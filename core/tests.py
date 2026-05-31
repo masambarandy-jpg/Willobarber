@@ -2,6 +2,7 @@ from datetime import date, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -26,7 +27,7 @@ def make_client(**kwargs):
 
 
 def make_admin(**kwargs):
-    defaults = {'username': 'admin', 'email': 'admin@test.com', 'password': 'AdminPass123!'}
+    defaults = {'username': 'admin', 'email': 'admin@test.com', 'password': 'AdminPass123!', 'role': 'admin'}
     defaults.update(kwargs)
     return User.objects.create_superuser(**defaults)
 
@@ -388,8 +389,7 @@ class SlotLockTestCase(APITestCase):
         SlotLock.objects.create(
             barber=self.barber, date=self.future_date,
             start_time=time(10, 0), locked_by=self.user1,
-            locked_until=__import__('django.utils.timezone', fromlist=['timezone']).timezone.now()
-                         + timedelta(minutes=3)
+            locked_until=timezone.now() + timedelta(minutes=3)
         )
         res = self.client.delete('/api/slots/unlock/', {
             'barber_id': self.barber.pk,
@@ -557,3 +557,175 @@ class SalonSettingsTestCase(APITestCase):
     def test_get_settings_unauthenticated(self):
         res = self.client.get('/api/settings/')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ══════════════════════════════════════════
+# DASHBOARD STATS
+# ══════════════════════════════════════════
+class DashboardStatsTestCase(APITestCase):
+    def setUp(self):
+        self.admin = make_admin()
+        self.client_user = make_client()
+        bu = make_barber_user()
+        self.barber = Barber.objects.create(user=bu, is_active=True)
+        self.service = Service.objects.create(
+            name='Coupe', category='coupe_homme',
+            price=Decimal('25.00'), duration=30, status='active'
+        )
+        future_date = date.today() + timedelta(days=1)
+        self.reservation = Reservation.objects.create(
+            client=self.client_user, barber=self.barber, service=self.service,
+            date=future_date, start_time=time(10, 0), end_time=time(10, 30),
+            total_amount=Decimal('25.00'), status='confirmed'
+        )
+
+    def test_dashboard_stats_admin(self):
+        res = self.client.get('/api/dashboard/stats/', **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('total_clients', res.data)
+        self.assertIn('total_services', res.data)
+        self.assertIn('total_reservations', res.data)
+        self.assertIn('monthly_revenue', res.data)
+        self.assertIn('avg_rating', res.data)
+        self.assertIn('upcoming_today', res.data)
+        self.assertEqual(res.data['total_clients'], 1)
+        self.assertEqual(res.data['total_services'], 1)
+
+    def test_dashboard_stats_client_forbidden(self):
+        res = self.client.get('/api/dashboard/stats/', **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+
+# ══════════════════════════════════════════
+# AVAILABLE SLOTS
+# ══════════════════════════════════════════
+class AvailableSlotsTestCase(APITestCase):
+    def setUp(self):
+        self.client_user = make_client()
+        bu = make_barber_user()
+        self.barber = Barber.objects.create(user=bu, is_active=True)
+        self.future_date = date.today() + timedelta(days=2)
+        Availability.objects.create(
+            barber=self.barber, date=self.future_date,
+            start_time=time(9, 0), end_time=time(9, 30), is_available=True
+        )
+        Availability.objects.create(
+            barber=self.barber, date=self.future_date,
+            start_time=time(10, 0), end_time=time(10, 30), is_available=True
+        )
+
+    def test_available_slots_returns_list(self):
+        res = self.client.get(
+            f'/api/slots/available/?barber_id={self.barber.pk}&date={self.future_date}',
+            **auth_header(self.client_user)
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('slots', res.data)
+        self.assertEqual(len(res.data['slots']), 2)
+
+    def test_available_slots_missing_params(self):
+        res = self.client.get('/api/slots/available/', **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_available_slots_reserved_slot_marked_unavailable(self):
+        service = Service.objects.create(
+            name='Coupe', category='coupe_homme',
+            price=Decimal('25.00'), duration=30, status='active'
+        )
+        Reservation.objects.create(
+            client=self.client_user, barber=self.barber, service=service,
+            date=self.future_date, start_time=time(9, 0), end_time=time(9, 30),
+            total_amount=Decimal('25.00'), status='confirmed'
+        )
+        res = self.client.get(
+            f'/api/slots/available/?barber_id={self.barber.pk}&date={self.future_date}',
+            **auth_header(self.client_user)
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        slot_9h = next(s for s in res.data['slots'] if str(s['start_time']).startswith('09'))
+        self.assertFalse(slot_9h['is_available'])
+
+
+# ══════════════════════════════════════════
+# WALK-IN
+# ══════════════════════════════════════════
+class WalkInTestCase(APITestCase):
+    def setUp(self):
+        self.admin = make_admin()
+        self.client_user = make_client()
+        bu = make_barber_user()
+        self.barber = Barber.objects.create(user=bu, is_active=True)
+        self.service = Service.objects.create(
+            name='Coupe', category='coupe_homme',
+            price=Decimal('25.00'), duration=30, status='active'
+        )
+        SalonSettings.objects.create(
+            pk=1, booking_cutoff_hour=23, min_booking_hours_ahead=0,
+            bookings_open=True, rush_mode_active=False
+        )
+        self.future_date = date.today() + timedelta(days=1)
+
+    def test_add_walk_in_admin(self):
+        res = self.client.post('/api/reservations/walk-in/', {
+            'barber': self.barber.pk,
+            'service': self.service.pk,
+            'date': str(self.future_date),
+            'start_time': '14:00',
+            'end_time': '14:30',
+        }, **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Reservation.objects.filter(is_walk_in=True).exists())
+
+    def test_add_walk_in_client_forbidden(self):
+        res = self.client.post('/api/reservations/walk-in/', {
+            'barber': self.barber.pk,
+            'service': self.service.pk,
+            'date': str(self.future_date),
+            'start_time': '14:00',
+            'end_time': '14:30',
+        }, **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+
+# ══════════════════════════════════════════
+# RECOMMENDATIONS
+# ══════════════════════════════════════════
+class RecommendationsTestCase(APITestCase):
+    def setUp(self):
+        self.client_user = make_client()
+        bu = make_barber_user()
+        self.barber = Barber.objects.create(user=bu, is_active=True)
+        self.service = Service.objects.create(
+            name='Coupe', category='coupe_homme',
+            price=Decimal('25.00'), duration=30, status='active'
+        )
+
+    def test_recommendations_no_history(self):
+        res = self.client.get('/api/recommendations/', **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['recommendations'], [])
+
+    def test_recommendations_disabled(self):
+        self.client_user.ai_recommendations = False
+        self.client_user.save()
+        res = self.client.get('/api/recommendations/', **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['recommendations'], [])
+
+    def test_recommendations_with_history(self):
+        past1 = date.today() - timedelta(days=30)
+        past2 = date.today() - timedelta(days=60)
+        Reservation.objects.create(
+            client=self.client_user, barber=self.barber, service=self.service,
+            date=past1, start_time=time(10, 0), end_time=time(10, 30),
+            total_amount=Decimal('25.00'), status='completed'
+        )
+        Reservation.objects.create(
+            client=self.client_user, barber=self.barber, service=self.service,
+            date=past2, start_time=time(10, 0), end_time=time(10, 30),
+            total_amount=Decimal('25.00'), status='completed'
+        )
+        res = self.client.get('/api/recommendations/', **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('avg_interval_days', res.data['recommendations'])
+        self.assertIn('predicted_next_date', res.data['recommendations'])
