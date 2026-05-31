@@ -6,9 +6,11 @@ from . import views
 router = DefaultRouter()
 router.register(r'barbers', views.BarberViewSet, basename='barber')
 router.register(r'services', views.ServiceViewSet, basename='service')
+router.register(r'availability', views.AvailabilityViewSet, basename='availability')
 router.register(r'reservations', views.ReservationViewSet, basename='reservation')
 router.register(r'reviews', views.ReviewViewSet, basename='review')
 router.register(r'waiting-list', views.WaitingListViewSet, basename='waiting-list')
+router.register(r'consent-logs', views.ConsentLogViewSet, basename='consent-log')
 
 urlpatterns = [
     path('auth/login/', views.login_view, name='login'),
@@ -16,6 +18,7 @@ urlpatterns = [
     path('auth/logout/', views.logout_view, name='logout'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', views.me_view, name='me'),
+    path('auth/change-password/', views.change_password, name='change-password'),
     path('dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),
     path('slots/available/', views.available_slots, name='available-slots'),
     path('slots/lock/', views.lock_slot, name='lock-slot'),

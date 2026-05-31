@@ -73,10 +73,22 @@ class ServiceSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class BarberWriteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Barber
+        fields = ('user', 'title', 'bio', 'specialties', 'experience_years', 'color', 'is_active')
+
+
 class AvailabilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Availability
         fields = ('id', 'barber', 'date', 'start_time', 'end_time', 'is_available')
+        read_only_fields = ('id',)
+
+    def validate(self, attrs):
+        if attrs.get('start_time') >= attrs.get('end_time'):
+            raise serializers.ValidationError("L'heure de fin doit être après l'heure de début.")
+        return attrs
 
 
 class ReservationSerializer(serializers.ModelSerializer):
@@ -90,7 +102,7 @@ class ReservationSerializer(serializers.ModelSerializer):
                   'service', 'service_name', 'date', 'start_time', 'end_time',
                   'status', 'payment_status', 'deposit_amount', 'total_amount',
                   'notes', 'cancellation_reason', 'is_walk_in', 'person_count', 'created_at')
-        read_only_fields = ('id', 'reference', 'client', 'created_at')
+        read_only_fields = ('id', 'reference', 'client', 'status', 'payment_status', 'total_amount', 'created_at')
 
     def get_client_name(self, obj):
         return obj.client.get_full_name()
@@ -160,7 +172,7 @@ class ReviewSerializer(serializers.ModelSerializer):
         model = Review
         fields = ('id', 'reservation', 'client', 'client_name', 'barber', 'barber_name',
                   'rating', 'comment', 'reply', 'replied_at', 'status', 'created_at')
-        read_only_fields = ('id', 'client', 'reply', 'replied_at', 'status', 'created_at')
+        read_only_fields = ('id', 'client', 'barber', 'reply', 'replied_at', 'status', 'created_at')
 
     def get_client_name(self, obj):
         return obj.client.get_full_name()
@@ -181,6 +193,30 @@ class SalonSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalonSettings
         fields = '__all__'
+
+
+class ConsentLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConsentLog
+        fields = ('id', 'user', 'reservation', 'consent_version', 'accepted_at', 'ip_address', 'user_agent')
+        read_only_fields = ('id', 'user', 'accepted_at', 'ip_address', 'user_agent')
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, validators=[validate_password])
+    new_password2 = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['new_password2']:
+            raise serializers.ValidationError({"new_password": "Les mots de passe ne correspondent pas."})
+        return attrs
+
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Mot de passe actuel incorrect.")
+        return value
 
 
 class DashboardStatsSerializer(serializers.Serializer):

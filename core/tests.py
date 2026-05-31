@@ -729,3 +729,262 @@ class RecommendationsTestCase(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIn('avg_interval_days', res.data['recommendations'])
         self.assertIn('predicted_next_date', res.data['recommendations'])
+
+
+# ══════════════════════════════════════════
+# AVAILABILITY CRUD (P2)
+# ══════════════════════════════════════════
+class AvailabilityCRUDTestCase(APITestCase):
+    def setUp(self):
+        self.client_user = make_client()
+        self.admin = make_admin()
+        bu = make_barber_user()
+        self.barber = Barber.objects.create(user=bu, is_active=True)
+        self.future_date = date.today() + timedelta(days=5)
+
+    def test_list_availability_authenticated(self):
+        Availability.objects.create(
+            barber=self.barber, date=self.future_date,
+            start_time=time(10, 0), end_time=time(10, 30)
+        )
+        res = self.client.get('/api/availability/', **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+
+    def test_create_availability_admin(self):
+        res = self.client.post('/api/availability/', {
+            'barber': self.barber.pk,
+            'date': str(self.future_date),
+            'start_time': '09:00',
+            'end_time': '09:30',
+            'is_available': True,
+        }, **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Availability.objects.filter(barber=self.barber).exists())
+
+    def test_create_availability_client_forbidden(self):
+        res = self.client.post('/api/availability/', {
+            'barber': self.barber.pk,
+            'date': str(self.future_date),
+            'start_time': '09:00',
+            'end_time': '09:30',
+        }, **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_availability_admin(self):
+        slot = Availability.objects.create(
+            barber=self.barber, date=self.future_date,
+            start_time=time(11, 0), end_time=time(11, 30)
+        )
+        res = self.client.delete(f'/api/availability/{slot.pk}/', **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Availability.objects.filter(pk=slot.pk).exists())
+
+    def test_create_availability_invalid_time_range(self):
+        res = self.client.post('/api/availability/', {
+            'barber': self.barber.pk,
+            'date': str(self.future_date),
+            'start_time': '10:30',
+            'end_time': '10:00',
+        }, **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ══════════════════════════════════════════
+# BARBER CRUD ADMIN (P2)
+# ══════════════════════════════════════════
+class BarberCRUDTestCase(APITestCase):
+    def setUp(self):
+        self.admin = make_admin()
+        self.client_user = make_client()
+        bu = make_barber_user()
+        self.barber = Barber.objects.create(user=bu, title='Expert', is_active=True)
+
+    def test_admin_can_create_barber(self):
+        new_bu = make_barber_user(username='barber2', email='b2@test.com')
+        res = self.client.post('/api/barbers/', {
+            'user': new_bu.pk,
+            'title': 'Junior',
+            'bio': 'Bio test',
+            'specialties': [],
+            'experience_years': 2,
+            'color': '#FFFFFF',
+            'is_active': True,
+        }, **auth_header(self.admin), format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_admin_can_patch_barber(self):
+        res = self.client.patch(f'/api/barbers/{self.barber.pk}/',
+                                {'title': 'Senior Expert'},
+                                **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.barber.refresh_from_db()
+        self.assertEqual(self.barber.title, 'Senior Expert')
+
+    def test_admin_can_delete_barber(self):
+        res = self.client.delete(f'/api/barbers/{self.barber.pk}/',
+                                 **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.barber.refresh_from_db()
+        self.assertTrue(self.barber.is_deleted)
+
+    def test_client_cannot_create_barber(self):
+        new_bu = make_barber_user(username='barber3', email='b3@test.com')
+        res = self.client.post('/api/barbers/', {
+            'user': new_bu.pk,
+            'title': 'Intrus',
+        }, **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_sees_inactive_barbers(self):
+        inactive_bu = make_barber_user(username='barber4', email='b4@test.com')
+        Barber.objects.create(user=inactive_bu, is_active=False)
+        res = self.client.get('/api/barbers/', **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 2)
+
+
+# ══════════════════════════════════════════
+# PASSWORD CHANGE (P3)
+# ══════════════════════════════════════════
+class ChangePasswordTestCase(APITestCase):
+    def setUp(self):
+        self.user = make_client()
+
+    def test_change_password_success(self):
+        res = self.client.post('/api/auth/change-password/', {
+            'old_password': 'TestPass123!',
+            'new_password': 'NewSecure@456!',
+            'new_password2': 'NewSecure@456!',
+        }, **auth_header(self.user))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('NewSecure@456!'))
+
+    def test_change_password_wrong_old(self):
+        res = self.client.post('/api/auth/change-password/', {
+            'old_password': 'WrongOld!',
+            'new_password': 'NewSecure@456!',
+            'new_password2': 'NewSecure@456!',
+        }, **auth_header(self.user))
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_change_password_mismatch(self):
+        res = self.client.post('/api/auth/change-password/', {
+            'old_password': 'TestPass123!',
+            'new_password': 'NewSecure@456!',
+            'new_password2': 'Different@456!',
+        }, **auth_header(self.user))
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_change_password_unauthenticated(self):
+        res = self.client.post('/api/auth/change-password/', {
+            'old_password': 'TestPass123!',
+            'new_password': 'NewSecure@456!',
+            'new_password2': 'NewSecure@456!',
+        })
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ══════════════════════════════════════════
+# REVIEW MODERATION (P3)
+# ══════════════════════════════════════════
+class ReviewModerationTestCase(APITestCase):
+    def setUp(self):
+        self.admin = make_admin()
+        self.client_user = make_client()
+        bu = make_barber_user()
+        self.barber = Barber.objects.create(user=bu, is_active=True)
+        service = Service.objects.create(
+            name='Coupe', category='coupe_homme',
+            price=Decimal('25.00'), duration=30, status='active'
+        )
+        future_date = date.today() + timedelta(days=5)
+        reservation = Reservation.objects.create(
+            client=self.client_user, barber=self.barber, service=service,
+            date=future_date, start_time=time(10, 0), end_time=time(10, 30),
+            total_amount=Decimal('25.00'), status='completed'
+        )
+        self.review = Review.objects.create(
+            reservation=reservation, client=self.client_user,
+            barber=self.barber, rating=4, status='pending'
+        )
+
+    def test_admin_approve_review(self):
+        res = self.client.post(f'/api/reviews/{self.review.pk}/approve/',
+                               **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.status, 'published')
+
+    def test_admin_reject_review(self):
+        res = self.client.post(f'/api/reviews/{self.review.pk}/reject/',
+                               **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.status, 'rejected')
+
+    def test_client_cannot_approve(self):
+        res = self.client.post(f'/api/reviews/{self.review.pk}/approve/',
+                               **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_review_ownership_destroy(self):
+        other = make_client(username='other', email='other@test.com')
+        res = self.client.delete(f'/api/reviews/{self.review.pk}/',
+                                 **auth_header(other))
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_owner_can_destroy_review(self):
+        res = self.client.delete(f'/api/reviews/{self.review.pk}/',
+                                 **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+
+
+# ══════════════════════════════════════════
+# CONSENT LOG (P4)
+# ══════════════════════════════════════════
+class ConsentLogTestCase(APITestCase):
+    def setUp(self):
+        self.client_user = make_client()
+        self.admin = make_admin()
+
+    def test_create_consent_log(self):
+        res = self.client.post('/api/consent-logs/', {
+            'consent_version': 'v1.0',
+        }, **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['user'], self.client_user.pk)
+
+    def test_list_own_consent_logs(self):
+        other = make_client(username='other', email='other@test.com')
+        from core.models import ConsentLog
+        ConsentLog.objects.create(user=self.client_user, consent_version='v1.0')
+        ConsentLog.objects.create(user=other, consent_version='v1.0')
+        res = self.client.get('/api/consent-logs/', **auth_header(self.client_user))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+
+    def test_admin_sees_all_consent_logs(self):
+        other = make_client(username='other2', email='other2@test.com')
+        from core.models import ConsentLog
+        ConsentLog.objects.create(user=self.client_user, consent_version='v1.0')
+        ConsentLog.objects.create(user=other, consent_version='v1.0')
+        res = self.client.get('/api/consent-logs/', **auth_header(self.admin))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 2)
+
+    def test_consent_log_unauthenticated(self):
+        res = self.client.get('/api/consent-logs/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ══════════════════════════════════════════
+# SALONSETTINGS SINGLETON (P4)
+# ══════════════════════════════════════════
+class SalonSettingsSingletonTestCase(APITestCase):
+    def test_singleton_enforced(self):
+        from core.models import SalonSettings
+        SalonSettings.objects.create()
+        with self.assertRaises(ValueError):
+            SalonSettings.objects.create()

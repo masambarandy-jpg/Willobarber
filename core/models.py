@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.utils import timezone
+from .validators import validate_image_file
 
 
 class SoftDeleteMixin(models.Model):
@@ -28,7 +29,8 @@ class User(SoftDeleteMixin, AbstractUser):
     ]
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='client')
     phone = models.CharField(max_length=20, blank=True, null=True)
-    profile_picture = models.ImageField(upload_to='profiles/', blank=True, null=True)
+    email = models.EmailField(unique=True)
+    profile_picture = models.ImageField(upload_to='profiles/', blank=True, null=True, validators=[validate_image_file])
     language = models.CharField(max_length=5, default='fr', choices=[('fr','Français'),('nl','Nederlands'),('en','English')])
     dark_mode = models.BooleanField(default=True)
     ai_recommendations = models.BooleanField(default=True)
@@ -76,7 +78,7 @@ class Service(SoftDeleteMixin, models.Model):
     duration = models.IntegerField(help_text="Durée en minutes")
     is_popular = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
-    image = models.ImageField(upload_to='services/', blank=True, null=True)
+    image = models.ImageField(upload_to='services/', blank=True, null=True, validators=[validate_image_file])
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -134,6 +136,12 @@ class Reservation(SoftDeleteMixin, models.Model):
     person_count = models.IntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['barber', 'date', 'start_time'], name='res_barber_date_start_idx'),
+            models.Index(fields=['client', 'is_deleted'], name='res_client_deleted_idx'),
+        ]
 
     def save(self, *args, **kwargs):
         if not self.reference:
@@ -240,6 +248,11 @@ class SalonSettings(models.Model):
 
     class Meta:
         verbose_name = "Paramètres du salon"
+
+    def save(self, *args, **kwargs):
+        if not self.pk and SalonSettings.objects.exists():
+            raise ValueError("Un seul objet SalonSettings est autorisé.")
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return "Paramètres du salon WilloBarber"

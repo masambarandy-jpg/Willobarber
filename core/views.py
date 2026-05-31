@@ -11,13 +11,15 @@ from decimal import Decimal
 
 from .models import (
     User, Barber, Service, Availability, Reservation,
-    Review, WaitingList, SalonSettings, SlotLock
+    Review, WaitingList, SalonSettings, SlotLock, ConsentLog
 )
 from .serializers import (
-    RegisterSerializer, UserSerializer, UserUpdateSerializer,
-    BarberSerializer, ServiceSerializer,
+    RegisterSerializer, UserSerializer, UserUpdateSerializer, ChangePasswordSerializer,
+    BarberSerializer, BarberWriteSerializer, ServiceSerializer,
+    AvailabilitySerializer,
     ReservationSerializer, ReservationCreateSerializer,
     ReviewSerializer, WaitingListSerializer, SalonSettingsSerializer,
+    ConsentLogSerializer,
 )
 from .permissions import IsOwnerOrAdmin, IsBarberOrAdmin
 
@@ -43,7 +45,7 @@ def login_view(request):
     try:
         user_obj = User.objects.get(email=username)
         username = user_obj.username
-    except User.DoesNotExist:
+    except (User.DoesNotExist, User.MultipleObjectsReturned):
         pass
 
     user = authenticate(username=username, password=password)
@@ -100,6 +102,17 @@ def me_view(request):
     return Response(serializer.errors, status=400)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+    if serializer.is_valid():
+        request.user.set_password(serializer.validated_data['new_password'])
+        request.user.save()
+        return Response({'message': 'Mot de passe modifié avec succès.'})
+    return Response(serializer.errors, status=400)
+
+
 # ══════════════════════════════════════════
 # DASHBOARD STATS
 # ══════════════════════════════════════════
@@ -144,10 +157,27 @@ def dashboard_stats(request):
 # ══════════════════════════════════════════
 # BARBERS
 # ══════════════════════════════════════════
-class BarberViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Barber.objects.filter(is_deleted=False, is_active=True)
+class BarberViewSet(viewsets.ModelViewSet):
     serializer_class = BarberSerializer
-    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = Barber.objects.filter(is_deleted=False)
+        if not self.request.user.is_staff:
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return BarberWriteSerializer
+        return BarberSerializer
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [IsAuthenticated()]
+        return [IsAdminUser()]
+
+    def perform_destroy(self, instance):
+        instance.delete()  # soft delete
 
 
 # ══════════════════════════════════════════
@@ -172,7 +202,45 @@ class ServiceViewSet(viewsets.ModelViewSet):
 
 
 # ══════════════════════════════════════════
-# AVAILABILITY + SLOT LOCK
+# AVAILABILITY
+# ══════════════════════════════════════════
+class AvailabilityViewSet(viewsets.ModelViewSet):
+    serializer_class = AvailabilitySerializer
+
+    def get_queryset(self):
+        qs = Availability.objects.all()
+        barber_id = self.request.query_params.get('barber_id')
+        if barber_id:
+            qs = qs.filter(barber_id=barber_id)
+        return qs
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [IsAuthenticated()]
+        return [IsBarberOrAdmin()]
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if not user.is_staff:
+            try:
+                barber = user.barber_profile
+            except Barber.DoesNotExist:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Vous n'avez pas de profil barbier.")
+            serializer.save(barber=barber)
+        else:
+            serializer.save()
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if not user.is_staff and instance.barber.user != user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Vous ne pouvez supprimer que vos propres créneaux.")
+        instance.delete()
+
+
+# ══════════════════════════════════════════
+# SLOT LOCK
 # ══════════════════════════════════════════
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -411,6 +479,8 @@ class ReviewViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        if self.action in ['destroy', 'approve', 'reject', 'reply']:
+            return Review.objects.filter(is_deleted=False)
         return Review.objects.filter(is_deleted=False, status='published')
 
     def perform_create(self, serializer):
@@ -419,6 +489,12 @@ class ReviewViewSet(viewsets.ModelViewSet):
             client=self.request.user,
             barber=reservation.barber
         )
+
+    def perform_destroy(self, instance):
+        if not self.request.user.is_staff and instance.client != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Vous ne pouvez supprimer que vos propres avis.")
+        instance.delete()
 
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def reply(self, request, pk=None):
@@ -430,6 +506,26 @@ class ReviewViewSet(viewsets.ModelViewSet):
         review.reply = request.data.get('reply', '')
         review.replied_at = timezone.now()
         review.replied_by = request.user
+        review.save()
+        return Response(ReviewSerializer(review).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def approve(self, request, pk=None):
+        try:
+            review = Review.objects.get(pk=pk, is_deleted=False)
+        except Review.DoesNotExist:
+            return Response({'error': 'Avis introuvable.'}, status=404)
+        review.status = 'published'
+        review.save()
+        return Response(ReviewSerializer(review).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def reject(self, request, pk=None):
+        try:
+            review = Review.objects.get(pk=pk, is_deleted=False)
+        except Review.DoesNotExist:
+            return Response({'error': 'Avis introuvable.'}, status=404)
+        review.status = 'rejected'
         review.save()
         return Response(ReviewSerializer(review).data)
 
@@ -520,6 +616,33 @@ class WaitingListViewSet(viewsets.ModelViewSet):
             status='waiting'
         ).count() + 1
         serializer.save(client=self.request.user, position=position)
+
+
+# ══════════════════════════════════════════
+# CONSENT LOG (RGPD)
+# ══════════════════════════════════════════
+class ConsentLogViewSet(viewsets.ModelViewSet):
+    serializer_class = ConsentLogSerializer
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        if self.request.user.is_staff:
+            return ConsentLog.objects.all().order_by('-accepted_at')
+        return ConsentLog.objects.filter(user=self.request.user).order_by('-accepted_at')
+
+    def get_permissions(self):
+        return [IsAuthenticated()]
+
+    def perform_create(self, serializer):
+        ip = (
+            self.request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+            or self.request.META.get('REMOTE_ADDR')
+        )
+        serializer.save(
+            user=self.request.user,
+            ip_address=ip or None,
+            user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
+        )
 
 
 # ══════════════════════════════════════════
