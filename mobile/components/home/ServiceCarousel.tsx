@@ -25,6 +25,8 @@ interface Service {
   price: string;
 }
 
+const SLIDE_DURATION = 6000;
+
 const SERVICES: Service[] = [
   {
     id: '1',
@@ -73,6 +75,7 @@ export function ServiceCarousel() {
   const { width: screenWidth } = useWindowDimensions();
   const cardWidth = screenWidth - 2 * Spacing.xl;
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
 
   const progress = useSharedValue(0);
   const slideX = useSharedValue(0);
@@ -82,11 +85,11 @@ export function ServiceCarousel() {
     setCurrentSlide((prev) => (prev + 1) % SERVICES.length);
   }, []);
 
-  // La barre de progression se remplit en 4 secondes
-  // puis le slide change automatiquement
+  // La barre de progression se remplit en 6 secondes puis le slide change.
+  // Au changement de slide la barre repart de zéro.
   useEffect(() => {
     progress.value = 0;
-    progress.value = withTiming(1, { duration: 4000 }, (finished) => {
+    progress.value = withTiming(1, { duration: SLIDE_DURATION }, (finished) => {
       if (finished) runOnJS(handleAutoAdvance)();
     });
     return () => {
@@ -100,7 +103,25 @@ export function ServiceCarousel() {
     slideX.value = withTiming(-currentSlide * cardWidth, { duration: 320 });
   }, [currentSlide, cardWidth, slideX]);
 
+  // Pause : stoppe la barre exactement là où elle est.
+  // Play  : reprend avec le temps restant (pas de reset).
+  const handlePausePlay = useCallback(() => {
+    if (isPaused) {
+      const remaining = (1 - progress.value) * SLIDE_DURATION;
+      progress.value = withTiming(1, { duration: remaining }, (finished) => {
+        if (finished) runOnJS(handleAutoAdvance)();
+      });
+      setIsPaused(false);
+    } else {
+      cancelAnimation(progress);
+      setIsPaused(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPaused]);
+
+  // Changer de slide via un dot reprend automatiquement la lecture
   const handleDotPress = useCallback((index: number) => {
+    setIsPaused(false);
     setCurrentSlide(index);
   }, []);
 
@@ -122,7 +143,11 @@ export function ServiceCarousel() {
           {SERVICES.map((service) => (
             <Pressable
               key={service.id}
-              style={({ pressed }) => [styles.slide, { width: cardWidth }, pressed && styles.slidePressed]}
+              style={({ pressed }) => [
+                styles.slide,
+                { width: cardWidth },
+                pressed && styles.slidePressed,
+              ]}
               onPress={() => router.push('/(tabs)/book')}
             >
               <View style={styles.tagRow}>
@@ -144,16 +169,19 @@ export function ServiceCarousel() {
         </Animated.View>
       </View>
 
-      {/* Dot indicators */}
-      <View style={styles.dotsRow}>
+      {/* Dots + bouton pause/play */}
+      <View style={styles.controlsRow}>
         {SERVICES.map((_, i) => (
           <Pressable key={i} onPress={() => handleDotPress(i)} hitSlop={8}>
             <View style={[styles.dot, i === currentSlide && styles.dotActive]} />
           </Pressable>
         ))}
+        <Pressable onPress={handlePausePlay} hitSlop={8} style={styles.pauseBtn}>
+          <Text style={styles.pauseIcon}>{isPaused ? '▶' : '⏸'}</Text>
+        </Pressable>
       </View>
 
-      {/* Progress bar — au changement de slide, repart de zéro */}
+      {/* Progress bar — se met en pause / reprend exactement là où elle s'est arrêtée */}
       <View
         style={styles.progressTrack}
         onLayout={(e) => {
@@ -246,7 +274,7 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semiBold,
     color: Colors.gold,
   },
-  dotsRow: {
+  controlsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -263,6 +291,15 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: Colors.gold,
+  },
+  pauseBtn: {
+    marginLeft: Spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pauseIcon: {
+    fontSize: 10,
+    color: Colors.textMuted,
   },
   progressTrack: {
     height: 3,
