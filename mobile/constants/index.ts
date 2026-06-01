@@ -2,7 +2,7 @@ export * from './Colors';
 export * from './Typography';
 export * from './Spacing';
 
-export const API_BASE_URL = 'http://192.168.129.7:8000/api';
+export const API_BASE_URL = 'https://willobarber-production.up.railway.app/api';
 
 export const LANGUAGES = [
   { code: 'fr', label: 'Français' },
