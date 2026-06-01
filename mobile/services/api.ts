@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { API_BASE_URL } from '@/constants';
 import type {
   AuthResponse,
@@ -29,22 +30,31 @@ const http: AxiosInstance = axios.create({
 
 export const TokenStorage = {
   async getAccess(): Promise<string | null> {
+    if (Platform.OS === 'web') return localStorage.getItem(SECURE_KEY_ACCESS);
     return SecureStore.getItemAsync(SECURE_KEY_ACCESS);
   },
   async getRefresh(): Promise<string | null> {
+    if (Platform.OS === 'web') return localStorage.getItem(SECURE_KEY_REFRESH);
     return SecureStore.getItemAsync(SECURE_KEY_REFRESH);
+  },
+  async setAccess(token: string): Promise<void> {
+    if (Platform.OS === 'web') { localStorage.setItem(SECURE_KEY_ACCESS, token); return; }
+    return SecureStore.setItemAsync(SECURE_KEY_ACCESS, token);
+  },
+  async setRefresh(token: string): Promise<void> {
+    if (Platform.OS === 'web') { localStorage.setItem(SECURE_KEY_REFRESH, token); return; }
+    return SecureStore.setItemAsync(SECURE_KEY_REFRESH, token);
   },
   async save(access: string, refresh: string): Promise<void> {
     await Promise.all([
-      SecureStore.setItemAsync(SECURE_KEY_ACCESS, access),
-      SecureStore.setItemAsync(SECURE_KEY_REFRESH, refresh),
+      TokenStorage.setAccess(access),
+      TokenStorage.setRefresh(refresh),
     ]);
   },
   async clear(): Promise<void> {
-    await Promise.all([
-      SecureStore.deleteItemAsync(SECURE_KEY_ACCESS),
-      SecureStore.deleteItemAsync(SECURE_KEY_REFRESH),
-    ]);
+    if (Platform.OS === 'web') { localStorage.removeItem(SECURE_KEY_ACCESS); localStorage.removeItem(SECURE_KEY_REFRESH); return; }
+    await SecureStore.deleteItemAsync(SECURE_KEY_ACCESS);
+    await SecureStore.deleteItemAsync(SECURE_KEY_REFRESH);
   },
 };
 
@@ -95,7 +105,7 @@ http.interceptors.response.use(
           { refresh },
         );
 
-        await SecureStore.setItemAsync(SECURE_KEY_ACCESS, data.access);
+        await TokenStorage.setAccess(data.access);
         http.defaults.headers.common.Authorization = `Bearer ${data.access}`;
         processQueue(null, data.access);
         original.headers.Authorization = `Bearer ${data.access}`;
