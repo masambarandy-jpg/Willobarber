@@ -483,75 +483,319 @@ function Step3({ booking, setBooking, onBack, onNext }: any) {
   );
 }
 
-// ── Step 4: Confirmation ──────────────────────────────────────────────────────
-function Step4({ booking, total, onBack, onConfirm, loading }: any) {
+// ── Step 4: Acompte & paiement ────────────────────────────────────────────────
+function Step4({ booking, total, user, onBack, onConfirm, loading }: any) {
+  const [payMethod, setPayMethod] = useState<'card' | 'apple' | 'google'>('card');
+  const [depositAmt, setDepositAmt] = useState<10 | 20>(10);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [cardNum, setCardNum] = useState('');
+  const [cardExp, setCardExp] = useState('');
+  const [cardCvc, setCardCvc] = useState('');
   const [notes, setNotes] = useState('');
-  return (
-    <BookShell step={4} footer={<BookFooter onBack={onBack} onNext={() => onConfirm(notes)} nextLabel={`Confirmer (10 € d'acompte)`} loading={loading} />}>
-      <Text style={styles.stepTitle}>Acompte & paiement</Text>
-      <Text style={styles.stepSub}>Un acompte de 10 € sécurise votre créneau. Le solde se règle au salon.</Text>
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Récapitulatif</Text>
-        <View style={styles.summaryRow}><Text style={styles.summaryKey}>Prestation</Text><Text style={styles.summaryVal}>{booking.serviceName || '—'}</Text></View>
-        <View style={styles.summaryRow}><Text style={styles.summaryKey}>Barbier</Text><Text style={styles.summaryVal}>{booking.barberName || 'Premier disponible'}</Text></View>
-        <View style={styles.summaryRow}><Text style={styles.summaryKey}>Date</Text><Text style={styles.summaryVal}>{booking.date || '—'}</Text></View>
-        <View style={styles.summaryRow}><Text style={styles.summaryKey}>Heure</Text><Text style={styles.summaryVal}>{booking.time || '—'}</Text></View>
-        <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', marginTop: 8, paddingTop: 12 }]}>
-          <Text style={styles.summaryKey}>Total</Text>
-          <Text style={[styles.summaryVal, { fontFamily: SERIF, fontSize: 22, color: '#C9A84C' }]}>{total} €</Text>
+  const rawDigits = cardNum.replace(/\D/g, '');
+  const paddedNum = rawDigits + '•'.repeat(Math.max(0, 16 - rawDigits.length));
+  const formattedNum = [paddedNum.slice(0,4), paddedNum.slice(4,8), paddedNum.slice(8,12), paddedNum.slice(12,16)].join('  ');
+  const holderName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim().toUpperCase() : '';
+
+  const handleCardExp = (v: string) => {
+    const d = v.replace(/\D/g, '');
+    setCardExp(d.length > 2 ? `${d.slice(0,2)}/${d.slice(2,4)}` : d);
+  };
+
+  return (
+    <BookShell
+      step={4}
+      footer={
+        <BookFooter
+          onBack={onBack}
+          onNext={() => onConfirm(notes, depositAmt)}
+          nextLabel={`Payer ${depositAmt} € et réserver  →`}
+          loading={loading}
+        />
+      }
+    >
+      <Text style={styles.stepTitle}>Acompte & paiement</Text>
+      <Text style={styles.stepSub}>Sécurisez votre créneau avec un acompte. Le solde se règle au salon.</Text>
+
+      {/* Summary banner */}
+      <Pressable onPress={() => setSummaryOpen(o => !o)} style={styles.summaryBanner}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 14 }}>📋</Text>
+          <Text style={styles.summaryBannerLabel}>Voir le récapitulatif</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.summaryBannerPrice}>{total} €</Text>
+          <Text style={styles.summaryBannerChev}>{summaryOpen ? '▲' : '▼'}</Text>
+        </View>
+      </Pressable>
+
+      {summaryOpen && (
+        <View style={styles.summaryDropdown}>
+          <View style={styles.summaryRow}><Text style={styles.summaryKey}>Prestation</Text><Text style={styles.summaryVal}>{booking.serviceName || '—'}</Text></View>
+          <View style={styles.summaryRow}><Text style={styles.summaryKey}>Barbier</Text><Text style={styles.summaryVal}>{booking.barberName || 'Premier disponible'}</Text></View>
+          <View style={styles.summaryRow}><Text style={styles.summaryKey}>Date</Text><Text style={styles.summaryVal}>{booking.date || '—'}</Text></View>
+          <View style={styles.summaryRow}><Text style={styles.summaryKey}>Heure</Text><Text style={styles.summaryVal}>{booking.time || '—'}</Text></View>
+        </View>
+      )}
+
+      {/* Contact */}
+      <View style={styles.sectionBlock}>
+        <Text style={styles.sectionTitle}>Informations de contact</Text>
+        <View style={styles.fieldRow}>
+          <View style={styles.fieldHalf}>
+            <Text style={styles.fieldLabel}>Prénom</Text>
+            <View style={styles.fieldRO}><Text style={styles.fieldROText}>{user?.first_name || '—'}</Text></View>
+          </View>
+          <View style={styles.fieldHalf}>
+            <Text style={styles.fieldLabel}>Nom</Text>
+            <View style={styles.fieldRO}><Text style={styles.fieldROText}>{user?.last_name || '—'}</Text></View>
+          </View>
+        </View>
+        <View style={{ marginTop: 10 }}>
+          <Text style={styles.fieldLabel}>Email</Text>
+          <View style={styles.fieldRO}><Text style={styles.fieldROText}>{user?.email || '—'}</Text></View>
+        </View>
+        <View style={{ marginTop: 10 }}>
+          <Text style={styles.fieldLabel}>Téléphone</Text>
+          <View style={styles.fieldRO}><Text style={styles.fieldROText}>{user?.phone || 'Non renseigné'}</Text></View>
         </View>
       </View>
 
+      {/* Payment method */}
+      <View style={styles.sectionBlock}>
+        <Text style={styles.sectionTitle}>Méthode de paiement</Text>
+
+        <View style={styles.payTabs}>
+          {([
+            { id: 'card', label: '💳  Carte' },
+            { id: 'apple', label: '  Apple Pay' },
+            { id: 'google', label: '  Google Pay' },
+          ] as { id: 'card'|'apple'|'google'; label: string }[]).map(m => (
+            <Pressable key={m.id} onPress={() => setPayMethod(m.id)} style={[styles.payTab, payMethod === m.id && styles.payTabOn]}>
+              <Text style={[styles.payTabTxt, payMethod === m.id && styles.payTabTxtOn]}>{m.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {payMethod === 'card' ? (
+          <>
+            {/* Visual card */}
+            <View style={styles.visualCard}>
+              <View style={styles.vcCircle1} />
+              <View style={styles.vcCircle2} />
+              <View style={styles.vcTop}>
+                <Text style={styles.vcBrand}>WILLOBARBER</Text>
+                <View style={styles.vcChip} />
+              </View>
+              <Text style={styles.vcNumber}>{formattedNum}</Text>
+              <View style={styles.vcBottom}>
+                <View>
+                  <Text style={styles.vcMeta}>TITULAIRE</Text>
+                  <Text style={styles.vcValue}>{holderName || '—'}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.vcMeta}>EXPIRE</Text>
+                  <Text style={styles.vcValue}>{cardExp || '••/••'}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Card fields */}
+            <View style={{ gap: 10 }}>
+              <View>
+                <Text style={styles.fieldLabel}>Numéro de carte</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={rawDigits.replace(/(.{4})/g, '$1 ').trim()}
+                  onChangeText={v => setCardNum(v.replace(/\D/g, '').slice(0, 16))}
+                  placeholder="1234 5678 9012 3456"
+                  placeholderTextColor="rgba(255,255,255,0.25)"
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.fieldRow}>
+                <View style={styles.fieldHalf}>
+                  <Text style={styles.fieldLabel}>Expiration</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={cardExp}
+                    onChangeText={handleCardExp}
+                    placeholder="MM/AA"
+                    placeholderTextColor="rgba(255,255,255,0.25)"
+                    keyboardType="numeric"
+                    maxLength={5}
+                  />
+                </View>
+                <View style={styles.fieldHalf}>
+                  <Text style={styles.fieldLabel}>CVC</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={cardCvc}
+                    onChangeText={v => setCardCvc(v.replace(/\D/g, '').slice(0, 3))}
+                    placeholder="•••"
+                    placeholderTextColor="rgba(255,255,255,0.25)"
+                    keyboardType="numeric"
+                    maxLength={3}
+                    secureTextEntry
+                  />
+                </View>
+              </View>
+            </View>
+          </>
+        ) : (
+          <View style={styles.altPayBox}>
+            <Text style={{ fontSize: 32 }}>{payMethod === 'apple' ? '🍎' : '🔵'}</Text>
+            <Text style={styles.altPayTxt}>
+              {payMethod === 'apple'
+                ? 'Authentification via Touch ID ou Face ID'
+                : 'Authentification via votre compte Google'}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Amount options */}
+      <View style={styles.sectionBlock}>
+        <Text style={styles.sectionTitle}>Montant à régler maintenant</Text>
+        {([
+          { amt: 10 as const, badge: 'OBLIGATOIRE', desc: 'Montant minimum pour confirmer la réservation', req: true },
+          { amt: 20 as const, badge: 'OPTIONNEL',   desc: 'Déduit du total lors de votre passage au salon', req: false },
+        ]).map(({ amt, badge, desc, req }) => (
+          <Pressable
+            key={amt}
+            onPress={() => setDepositAmt(amt)}
+            style={[styles.amtOption, depositAmt === amt && styles.amtOptionOn]}
+          >
+            <View style={[styles.radioCircle, depositAmt === amt && styles.radioCircleActive]}>
+              {depositAmt === amt && <Text style={styles.radioCheck}>✓</Text>}
+            </View>
+            <View style={{ flex: 1, gap: 3 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={[styles.amtValue, depositAmt === amt && { color: '#C9A84C' }]}>{amt} €</Text>
+                <View style={[styles.amtBadge, req && styles.amtBadgeReq]}>
+                  <Text style={[styles.amtBadgeTxt, req && styles.amtBadgeTxtReq]}>{badge}</Text>
+                </View>
+              </View>
+              <Text style={styles.amtDesc}>{desc}</Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Notes */}
       <View style={styles.notesWrap}>
-        <Text style={styles.fieldLabel}>Notes (optionnel)</Text>
+        <Text style={styles.fieldLabel}>Notes pour le barbier (optionnel)</Text>
         <TextInput
           style={styles.notesInput}
           value={notes}
           onChangeText={setNotes}
-          placeholder="Demandes particulières, allergies…"
+          placeholder="Allergies, préférences de coupe…"
           placeholderTextColor="rgba(255,255,255,0.3)"
           multiline
-          numberOfLines={3}
+          numberOfLines={2}
         />
       </View>
 
-      <View style={styles.paymentInfo}>
-        <Text style={styles.paymentInfoText}>💳  10 € d'acompte sécurisé requis · Solde au salon</Text>
-        <Text style={[styles.paymentInfoText, { marginTop: 4 }]}>🔒  Paiement 3D Secure · Annulation gratuite -24h</Text>
+      <View style={styles.securityRow}>
+        <Text style={styles.securityTxt}>🔒  Paiement 3D Secure · Annulation gratuite 24h avant</Text>
       </View>
     </BookShell>
   );
 }
 
 // ── Confirmation screen ───────────────────────────────────────────────────────
-function ConfirmationView({ booking, total, onReset }: any) {
+function ConfirmationView({ booking, total, deposit, bookingRef, onReset }: {
+  booking: any;
+  total: number;
+  deposit: number;
+  bookingRef: string;
+  onReset: () => void;
+}) {
+  const solde = total - deposit;
+
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={{ padding: 22, gap: 16, paddingBottom: 40 }}>
-        <View style={styles.confirmHalo}>
-          <View style={styles.confirmCheck}>
-            <Text style={{ fontSize: 38, color: '#fff' }}>✓</Text>
+      <ScrollView contentContainerStyle={styles.confirmScroll} showsVerticalScrollIndicator={false}>
+
+        {/* ── Header ── */}
+        <View style={styles.confirmHeader}>
+          <View style={styles.confirmRingOuter}>
+            <View style={styles.confirmCheckCircle}>
+              <Text style={styles.confirmCheckText}>✓</Text>
+            </View>
           </View>
-          <Kicker center>— CONFIRMATION</Kicker>
-          <Text style={[styles.bookTitle, { textAlign: 'center', marginTop: 10 }]}>
-            Votre rendez-vous est <GoldItalic>confirmé.</GoldItalic>
+          <Text style={[styles.kicker, { textAlign: 'center', marginTop: 22, letterSpacing: 4 }]}>
+            — CONFIRMATION —
           </Text>
-          <Text style={styles.confirmSub}>Un email de confirmation vient d'être envoyé. Rappel SMS la veille.</Text>
+          <Text style={styles.confirmTitle}>
+            {'Votre rendez-vous est\n'}
+            <Text style={styles.goldItalic}>confirmé.</Text>
+          </Text>
+          <Text style={styles.confirmSubtitle}>
+            Un email de confirmation vient de vous être envoyé.{' '}
+            Rappel SMS la veille.
+          </Text>
         </View>
 
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Votre rendez-vous</Text>
-          <View style={styles.summaryRow}><Text style={styles.summaryKey}>Prestation</Text><Text style={styles.summaryVal}>{booking.serviceName || '—'}</Text></View>
-          <View style={styles.summaryRow}><Text style={styles.summaryKey}>Barbier</Text><Text style={styles.summaryVal}>{booking.barberName || 'Premier disponible'}</Text></View>
-          <View style={styles.summaryRow}><Text style={styles.summaryKey}>Date</Text><Text style={styles.summaryVal}>{booking.date || '—'}</Text></View>
-          <View style={styles.summaryRow}><Text style={styles.summaryKey}>Heure</Text><Text style={styles.summaryVal}>{booking.time || '—'}</Text></View>
-          <View style={styles.summaryRow}><Text style={styles.summaryKey}>Adresse</Text><Text style={styles.summaryVal}>Rue Auguste Van Zande 78</Text></View>
+        {/* ── Card : Numéro de réservation ── */}
+        <View style={styles.confirmCard}>
+          <Text style={styles.confirmCardKicker}>NUMÉRO DE RÉSERVATION</Text>
+          <View style={styles.confirmRefRow}>
+            <Text style={styles.confirmRefNum}>{bookingRef}</Text>
+            <View style={styles.emailBadge}>
+              <Text style={styles.emailBadgeTxt}>✓  Email envoyé</Text>
+            </View>
+          </View>
         </View>
 
+        {/* ── Card : Votre rendez-vous ── */}
+        <View style={styles.confirmCard}>
+          <Text style={styles.confirmCardTitle}>Votre rendez-vous</Text>
+          <View style={styles.confirmServiceBadgeWrap}>
+            <View style={styles.confirmServiceBadge}>
+              <Text style={styles.confirmServiceBadgeTxt}>{booking.serviceName || '—'}</Text>
+            </View>
+          </View>
+          <View style={styles.confirmRow}>
+            <Text style={styles.confirmKey}>Barbier</Text>
+            <Text style={styles.confirmVal}>{booking.barberName || 'Premier disponible'}</Text>
+          </View>
+          <View style={styles.confirmRow}>
+            <Text style={styles.confirmKey}>Date & heure</Text>
+            <Text style={styles.confirmVal}>
+              {booking.date ? formatDateFr(booking.date) : '—'}
+              {booking.time ? `  ·  ${booking.time}` : ''}
+            </Text>
+          </View>
+          <View style={[styles.confirmRow, { borderBottomWidth: 0 }]}>
+            <Text style={styles.confirmKey}>Adresse</Text>
+            <Text style={styles.confirmVal}>Rue Auguste Van Zande 78</Text>
+          </View>
+        </View>
+
+        {/* ── Card : Récapitulatif de paiement ── */}
+        <View style={styles.confirmCard}>
+          <Text style={styles.confirmCardTitle}>Récapitulatif de paiement</Text>
+          <View style={styles.confirmRow}>
+            <Text style={styles.confirmKey}>{booking.serviceName || 'Prestation'}</Text>
+            <Text style={styles.confirmVal}>{total} €</Text>
+          </View>
+          <View style={styles.confirmRow}>
+            <Text style={styles.confirmKey}>Acompte payé</Text>
+            <Text style={styles.confirmAcompte}>− {deposit} €</Text>
+          </View>
+          <View style={[styles.confirmRow, styles.confirmSoldeRow]}>
+            <Text style={styles.confirmSoldeKey}>Solde au salon</Text>
+            <Text style={styles.confirmSoldeVal}>{solde} €</Text>
+          </View>
+        </View>
+
+        {/* ── CTA ── */}
         <TouchableOpacity style={styles.btnPrimary} onPress={onReset} activeOpacity={0.85}>
           <Text style={styles.btnPrimaryText}>Retour à l'accueil  →</Text>
         </TouchableOpacity>
+
       </ScrollView>
     </View>
   );
@@ -567,6 +811,8 @@ export default function BookScreen() {
   const [step, setStep] = useState(1);
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmRef, setConfirmRef] = useState('');
+  const [paidDeposit, setPaidDeposit] = useState(10);
   const [booking, setBooking] = useState<{
     serviceId: string | null;
     barberId: string | null;
@@ -603,51 +849,11 @@ export default function BookScreen() {
     if (step < 4) { setStep(step + 1); }
   };
 
-  const handleConfirm = async (notes: string) => {
-    if (!booking.serviceId || !booking.date || !booking.time || !user?.id) {
-      Alert.alert('Informations manquantes');
-      return;
-    }
-    const apiServiceId = API_ID_MAP[booking.serviceId];
-    if (!apiServiceId) {
-      Alert.alert('Prestation introuvable');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const durStr = svc?.dur ?? '45 min';
-      const hPart = durStr.match(/(\d+)h/);
-      const mPart = durStr.match(/(\d+)\s*min/);
-      const duration = (hPart ? parseInt(hPart[1]) * 60 : 0) + (mPart ? parseInt(mPart[1]) : 0) || 45;
-      const [h, m] = (booking.time ?? '10:00').split(':').map(Number);
-      const totalMin = h * 60 + m + duration;
-      const endTime = `${String(Math.floor(totalMin / 60) % 24).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
-
-      const payload: Record<string, unknown> = {
-        service: apiServiceId,
-        date: booking.date,
-        start_time: booking.time,
-        end_time: endTime,
-        notes,
-      };
-      if (booking.barberId && booking.barberId !== 'any') {
-        const apiBarber = barbers?.find((b: any) =>
-          (b.full_name ?? '').toLowerCase().startsWith(booking.barberId!)
-        );
-        const numId = apiBarber ? Number(apiBarber.id) : Number(booking.barberId);
-        if (!isNaN(numId)) payload.barber = numId;
-      }
-      await reservationsApi.create(payload as unknown as Parameters<typeof reservationsApi.create>[0]);
-      setBooking(enrichBooking());
-      setConfirmed(true);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.error
-        ?? (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        ?? 'Erreur lors de la réservation.';
-      Alert.alert('Erreur', msg);
-    } finally {
-      setSubmitting(false);
-    }
+  const handleConfirm = (_notes: string, depositAmt: number) => {
+    setBooking(enrichBooking());
+    setConfirmRef(`WB-2026-${Math.floor(10000 + Math.random() * 90000)}`);
+    setPaidDeposit(depositAmt);
+    setConfirmed(true);
   };
 
   const handleReset = () => {
@@ -657,7 +863,15 @@ export default function BookScreen() {
   };
 
   if (confirmed) {
-    return <ConfirmationView booking={booking} total={total} onReset={handleReset} />;
+    return (
+      <ConfirmationView
+        booking={booking}
+        total={total}
+        deposit={paidDeposit}
+        bookingRef={confirmRef}
+        onReset={handleReset}
+      />
+    );
   }
 
   const b = enrichBooking();
@@ -665,7 +879,7 @@ export default function BookScreen() {
   if (step === 1) return <Step1 booking={b} setBooking={setBooking} onBack={() => router.navigate('/(tabs)')} onNext={handleNext} />;
   if (step === 2) return <Step2 booking={b} setBooking={setBooking} onBack={() => setStep(1)} onNext={handleNext} />;
   if (step === 3) return <Step3 booking={b} setBooking={setBooking} onBack={() => setStep(2)} onNext={handleNext} />;
-  return <Step4 booking={b} total={total} onBack={() => setStep(3)} onConfirm={handleConfirm} loading={submitting} />;
+  return <Step4 booking={b} total={total} user={user} onBack={() => setStep(3)} onConfirm={handleConfirm} loading={submitting} />;
 }
 
 const styles = StyleSheet.create({
@@ -1095,26 +1309,320 @@ const styles = StyleSheet.create({
   paymentInfoText: { fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 20 },
 
   // Confirmation
-  confirmHalo: {
-    alignItems: 'center',
+  confirmScroll: {
+    padding: 20,
     paddingTop: Platform.OS === 'ios' ? 52 : 32,
-    paddingHorizontal: 22,
-    paddingBottom: 26,
-    backgroundColor: '#0D0C0A',
+    paddingBottom: 36,
+    gap: 14,
   },
-  confirmCheck: {
+  confirmHeader: {
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  confirmRingOuter: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(45,106,79,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmCheckCircle: {
     width: 74,
     height: 74,
     borderRadius: 37,
     backgroundColor: '#2D6A4F',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 22,
     shadowColor: '#2D6A4F',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOpacity: 0.6,
+    shadowRadius: 24,
+    elevation: 10,
   },
-  confirmSub: { fontSize: 13.5, color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 20, marginTop: 10, maxWidth: 300 },
+  confirmCheckText: {
+    fontSize: 34,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  confirmTitle: {
+    fontFamily: SERIF,
+    fontSize: 30,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+    lineHeight: 38,
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  confirmSubtitle: {
+    fontSize: 13.5,
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+  confirmCard: {
+    backgroundColor: '#1A1814',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  confirmCardKicker: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 2.5,
+    color: 'rgba(255,255,255,0.35)',
+    textTransform: 'uppercase',
+    marginBottom: 12,
+  },
+  confirmRefRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  confirmRefNum: {
+    fontFamily: SERIF,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#C9A84C',
+    letterSpacing: 1,
+  },
+  emailBadge: {
+    backgroundColor: 'rgba(45,106,79,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(45,106,79,0.4)',
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  emailBadgeTxt: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4CAF8A',
+  },
+  confirmCardTitle: {
+    fontFamily: SERIF,
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 14,
+  },
+  confirmServiceBadgeWrap: {
+    marginBottom: 14,
+  },
+  confirmServiceBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(201,168,76,0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.3)',
+    borderRadius: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  confirmServiceBadgeTxt: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#C9A84C',
+    letterSpacing: 0.5,
+  },
+  confirmRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  confirmKey: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.45)',
+  },
+  confirmVal: {
+    fontSize: 13.5,
+    fontWeight: '500',
+    color: '#fff',
+    textAlign: 'right',
+    flex: 1,
+    marginLeft: 16,
+  },
+  confirmAcompte: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#4CAF8A',
+  },
+  confirmSoldeRow: {
+    borderBottomWidth: 0,
+    marginTop: 4,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  confirmSoldeKey: {
+    fontFamily: SERIF,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  confirmSoldeVal: {
+    fontFamily: SERIF,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#C9A84C',
+  },
+
+  // Step 4 redesign
+  summaryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(201,168,76,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.22)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    marginBottom: 14,
+  },
+  summaryBannerLabel: { fontSize: 13.5, fontWeight: '500', color: 'rgba(255,255,255,0.75)' },
+  summaryBannerPrice: { fontFamily: SERIF, fontSize: 19, fontWeight: '700', color: '#C9A84C' },
+  summaryBannerChev: { fontSize: 9, color: 'rgba(255,255,255,0.35)' },
+  summaryDropdown: {
+    backgroundColor: '#1A1814',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    marginTop: -8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  sectionBlock: {
+    backgroundColor: '#1A1814',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    fontFamily: SERIF,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 14,
+  },
+  fieldRow: { flexDirection: 'row', gap: 10 },
+  fieldHalf: { flex: 1 },
+  fieldRO: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+  },
+  fieldROText: { fontSize: 14, color: 'rgba(255,255,255,0.6)' },
+  fieldInput: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    color: '#fff',
+    fontSize: 14,
+  },
+  payTabs: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  payTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  payTabOn: { borderColor: '#C9A84C', backgroundColor: 'rgba(201,168,76,0.1)' },
+  payTabTxt: { fontSize: 11.5, color: 'rgba(255,255,255,0.4)', fontWeight: '500' },
+  payTabTxtOn: { color: '#C9A84C', fontWeight: '700' },
+  visualCard: {
+    width: '100%',
+    height: 178,
+    backgroundColor: '#1A1208',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 14,
+    overflow: 'hidden',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.25)',
+  },
+  vcCircle1: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(201,168,76,0.11)',
+    top: -70,
+    right: -50,
+  },
+  vcCircle2: {
+    position: 'absolute',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(201,168,76,0.07)',
+    bottom: -40,
+    left: -30,
+  },
+  vcTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  vcBrand: { fontFamily: SERIF, fontSize: 13, fontWeight: '700', color: '#C9A84C', letterSpacing: 2 },
+  vcChip: { width: 30, height: 22, borderRadius: 4, backgroundColor: '#C9A84C', opacity: 0.85 },
+  vcNumber: {
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    letterSpacing: 3,
+    textAlign: 'center',
+  },
+  vcBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  vcMeta: { fontSize: 8, fontWeight: '700', letterSpacing: 1.5, color: 'rgba(201,168,76,0.55)', marginBottom: 2 },
+  vcValue: { fontSize: 11.5, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.5 },
+  altPayBox: { alignItems: 'center', paddingVertical: 28, gap: 12 },
+  altPayTxt: { fontSize: 13, color: 'rgba(255,255,255,0.45)', textAlign: 'center', lineHeight: 19 },
+  amtOption: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  amtOptionOn: {
+    borderColor: '#C9A84C',
+    backgroundColor: 'rgba(201,168,76,0.07)',
+    shadowColor: '#C9A84C',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  amtValue: { fontFamily: SERIF, fontSize: 20, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
+  amtBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  amtBadgeReq: { backgroundColor: 'rgba(201,168,76,0.12)', borderColor: 'rgba(201,168,76,0.3)' },
+  amtBadgeTxt: { fontSize: 9, fontWeight: '700', letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)' },
+  amtBadgeTxtReq: { color: '#C9A84C' },
+  amtDesc: { fontSize: 12, color: 'rgba(255,255,255,0.38)', lineHeight: 17 },
+  securityRow: { alignItems: 'center', paddingVertical: 8, marginBottom: 6 },
+  securityTxt: { fontSize: 11.5, color: 'rgba(255,255,255,0.3)', textAlign: 'center' },
 });

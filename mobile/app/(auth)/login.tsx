@@ -36,7 +36,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      setError('Email et mot de passe requis.');
+      setError('Identifiant et mot de passe requis.');
       return;
     }
     setLoading(true);
@@ -44,9 +44,8 @@ export default function LoginScreen() {
     try {
       await login({ username: email.trim(), password });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        'Identifiants invalides.';
+      const data = (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data;
+      const msg = data?.detail ?? data?.error ?? 'Identifiants invalides.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -106,15 +105,14 @@ export default function LoginScreen() {
             </View>
           )}
 
-          {/* Email */}
-          <Text style={styles.fieldLabel}>Adresse email</Text>
+          {/* Username */}
+          <Text style={styles.fieldLabel}>Nom d'utilisateur</Text>
           <TextInput
             style={styles.input}
             value={email}
             onChangeText={setEmail}
-            placeholder="votre@email.com"
+            placeholder="votre_username"
             placeholderTextColor="#b8afa2"
-            keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="next"
