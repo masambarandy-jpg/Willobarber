@@ -1,334 +1,333 @@
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-  Pressable,
-  RefreshControl,
-  SafeAreaView,
+  Dimensions,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/hooks/useAuth';
-import { useReservations } from '@/hooks/useReservations';
-import { settingsApi } from '@/services/api';
-import { ReservationCard } from '@/components/home/ReservationCard';
 import { ServiceCarousel } from '@/components/home/ServiceCarousel';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { Colors, FontSize, FontWeight, Spacing, BorderRadius, Shadow } from '@/constants';
-import type { SalonSettingsPublic } from '@/types';
 
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Bonjour';
-  if (h < 18) return 'Bon après-midi';
-  return 'Bonsoir';
+const { width: SCREEN_W } = Dimensions.get('window');
+const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
+
+// Static team data matching design
+const BARBERS = [
+  { id: 'willo', initial: 'W', name: 'Willo', role: 'FONDATEUR & MASTER BARBER', color: '#C9A84C', ringColor: '#C9A84C', rating: '4,9', reviews: 312, desc: '30 ans de passion pour la coiffure. Spécialiste des coupes texturées et des fondus ultra-précis.', tags: ['Fade', 'Texturé', 'Rasoir'] },
+  { id: 'malik', initial: 'M', name: 'Malik', role: 'BARBIER SENIOR', color: '#d8a06a', ringColor: '#8a5a35', rating: '4,9', reviews: 184, desc: "L'œil pour la barbe ciselée. Patience d'orfèvre, geste vif, résultat impeccable.", tags: ['Barbe', 'Rasage', 'Classique'] },
+  { id: 'idris', initial: 'I', name: 'Idris', role: 'BARBIER & COLORISTE', color: '#6fc191', ringColor: '#2D6A4F', rating: '4,8', reviews: 96, desc: 'Le réflexe pour les coupes contemporaines et la couleur masculine la plus discrète.', tags: ['Color', 'Crop', 'Soin'] },
+];
+
+const REVIEWS = [
+  { name: 'Thomas L.', color: '#6fc191', ring: '#2D6A4F', stars: 5, quote: 'Le meilleur barbier de Bruxelles, sans hésiter. On ressort avec dix ans de moins.', service: 'Signature WilloBarber' },
+  { name: 'Karim B.', color: '#d8a06a', ring: '#8a5a35', stars: 5, quote: 'Un vrai rituel. La serviette chaude, le rasoir droit… on prend le temps.', service: 'Taille & rasage' },
+  { name: 'Noé V.', color: '#b69ae0', ring: '#6b4fa0', stars: 5, quote: 'Idris a compris exactement ce que je voulais. Couleur impeccable et naturelle.', service: 'Camouflage gris' },
+  { name: 'Antoine R.', color: '#C9A84C', ring: '#8B6914', stars: 5, quote: 'Réservation en deux clics, accueil parfait, résultat au-dessus de mes attentes.', service: 'Le Rituel' },
+];
+
+function Stars({ n }: { n: number }) {
+  return <Text style={styles.stars}>{'★'.repeat(n)}{'☆'.repeat(5 - n)}</Text>;
 }
 
-const QUICK_ACTIONS = [
-  { icon: '✂️', label: 'Réserver', route: '/(tabs)/book' as const },
-  { icon: '📋', label: 'Mes RDV', route: '/(tabs)/reservations' as const },
-  { icon: '⭐', label: 'Services', route: '/(tabs)/book' as const },
-  { icon: '👤', label: 'Profil', route: '/(tabs)/profile' as const },
-];
+function Avatar({ initial, color, ring, size = 44 }: { initial: string; color: string; ring: string; size?: number }) {
+  return (
+    <View style={[styles.avatarBase, { width: size, height: size, borderRadius: size / 2, backgroundColor: color + '22', borderColor: ring }]}>
+      <Text style={[styles.avatarInitial, { fontSize: size * 0.38, color }]}>{initial}</Text>
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { upcoming, isLoading, refetch } = useReservations();
-  const [salonSettings, setSalonSettings] = useState<SalonSettingsPublic | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    settingsApi.get().then(setSalonSettings).catch(() => {});
-  }, []);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await refetch();
-    setRefreshing(false);
-  };
-
-  const nextReservation = upcoming[0] ?? null;
   const firstName = user?.first_name || user?.username || 'vous';
+  const scrollRef = useRef<ScrollView>(null);
+  const [servicesY, setServicesY] = useState(0);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={Colors.gold}
-          />
-        }
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>{getGreeting()},</Text>
-            <Text style={styles.userName}>{firstName} 👋</Text>
-          </View>
-          <View style={styles.loyaltyBadge}>
-            <Text style={styles.loyaltyIcon}>⭐</Text>
-            <Text style={styles.loyaltyPoints}>{user?.loyalty_points ?? 0} pts</Text>
-          </View>
+    <View style={styles.root}>
+      {/* Fixed header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerLogo}>{'{w}'}</Text>
+          <Text style={styles.headerBrand}>willobarber</Text>
         </View>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerIcon}>
+            <Text style={styles.headerIconText}>☰</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
+            <Avatar initial={(firstName[0] ?? 'U').toUpperCase()} color="#C9A84C" ring="#8B6914" size={32} />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        {/* Rush / Closed alert */}
-        {salonSettings?.rush_mode_active && (
-          <View style={styles.alertBanner}>
-            <Text style={styles.alertIcon}>⚡</Text>
-            <Text style={styles.alertText}>Mode rush actif — réservations suspendues</Text>
-          </View>
-        )}
-        {salonSettings && !salonSettings.bookings_open && (
-          <View style={[styles.alertBanner, styles.alertClosed]}>
-            <Text style={styles.alertIcon}>🔒</Text>
-            <Text style={styles.alertText}>Les réservations sont actuellement fermées</Text>
-          </View>
-        )}
-
-        {/* Hero card — next appointment */}
+      <ScrollView ref={scrollRef} style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        {/* ── Hero dark section ── */}
         <LinearGradient
-          colors={['#1A1400', '#2A2000', '#1A1A1A']}
-          style={styles.heroCard}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          colors={['#221c12', '#141009', '#0D0C0A']}
+          start={{ x: 0.8, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.hero}
         >
-          <View style={styles.heroTop}>
-            <Text style={styles.heroEmoji}>💈</Text>
-            <Badge label="WilloBarber" variant="gold" size="md" />
+          <Text style={styles.heroKicker}>BARBER PRIVÉ · RUE AUGUSTE VAN ZANDE 78</Text>
+          <Text style={styles.heroTitle}>
+            L'art de la{'\n'}
+            <Text style={styles.heroTitleGold}>coupe,{'\n'}</Text>
+            l'esprit du{'\n'}
+            <Text style={styles.heroTitleGold}>détail.</Text>
+          </Text>
+          <Text style={styles.heroSub}>
+            WilloBarber élève la coupe masculine au rang de rituel. Une heure suspendue, un geste précis, un résultat sur mesure.
+          </Text>
+          <View style={styles.heroBtns}>
+            <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
+              <Text style={styles.btnPrimaryText}>Réserver maintenant  →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnOutline} onPress={() => scrollRef.current?.scrollTo({ y: servicesY, animated: true })} activeOpacity={0.85}>
+              <Text style={styles.btnOutlineText}>↓  Nos prestations</Text>
+            </TouchableOpacity>
           </View>
 
-          {nextReservation ? (
-            <View style={styles.heroContent}>
-              <Text style={styles.heroLabel}>Prochain rendez-vous</Text>
-              <Text style={styles.heroService}>{nextReservation.service_name}</Text>
-              <Text style={styles.heroBarber}>avec {nextReservation.barber_name}</Text>
-              <View style={styles.heroDate}>
-                <Text style={styles.heroDateText}>
-                  📅{' '}
-                  {new Date(nextReservation.date).toLocaleDateString('fr-BE', {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                  })}
-                </Text>
-                <Text style={styles.heroDateText}>
-                  🕐 {nextReservation.start_time.substring(0, 5)}
-                </Text>
-              </View>
+          {/* Social proof card */}
+          <View style={styles.proofCard}>
+            <View style={styles.proofAvatars}>
+              {['#C9A84C', '#8a5a35', '#2D6A4F'].map((c, i) => (
+                <View key={i} style={[styles.proofAvatar, { backgroundColor: c + '33', borderColor: c, marginLeft: i ? -8 : 0 }]}>
+                  <Text style={{ fontSize: 10, color: c }}>W</Text>
+                </View>
+              ))}
+              <Text style={styles.proofCount}>2.4k+</Text>
             </View>
-          ) : (
-            <View style={styles.heroContent}>
-              <Text style={styles.heroLabel}>Pas de rendez-vous à venir</Text>
-              <Text style={styles.heroService}>Prenez soin de vous !</Text>
-              <Pressable
-                style={styles.heroBtn}
-                onPress={() => router.push('/(tabs)/book')}
-              >
-                <Text style={styles.heroBtnText}>Réserver maintenant →</Text>
-              </Pressable>
-            </View>
-          )}
+            <Text style={styles.proofText}>
+              Plus de 2 400 clients fidèles nous confient leur image chaque année  ·  4.9★ sur Google.
+            </Text>
+          </View>
         </LinearGradient>
 
-        {/* Quick actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Actions rapides</Text>
-          <View style={styles.quickGrid}>
-            {QUICK_ACTIONS.map((action) => (
-              <Pressable
-                key={action.label}
-                style={({ pressed }) => [styles.quickAction, pressed && styles.quickActionPressed]}
-                onPress={() => router.push(action.route)}
-              >
-                <Text style={styles.quickIcon}>{action.icon}</Text>
-                <Text style={styles.quickLabel}>{action.label}</Text>
-              </Pressable>
+        {/* ── Services section (cream) ── */}
+        <View style={styles.creamSection} onLayout={e => setServicesY(e.nativeEvent.layout.y)}>
+          <Text style={styles.sectionKicker}>NOS PRESTATIONS</Text>
+          <Text style={styles.sectionTitleDark}>
+            Une carte courte, <Text style={styles.sectionTitleGold}>une exigence longue.</Text>
+          </Text>
+          <Text style={styles.sectionSub}>Six prestations choisies, exécutées avec la même rigueur.</Text>
+          <View style={{ marginHorizontal: -22, marginTop: 6 }}>
+            <ServiceCarousel />
+          </View>
+        </View>
+
+        {/* ── Team section (dark) ── */}
+        <View style={styles.darkSection}>
+          <Text style={styles.sectionKicker}>L'ÉQUIPE</Text>
+          <Text style={styles.sectionTitleLight}>
+            Trois mains, <Text style={styles.sectionTitleGold}>une même école.</Text>
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+            {BARBERS.map(b => (
+              <View key={b.id} style={styles.barberCard}>
+                <Avatar initial={b.initial} color={b.color} ring={b.ringColor} size={72} />
+                <Text style={styles.barberName}>{b.name}</Text>
+                <Text style={styles.barberRole}>{b.role}</Text>
+                <Text style={styles.barberDesc}>{b.desc}</Text>
+                <View style={styles.tagRow}>
+                  {b.tags.map(t => (
+                    <View key={t} style={styles.tag}>
+                      <Text style={styles.tagText}>{t}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
             ))}
-          </View>
+          </ScrollView>
         </View>
 
-        {/* Nos Prestations — carousel animé */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Nos Prestations</Text>
-            <Text style={styles.sectionLink}>5 services</Text>
-          </View>
-          <ServiceCarousel />
+        {/* ── Reviews section (cream) ── */}
+        <View style={styles.creamSection}>
+          <Text style={styles.sectionKicker}>ILS EN PARLENT</Text>
+          <Text style={[styles.sectionTitleGold, { fontFamily: SERIF, fontSize: 26, marginBottom: 20, textAlign: 'center' }]}>
+            4,9 / 5 sur 720 avis vérifiés.
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+            {REVIEWS.map((r, i) => (
+              <View key={i} style={styles.reviewCard}>
+                <Stars n={r.stars} />
+                <Text style={styles.reviewQuote}>« {r.quote} »</Text>
+                <View style={styles.reviewAuthorRow}>
+                  <Avatar initial={r.name[0]} color={r.color} ring={r.ring} size={36} />
+                  <View>
+                    <Text style={styles.reviewAuthor}>{r.name}</Text>
+                    <Text style={styles.reviewService}>{r.service}</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
         </View>
 
-        {/* Upcoming reservations */}
-        {upcoming.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Prochains rendez-vous</Text>
-              <Pressable onPress={() => router.push('/(tabs)/reservations')}>
-                <Text style={styles.sectionLink}>Voir tout →</Text>
-              </Pressable>
-            </View>
-            <View style={styles.cardList}>
-              {upcoming.slice(0, 3).map((res) => (
-                <ReservationCard key={res.id} reservation={res} compact />
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Loyalty section */}
-        <Card style={styles.loyaltyCard} padded>
-          <View style={styles.loyaltyRow}>
-            <View>
-              <Text style={styles.loyaltyCardTitle}>Points fidélité</Text>
-              <Text style={styles.loyaltyCardSub}>Cumulez des points à chaque visite</Text>
-            </View>
-            <View style={styles.loyaltyPoints2}>
-              <Text style={styles.loyaltyNum}>{user?.loyalty_points ?? 0}</Text>
-              <Text style={styles.loyaltyPts}>pts</Text>
-            </View>
-          </View>
-        </Card>
-
-        <View style={styles.bottomPad} />
+        {/* ── CTA final (dark) ── */}
+        <View style={[styles.darkSection, { paddingVertical: 40, alignItems: 'center' }]}>
+          <Text style={[styles.sectionTitleLight, { textAlign: 'center', fontSize: 30, marginBottom: 12 }]}>
+            Votre prochain rendez-vous <Text style={styles.sectionTitleGold}>commence ici.</Text>
+          </Text>
+          <Text style={[styles.sectionSub, { color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 24, maxWidth: 280 }]}>
+            Plage horaire en quelques clics. Acompte sécurisé. Confirmation immédiate.
+          </Text>
+          <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
+            <Text style={styles.btnPrimaryText}>Réserver une plage  →</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.background },
-  scroll: { padding: Spacing.xl, gap: Spacing.xl },
+  root: { flex: 1, backgroundColor: '#0D0C0A' },
 
+  // Fixed header
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  headerLeft: { gap: 2 },
-  greeting: { fontSize: FontSize.base, color: Colors.textSecondary },
-  userName: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.textPrimary },
-
-  loyaltyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.goldSubtle,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.3)',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-  },
-  loyaltyIcon: { fontSize: 14 },
-  loyaltyPoints: { fontSize: FontSize.sm, color: Colors.gold, fontWeight: FontWeight.semiBold },
-
-  alertBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.warningSubtle,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.warning,
-    padding: Spacing.md,
-  },
-  alertClosed: {
-    backgroundColor: Colors.errorSubtle,
-    borderColor: Colors.error,
-  },
-  alertIcon: { fontSize: 18 },
-  alertText: { fontSize: FontSize.sm, color: Colors.textPrimary, flex: 1 },
-
-  heroCard: {
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    gap: Spacing.base,
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.2)',
-    ...Shadow.gold,
-  },
-  heroTop: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 52 : 32,
+    paddingBottom: 12,
+    backgroundColor: 'rgba(13,12,10,0.9)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.07)',
   },
-  heroEmoji: { fontSize: 28 },
-  heroContent: { gap: Spacing.sm },
-  heroLabel: { fontSize: FontSize.sm, color: Colors.textMuted, letterSpacing: 0.5 },
-  heroService: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.textPrimary },
-  heroBarber: { fontSize: FontSize.base, color: Colors.gold },
-  heroDate: { flexDirection: 'row', gap: Spacing.lg, marginTop: Spacing.xs },
-  heroDateText: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  heroBtn: {
-    alignSelf: 'flex-start',
-    marginTop: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.base,
-    backgroundColor: Colors.gold,
-    borderRadius: BorderRadius.md,
-  },
-  heroBtnText: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semiBold,
-    color: Colors.textInverse,
-  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  headerLogo: { fontFamily: SERIF, fontSize: 22, fontWeight: '700', color: '#C9A84C', letterSpacing: 1 },
+  headerBrand: { fontFamily: SERIF, fontSize: 19, fontWeight: '600', color: '#fff' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerIcon: {},
+  headerIconText: { fontSize: 20, color: '#fff' },
 
-  section: { gap: Spacing.md },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionTitle: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
-  },
-  sectionLink: {
-    fontSize: FontSize.sm,
-    color: Colors.gold,
-    fontWeight: FontWeight.medium,
-  },
+  scroll: { flex: 1 },
 
-  quickGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
+  // Avatar
+  avatarBase: { alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+  avatarInitial: { fontFamily: SERIF, fontWeight: '600' },
+
+  // Hero dark section
+  hero: {
+    paddingHorizontal: 22,
+    paddingTop: 30,
+    paddingBottom: 34,
   },
-  quickAction: {
-    flex: 1,
-    minWidth: '45%',
+  heroKicker: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2,
+    color: '#C9A84C',
+    textTransform: 'uppercase',
+    marginBottom: 18,
+  },
+  heroTitle: {
+    fontFamily: SERIF,
+    fontSize: 50,
+    fontWeight: '600',
+    color: '#fff',
+    lineHeight: 54,
+    letterSpacing: 0.3,
+  },
+  heroTitleGold: { color: '#C9A84C', fontStyle: 'italic' },
+  heroSub: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.55)',
+    lineHeight: 21,
+    marginTop: 20,
+    marginBottom: 24,
+    maxWidth: 320,
+  },
+  heroBtns: { gap: 12, marginBottom: 26 },
+  btnPrimary: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingVertical: 16,
+    paddingHorizontal: 26,
     alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
+    shadowColor: '#C9A84C',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  btnPrimaryText: { color: '#1A1208', fontWeight: '700', fontSize: 15.5 },
+  btnOutline: {
+    borderRadius: 100,
+    paddingVertical: 15,
+    paddingHorizontal: 26,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    padding: Spacing.lg,
-  },
-  quickActionPressed: { opacity: 0.75, backgroundColor: Colors.surfaceElevated },
-  quickIcon: { fontSize: 28 },
-  quickLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: FontWeight.medium },
-
-  cardList: { gap: Spacing.sm },
-
-  loyaltyCard: { borderColor: 'rgba(201,168,76,0.25)', borderWidth: 1 },
-  loyaltyRow: {
-    flexDirection: 'row',
+    borderColor: 'rgba(255,255,255,0.28)',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  loyaltyCardTitle: { fontSize: FontSize.base, fontWeight: FontWeight.semiBold, color: Colors.textPrimary },
-  loyaltyCardSub: { fontSize: FontSize.sm, color: Colors.textMuted, marginTop: 2 },
-  loyaltyPoints2: { alignItems: 'flex-end' },
-  loyaltyNum: { fontSize: FontSize.xxl, fontWeight: FontWeight.bold, color: Colors.gold },
-  loyaltyPts: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  btnOutlineText: { color: 'rgba(255,255,255,0.8)', fontWeight: '500', fontSize: 14.5 },
 
-  bottomPad: { height: Spacing.xl },
+  // Social proof card
+  proofCard: {
+    backgroundColor: '#1A1814',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.18)',
+    borderRadius: 16,
+    padding: 16,
+  },
+  proofAvatars: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  proofAvatar: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+  proofCount: { fontFamily: SERIF, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
+  proofText: { fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 19 },
+
+  // Sections
+  creamSection: { backgroundColor: '#F5F0E8', paddingHorizontal: 22, paddingTop: 34, paddingBottom: 30 },
+  darkSection: { backgroundColor: '#0D0C0A', paddingHorizontal: 22, paddingTop: 34, paddingBottom: 30 },
+
+  sectionKicker: { fontSize: 11, fontWeight: '600', letterSpacing: 3, color: '#C9A84C', textTransform: 'uppercase', textAlign: 'center', marginBottom: 12 },
+  sectionTitleDark: { fontFamily: SERIF, fontSize: 28, fontWeight: '600', color: '#1A1208', textAlign: 'center', marginBottom: 8, lineHeight: 34 },
+  sectionTitleLight: { fontFamily: SERIF, fontSize: 28, fontWeight: '600', color: '#fff', textAlign: 'center', marginBottom: 20, lineHeight: 34 },
+  sectionTitleGold: { color: '#C9A84C', fontStyle: 'italic' },
+  sectionSub: { fontSize: 13.5, color: '#6B6560', textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+
+  // Horizontal scroll
+  hScroll: { paddingHorizontal: 0, gap: 14, paddingBottom: 4 },
+
+  // Barber cards
+  barberCard: {
+    width: 248,
+    backgroundColor: '#1A1814',
+    borderRadius: 18,
+    padding: 20,
+    alignItems: 'center',
+    gap: 6,
+  },
+  barberName: { fontFamily: SERIF, fontSize: 22, fontWeight: '600', color: '#fff', marginTop: 8 },
+  barberRole: { fontSize: 10, fontWeight: '600', letterSpacing: 2, color: '#C9A84C', textTransform: 'uppercase', textAlign: 'center' },
+  barberDesc: { fontSize: 12.5, color: 'rgba(255,255,255,0.55)', lineHeight: 19, textAlign: 'center', marginTop: 4 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, justifyContent: 'center', marginTop: 6 },
+  tag: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', borderRadius: 100, paddingHorizontal: 12, paddingVertical: 5 },
+  tagText: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
+
+  // Review cards
+  reviewCard: {
+    width: 262,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    gap: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 3,
+  },
+  stars: { fontSize: 14, color: '#C9A84C', marginBottom: 12 },
+  reviewQuote: { fontFamily: SERIF, fontStyle: 'italic', fontSize: 17, color: '#2a2118', lineHeight: 24, marginBottom: 16 },
+  reviewAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  reviewAuthor: { fontSize: 13.5, fontWeight: '600', color: '#1A1208' },
+  reviewService: { fontSize: 11.5, color: '#a89f93', marginTop: 1 },
 });

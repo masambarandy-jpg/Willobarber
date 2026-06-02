@@ -2,65 +2,77 @@ import React, { useState } from 'react';
 import {
   Alert,
   Modal,
+  Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { authApi } from '@/services/api';
-import { Avatar } from '@/components/ui/Avatar';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { Divider } from '@/components/ui/Divider';
-import { Colors, FontSize, FontWeight, Spacing, BorderRadius, Shadow } from '@/constants';
 
-interface SettingRowProps {
-  icon: string;
+const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
+
+function Avatar({ initial, size = 72 }: { initial: string; size?: number }) {
+  return (
+    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Text style={[styles.avatarText, { fontSize: size * 0.4 }]}>{initial}</Text>
+    </View>
+  );
+}
+
+function SectionTitle({ label }: { label: string }) {
+  return <Text style={styles.sectionTitle}>{label}</Text>;
+}
+
+function SettingRow({ icon, label, value, onPress, rightElement, destructive }: {
+  icon?: string;
   label: string;
   value?: string;
   onPress?: () => void;
   rightElement?: React.ReactNode;
   destructive?: boolean;
-}
-
-function SettingRow({ icon, label, value, onPress, rightElement, destructive = false }: SettingRowProps) {
+}) {
   return (
-    <Pressable
-      style={({ pressed }) => [rowStyles.row, pressed && onPress && rowStyles.pressed]}
-      onPress={onPress}
-      disabled={!onPress && !rightElement}
-    >
-      <Text style={rowStyles.icon}>{icon}</Text>
-      <View style={rowStyles.content}>
-        <Text style={[rowStyles.label, destructive && rowStyles.labelDestructive]}>{label}</Text>
-        {value && <Text style={rowStyles.value}>{value}</Text>}
+    <Pressable style={({ pressed }) => [styles.settingRow, pressed && onPress && { opacity: 0.7 }]} onPress={onPress} disabled={!onPress && !rightElement}>
+      {icon && <Text style={styles.settingIcon}>{icon}</Text>}
+      <View style={styles.settingContent}>
+        <Text style={[styles.settingLabel, destructive && { color: '#C0392B' }]}>{label}</Text>
+        {value && <Text style={styles.settingValue}>{value}</Text>}
       </View>
-      {rightElement ?? (onPress && <Text style={rowStyles.arrow}>›</Text>)}
+      {rightElement ?? (onPress && <Text style={styles.settingArrow}>›</Text>)}
     </Pressable>
   );
 }
 
-const rowStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-  },
-  pressed: { opacity: 0.7 },
-  icon: { fontSize: 20, width: 28 },
-  content: { flex: 1 },
-  label: { fontSize: FontSize.base, color: Colors.textPrimary },
-  labelDestructive: { color: Colors.error },
-  value: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 1 },
-  arrow: { fontSize: FontSize.lg, color: Colors.textMuted },
-});
+function ModalField({ label, value, onChangeText, placeholder, secureTextEntry, keyboardType }: {
+  label: string;
+  value: string;
+  onChangeText: (t: string) => void;
+  placeholder?: string;
+  secureTextEntry?: boolean;
+  keyboardType?: 'phone-pad' | 'email-address';
+}) {
+  return (
+    <View style={styles.mfWrap}>
+      <Text style={styles.mfLabel}>{label}</Text>
+      <TextInput
+        style={styles.mfInput}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="rgba(255,255,255,0.3)"
+        secureTextEntry={secureTextEntry}
+        keyboardType={keyboardType}
+        autoCapitalize="none"
+      />
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const { user, logout, refreshUser } = useAuth();
@@ -69,57 +81,46 @@ export default function ProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Edit profile fields
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [aiRec, setAiRec] = useState(user?.ai_recommendations ?? true);
 
-  // Password change fields
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [newPw2, setNewPw2] = useState('');
 
+  if (!user) return null;
+
+  const fullName = `${user.first_name} ${user.last_name}`.trim() || user.username;
+  const initial = (user.first_name?.[0] ?? user.username?.[0] ?? 'U').toUpperCase();
+  const memberSince = new Date(user.created_at).toLocaleDateString('fr-BE', { month: 'short', year: 'numeric' });
+
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      await authApi.updateProfile({
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        phone: phone.trim() || undefined,
-        ai_recommendations: aiRec,
-      });
+      await authApi.updateProfile({ first_name: firstName.trim(), last_name: lastName.trim(), phone: phone.trim() || undefined, ai_recommendations: aiRec });
       await refreshUser();
       setEditModal(false);
-      Alert.alert('✅ Profil mis à jour');
     } catch {
-      Alert.alert('Erreur', 'Impossible de sauvegarder le profil.');
+      Alert.alert('Erreur', 'Impossible de sauvegarder.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleChangePassword = async () => {
-    if (!oldPw || !newPw || !newPw2) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs.');
-      return;
-    }
-    if (newPw !== newPw2) {
-      Alert.alert('Erreur', 'Les mots de passe ne correspondent pas.');
-      return;
-    }
+    if (!oldPw || !newPw || !newPw2) { Alert.alert('Erreur', 'Tous les champs sont requis.'); return; }
+    if (newPw !== newPw2) { Alert.alert('Erreur', 'Les mots de passe ne correspondent pas.'); return; }
     setSaving(true);
     try {
       await authApi.changePassword({ old_password: oldPw, new_password: newPw, new_password2: newPw2 });
       setPwModal(false);
-      setOldPw('');
-      setNewPw('');
-      setNewPw2('');
+      setOldPw(''); setNewPw(''); setNewPw2('');
       Alert.alert('✅ Mot de passe modifié');
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: Record<string, string[]> } })?.response?.data;
-      const detail = msg ? Object.values(msg).flat().join('\n') : 'Erreur lors du changement de mot de passe.';
+      const msg = (err as { response?: { data?: Record<string, string[]> } })?.response?.data;
+      const detail = msg ? Object.values(msg).flat().join('\n') : 'Erreur.';
       Alert.alert('Erreur', detail);
     } finally {
       setSaving(false);
@@ -129,111 +130,89 @@ export default function ProfileScreen() {
   const handleLogout = () => {
     Alert.alert('Déconnexion', 'Êtes-vous sûr de vouloir vous déconnecter ?', [
       { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Déconnecter',
-        style: 'destructive',
-        onPress: async () => {
-          setLoggingOut(true);
-          await logout();
-          setLoggingOut(false);
-        },
-      },
+      { text: 'Se déconnecter', style: 'destructive', onPress: async () => { setLoggingOut(true); await logout(); setLoggingOut(false); } },
     ]);
   };
 
-  if (!user) return null;
-
-  const fullName = `${user.first_name} ${user.last_name}`.trim() || user.username;
-
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Profile hero */}
-        <View style={styles.hero}>
-          <View style={styles.avatarWrap}>
-            <Avatar name={fullName} size={84} color={Colors.gold} />
-            <View style={styles.roleChip}>
-              <Text style={styles.roleText}>{user.role}</Text>
-            </View>
-          </View>
-          <Text style={styles.name}>{fullName}</Text>
-          <Text style={styles.email}>{user.email}</Text>
-          {user.phone && <Text style={styles.phone}>📱 {user.phone}</Text>}
 
-          <View style={styles.statsRow}>
-            <View style={styles.stat}>
-              <Text style={styles.statNum}>{user.loyalty_points}</Text>
-              <Text style={styles.statLabel}>Points</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.stat}>
-              <Text style={styles.statNum}>{user.late_cancellations}</Text>
-              <Text style={[styles.statLabel, user.late_cancellations > 0 && { color: Colors.warning }]}>
-                Annulations tardives
-              </Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.stat}>
-              <Text style={styles.statNum}>
-                {new Date(user.created_at).toLocaleDateString('fr-BE', { month: 'short', year: 'numeric' })}
-              </Text>
-              <Text style={styles.statLabel}>Membre depuis</Text>
-            </View>
+        {/* Hero section */}
+        <View style={styles.hero}>
+          {/* Dark bg with subtle gradient */}
+          <View style={styles.heroBg} />
+          <Avatar initial={initial} size={80} />
+          <View style={styles.rolePill}>
+            <Text style={styles.roleText}>{(user.role ?? 'client').toUpperCase()}</Text>
+          </View>
+          <Text style={styles.heroName}>{fullName}</Text>
+          <Text style={styles.heroEmail}>{user.email}</Text>
+          {user.phone && <Text style={styles.heroPhone}>{user.phone}</Text>}
+        </View>
+
+        {/* Stats row */}
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>{user.loyalty_points}</Text>
+            <Text style={styles.statLabel}>Points{'\n'}fidélité</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNum, user.late_cancellations > 0 && { color: '#C0392B' }]}>{user.late_cancellations}</Text>
+            <Text style={styles.statLabel}>Annulations{'\n'}tardives</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>{memberSince}</Text>
+            <Text style={styles.statLabel}>Membre{'\n'}depuis</Text>
           </View>
         </View>
 
         {/* Account settings */}
-        <Card padded style={styles.section}>
-          <Text style={styles.sectionTitle}>Mon compte</Text>
-          <Divider spacing={Spacing.sm} />
-          <SettingRow icon="✏️" label="Modifier le profil" onPress={() => {
-            setFirstName(user.first_name);
-            setLastName(user.last_name);
-            setPhone(user.phone ?? '');
-            setAiRec(user.ai_recommendations);
-            setEditModal(true);
-          }} />
-          <Divider spacing={0} />
+        <View style={styles.settingCard}>
+          <SectionTitle label="Mon compte" />
+          <View style={styles.settingDivider} />
+          <SettingRow icon="✏️" label="Modifier le profil" onPress={() => { setFirstName(user.first_name); setLastName(user.last_name); setPhone(user.phone ?? ''); setAiRec(user.ai_recommendations); setEditModal(true); }} />
+          <View style={styles.settingDivider} />
           <SettingRow icon="🔑" label="Changer le mot de passe" onPress={() => setPwModal(true)} />
-          <Divider spacing={0} />
+          <View style={styles.settingDivider} />
           <SettingRow
             icon="🤖"
             label="Recommandations IA"
             rightElement={
               <Switch
                 value={aiRec}
-                onValueChange={async (v) => {
-                  setAiRec(v);
-                  await authApi.updateProfile({ ai_recommendations: v });
-                  await refreshUser();
-                }}
-                trackColor={{ false: Colors.surfaceBorder, true: Colors.goldSubtle }}
-                thumbColor={aiRec ? Colors.gold : Colors.textMuted}
+                onValueChange={async v => { setAiRec(v); await authApi.updateProfile({ ai_recommendations: v }); await refreshUser(); }}
+                trackColor={{ false: 'rgba(255,255,255,0.12)', true: 'rgba(201,168,76,0.4)' }}
+                thumbColor={aiRec ? '#C9A84C' : 'rgba(255,255,255,0.5)'}
               />
             }
           />
-        </Card>
+        </View>
 
-        {/* Legal */}
-        <Card padded style={styles.section}>
-          <Text style={styles.sectionTitle}>Informations</Text>
-          <Divider spacing={Spacing.sm} />
+        {/* Info */}
+        <View style={styles.settingCard}>
+          <SectionTitle label="Informations" />
+          <View style={styles.settingDivider} />
           <SettingRow icon="📄" label="Conditions d'utilisation" />
-          <Divider spacing={0} />
+          <View style={styles.settingDivider} />
           <SettingRow icon="🔒" label="Politique de confidentialité" />
-          <Divider spacing={0} />
-          <SettingRow icon="📍" label="WilloBarber, Bruxelles" value="Rue de la Paix 12, 1000 Bruxelles" />
-        </Card>
+          <View style={styles.settingDivider} />
+          <SettingRow icon="📍" label="WilloBarber" value="Rue Auguste Van Zande 78, Bruxelles" />
+        </View>
 
         {/* Logout */}
-        <Button
-          label="Se déconnecter"
-          variant="danger"
-          loading={loggingOut}
+        <TouchableOpacity
+          style={styles.logoutBtn}
           onPress={handleLogout}
-        />
+          disabled={loggingOut}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.logoutBtnText}>{loggingOut ? 'Déconnexion…' : 'Se déconnecter'}</Text>
+        </TouchableOpacity>
 
-        <Text style={styles.version}>WilloBarber v1.0.0 • TFE 2025-2026</Text>
+        <Text style={styles.version}>WilloBarber v1.0.0 · TFE 2025-2026</Text>
       </ScrollView>
 
       {/* Edit profile modal */}
@@ -242,29 +221,19 @@ export default function ProfileScreen() {
           <View style={styles.modal}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Modifier le profil</Text>
-              <Pressable onPress={() => setEditModal(false)}>
-                <Text style={styles.modalClose}>✕</Text>
-              </Pressable>
+              <Pressable onPress={() => setEditModal(false)}><Text style={styles.modalClose}>✕</Text></Pressable>
             </View>
-
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.modalForm}>
-                <ModalField label="Prénom" value={firstName} onChangeText={setFirstName} placeholder="Jean" />
-                <ModalField label="Nom" value={lastName} onChangeText={setLastName} placeholder="Dupont" />
-                <ModalField label="Téléphone" value={phone} onChangeText={setPhone} placeholder="+32 470 …" keyboardType="phone-pad" />
-
-                <View style={styles.switchRow}>
-                  <Text style={styles.switchLabel}>Recommandations IA</Text>
-                  <Switch
-                    value={aiRec}
-                    onValueChange={setAiRec}
-                    trackColor={{ false: Colors.surfaceBorder, true: Colors.goldSubtle }}
-                    thumbColor={aiRec ? Colors.gold : Colors.textMuted}
-                  />
-                </View>
-
-                <Button label="Sauvegarder" onPress={handleSaveProfile} loading={saving} />
+              <ModalField label="Prénom" value={firstName} onChangeText={setFirstName} placeholder="Jean" />
+              <ModalField label="Nom" value={lastName} onChangeText={setLastName} placeholder="Dupont" />
+              <ModalField label="Téléphone" value={phone} onChangeText={setPhone} placeholder="+32 470 …" keyboardType="phone-pad" />
+              <View style={styles.switchRow}>
+                <Text style={styles.switchLabel}>Recommandations IA</Text>
+                <Switch value={aiRec} onValueChange={setAiRec} trackColor={{ false: 'rgba(255,255,255,0.12)', true: 'rgba(201,168,76,0.4)' }} thumbColor={aiRec ? '#C9A84C' : 'rgba(255,255,255,0.5)'} />
               </View>
+              <TouchableOpacity style={[styles.btnPrimary, saving && { opacity: 0.7 }]} onPress={handleSaveProfile} disabled={saving} activeOpacity={0.85}>
+                <Text style={styles.btnPrimaryText}>{saving ? 'Sauvegarde…' : 'Sauvegarder'}</Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
@@ -276,137 +245,156 @@ export default function ProfileScreen() {
           <View style={styles.modal}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Changer le mot de passe</Text>
-              <Pressable onPress={() => setPwModal(false)}>
-                <Text style={styles.modalClose}>✕</Text>
-              </Pressable>
+              <Pressable onPress={() => setPwModal(false)}><Text style={styles.modalClose}>✕</Text></Pressable>
             </View>
-            <View style={styles.modalForm}>
-              <ModalField label="Mot de passe actuel" value={oldPw} onChangeText={setOldPw} placeholder="••••••••" secureTextEntry />
-              <ModalField label="Nouveau mot de passe" value={newPw} onChangeText={setNewPw} placeholder="••••••••" secureTextEntry />
-              <ModalField label="Confirmer" value={newPw2} onChangeText={setNewPw2} placeholder="••••••••" secureTextEntry />
-              <Button label="Changer le mot de passe" onPress={handleChangePassword} loading={saving} />
-            </View>
+            <ModalField label="Mot de passe actuel" value={oldPw} onChangeText={setOldPw} placeholder="••••••••" secureTextEntry />
+            <ModalField label="Nouveau mot de passe" value={newPw} onChangeText={setNewPw} placeholder="••••••••" secureTextEntry />
+            <ModalField label="Confirmer" value={newPw2} onChangeText={setNewPw2} placeholder="••••••••" secureTextEntry />
+            <TouchableOpacity style={[styles.btnPrimary, saving && { opacity: 0.7 }]} onPress={handleChangePassword} disabled={saving} activeOpacity={0.85}>
+              <Text style={styles.btnPrimaryText}>{saving ? 'Modification…' : 'Changer le mot de passe'}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
-  );
-}
-
-function ModalField({
-  label, value, onChangeText, placeholder, secureTextEntry = false, keyboardType,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (t: string) => void;
-  placeholder?: string;
-  secureTextEntry?: boolean;
-  keyboardType?: 'phone-pad' | 'email-address';
-}) {
-  return (
-    <View style={mfStyles.wrapper}>
-      <Text style={mfStyles.label}>{label}</Text>
-      <TextInput
-        style={mfStyles.input}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={Colors.textMuted}
-        secureTextEntry={secureTextEntry}
-        keyboardType={keyboardType}
-        autoCapitalize="none"
-      />
     </View>
   );
 }
 
-const mfStyles = StyleSheet.create({
-  wrapper: { marginBottom: Spacing.md },
-  label: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.xs, fontWeight: FontWeight.medium },
-  input: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    padding: Spacing.md,
-    fontSize: FontSize.base,
-    color: Colors.textPrimary,
-    minHeight: 48,
-  },
-});
-
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.xl, gap: Spacing.lg, paddingBottom: Spacing.xxxl },
+  root: { flex: 1, backgroundColor: '#0D0C0A' },
+  content: { paddingBottom: 40 },
 
+  // Hero
   hero: {
     alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
+    paddingTop: Platform.OS === 'ios' ? 60 : 42,
+    paddingBottom: 28,
+    paddingHorizontal: 22,
+    backgroundColor: '#1A1814',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.07)',
+    gap: 4,
   },
-  avatarWrap: { position: 'relative' },
-  roleChip: {
-    position: 'absolute',
-    bottom: -4,
-    right: -4,
-    backgroundColor: Colors.goldSubtle,
-    borderRadius: BorderRadius.full,
+  heroBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#1A1814' },
+  avatar: {
+    backgroundColor: 'rgba(201,168,76,0.15)',
+    borderWidth: 2,
+    borderColor: '#C9A84C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    shadowColor: '#C9A84C',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  avatarText: { color: '#C9A84C', fontFamily: SERIF, fontWeight: '600' },
+  rolePill: {
+    backgroundColor: 'rgba(201,168,76,0.12)',
+    borderRadius: 100,
     borderWidth: 1,
-    borderColor: Colors.gold,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
+    borderColor: '#C9A84C',
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    marginBottom: 4,
   },
-  roleText: { fontSize: 9, color: Colors.gold, fontWeight: FontWeight.bold, textTransform: 'uppercase' },
-  name: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.textPrimary },
-  email: { fontSize: FontSize.base, color: Colors.textSecondary },
-  phone: { fontSize: FontSize.sm, color: Colors.textMuted },
+  roleText: { fontSize: 9.5, color: '#C9A84C', fontWeight: '700', letterSpacing: 1 },
+  heroName: { fontFamily: SERIF, fontSize: 26, fontWeight: '600', color: '#fff', textAlign: 'center' },
+  heroEmail: { fontSize: 14, color: 'rgba(255,255,255,0.55)', textAlign: 'center' },
+  heroPhone: { fontSize: 13, color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
+
+  // Stats
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    padding: Spacing.md,
-    marginTop: Spacing.sm,
-    gap: Spacing.md,
+    backgroundColor: '#1A1814',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.07)',
+    paddingVertical: 16,
+    paddingHorizontal: 22,
+    marginBottom: 20,
   },
-  stat: { flex: 1, alignItems: 'center' },
-  statNum: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.textPrimary },
-  statLabel: { fontSize: FontSize.xs, color: Colors.textMuted, textAlign: 'center', marginTop: 2 },
-  statDivider: { width: 1, height: 32, backgroundColor: Colors.surfaceBorder },
+  statItem: { flex: 1, alignItems: 'center' },
+  statNum: { fontFamily: SERIF, fontSize: 18, fontWeight: '700', color: '#fff', lineHeight: 22 },
+  statLabel: { fontSize: 9.5, color: 'rgba(255,255,255,0.45)', textAlign: 'center', marginTop: 3, lineHeight: 13 },
+  statDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.08)' },
 
-  section: { gap: 0 },
-  sectionTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.textPrimary, marginBottom: Spacing.xs },
+  // Settings card
+  settingCard: {
+    backgroundColor: '#1A1814',
+    marginHorizontal: 22,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 12 },
+  settingDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 0 },
+  settingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, gap: 12 },
+  settingIcon: { fontSize: 18, width: 26 },
+  settingContent: { flex: 1 },
+  settingLabel: { fontSize: 14.5, color: '#fff' },
+  settingValue: { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 },
+  settingArrow: { fontSize: 20, color: 'rgba(255,255,255,0.35)' },
 
-  version: { fontSize: FontSize.xs, color: Colors.textMuted, textAlign: 'center' },
+  // Logout
+  logoutBtn: {
+    backgroundColor: '#FDECEA',
+    borderRadius: 100,
+    marginHorizontal: 22,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  logoutBtnText: { color: '#C0392B', fontWeight: '700', fontSize: 14.5 },
 
-  overlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  version: { fontSize: 11.5, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginBottom: 8 },
+
+  // Buttons
+  btnPrimary: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingVertical: 15,
+    alignItems: 'center',
+    shadowColor: '#C9A84C',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 5,
+    marginTop: 8,
+  },
+  btnPrimaryText: { color: '#1A1208', fontWeight: '700', fontSize: 15 },
+
+  // Modal
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modal: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: BorderRadius.xxl,
-    borderTopRightRadius: BorderRadius.xxl,
-    padding: Spacing.xl,
+    backgroundColor: '#1A1814',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
     maxHeight: '85%',
     borderTopWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
-  },
-  modalTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.textPrimary },
-  modalClose: { fontSize: FontSize.lg, color: Colors.textMuted, padding: Spacing.xs },
-  modalForm: { gap: Spacing.sm },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  modalTitle: { fontFamily: SERIF, fontSize: 22, fontWeight: '600', color: '#fff' },
+  modalClose: { fontSize: 18, color: 'rgba(255,255,255,0.45)', padding: 4 },
 
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.sm,
+  mfWrap: { marginBottom: 14 },
+  mfLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: 7 },
+  mfInput: {
+    backgroundColor: '#252018',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 13,
+    fontSize: 14,
+    color: '#fff',
+    minHeight: 46,
   },
-  switchLabel: { fontSize: FontSize.base, color: Colors.textPrimary },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, marginBottom: 8 },
+  switchLabel: { fontSize: 14.5, color: '#fff' },
 });

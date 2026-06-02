@@ -1,43 +1,57 @@
 export const Colors = {
-  // Backgrounds
-  background: '#0D0D0D',
-  surface: '#1A1A1A',
-  surfaceElevated: '#252525',
-  surfaceBorder: '#2A2A2A',
+  // ── Core backgrounds ──────────────────────────
+  dark: '#0D0C0A',
+  cream: '#F5F0E8',
 
-  // Brand
+  // Legacy aliases kept for backward compat
+  background: '#0D0C0A',
+  surface: '#1A1814',
+  surfaceElevated: '#201E19',
+  surfaceBorder: 'rgba(255,255,255,0.08)',
+
+  // ── Brand gold ────────────────────────────────
   gold: '#C9A84C',
-  goldLight: '#E8C96A',
-  goldDark: '#A07830',
-  goldSubtle: 'rgba(201, 168, 76, 0.12)',
+  goldLight: '#E8CF8A',
+  goldDark: '#8B6914',
+  goldSubtle: 'rgba(201,168,76,0.12)',
+  goldGlow: 'rgba(201,168,76,0.35)',
 
-  // Text
+  // ── Cards ──────────────────────────────────────
+  cardDark: '#1A1814',
+  cardCream: '#FFFFFF',
+
+  // ── Text ──────────────────────────────────────
   textPrimary: '#FFFFFF',
-  textSecondary: '#A0A0A0',
-  textMuted: '#666666',
-  textInverse: '#0D0D0D',
+  textDark: '#1A1208',
+  textSecondary: 'rgba(255,255,255,0.55)',
+  textGray: '#6B6560',
+  textMuted: 'rgba(255,255,255,0.4)',
+  textInverse: '#1A1208',
 
-  // Status
-  success: '#4CAF50',
-  successSubtle: 'rgba(76, 175, 80, 0.12)',
-  error: '#EF5350',
-  errorSubtle: 'rgba(239, 83, 80, 0.12)',
+  // ── Status ────────────────────────────────────
+  success: '#2D6A4F',
+  successLight: '#6fc191',
+  successSubtle: '#D4EDDA',
+  successText: '#2D6A4F',
+  error: '#C0392B',
+  errorSubtle: '#FDECEA',
+  errorText: '#C0392B',
   warning: '#FF9800',
-  warningSubtle: 'rgba(255, 152, 0, 0.12)',
+  warningSubtle: 'rgba(255,152,0,0.12)',
   info: '#2196F3',
-  infoSubtle: 'rgba(33, 150, 243, 0.12)',
+  infoSubtle: 'rgba(33,150,243,0.12)',
 
-  // Reservation status
+  // ── Reservation status ────────────────────────
   statusPending: '#FF9800',
-  statusConfirmed: '#4CAF50',
+  statusConfirmed: '#2D6A4F',
   statusCompleted: '#2196F3',
-  statusCancelled: '#EF5350',
+  statusCancelled: '#C0392B',
 
-  // Misc
+  // ── Misc ──────────────────────────────────────
   white: '#FFFFFF',
   black: '#000000',
   transparent: 'transparent',
-  overlay: 'rgba(0, 0, 0, 0.6)',
+  overlay: 'rgba(0,0,0,0.7)',
 } as const;
 
 export type ColorKey = keyof typeof Colors;

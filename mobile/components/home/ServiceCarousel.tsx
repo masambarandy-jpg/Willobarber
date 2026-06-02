@@ -1,11 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
+  Dimensions,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
-  useWindowDimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   cancelAnimation,
   runOnJS,
@@ -14,101 +17,73 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { BorderRadius, Colors, FontSize, FontWeight, Spacing } from '@/constants';
+import { useState } from 'react';
 
-interface Service {
-  id: string;
-  icon: string;
-  tag: string;
-  title: string;
-  description: string;
-  price: string;
-}
+const { width: SCREEN_W } = Dimensions.get('window');
+const PADDING_H = 22;
+const PEEK = 20;
+const GAP = 12;
+const SLIDE_W = SCREEN_W - PADDING_H * 2 - PEEK;
+const IMAGE_H = 205;
+const SLIDE_DURATION = 10000;
+const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
-const SLIDE_DURATION = 6000;
-
-const SERVICES: Service[] = [
-  {
-    id: '1',
-    icon: '✂️',
-    tag: 'POPULAIRE',
-    title: 'Coupe Homme',
-    description: 'Dégradé, taper fade ou coupe classique. Un look soigné taillé à votre style.',
-    price: 'Dès 20€',
-  },
-  {
-    id: '2',
-    icon: '🪒',
-    tag: 'SIGNATURE',
-    title: 'Taille de Barbe',
-    description: 'Barbe sculptée au rasoir traditionnel, contours nets et finitions parfaites.',
-    price: 'Dès 15€',
-  },
-  {
-    id: '3',
-    icon: '💈',
-    tag: 'BEST VALUE',
-    title: 'Package Complet',
-    description: 'Coupe + barbe pour un résultat impeccable. La formule complète WilloBarber.',
-    price: 'Dès 30€',
-  },
-  {
-    id: '4',
-    icon: '🎨',
-    tag: 'TENDANCE',
-    title: 'Coloration',
-    description: 'Mèches, dégradé de couleur ou teinte complète. Exprimez votre personnalité.',
-    price: 'Sur devis',
-  },
-  {
-    id: '5',
-    icon: '👶',
-    tag: 'FAMILLE',
-    title: 'Coupe Enfant',
-    description: 'Douceur et précision pour les plus jeunes. Un moment agréable pour toute la famille.',
-    price: 'Dès 12€',
-  },
+// Per-service dark elegant gradients (top-right → bottom-left diagonal)
+const GRADIENTS: readonly [string, string, string][] = [
+  ['#2A1A08', '#1A1008', '#0D0804'],  // signature — warm espresso
+  ['#10080E', '#1A1028', '#08060E'],  // barbe — deep plum
+  ['#221808', '#1A1208', '#0D0A04'],  // rituel — dark amber
+  ['#0E0E0E', '#181818', '#0A0A0A'],  // express — carbon
+  ['#061410', '#0D2018', '#040E0A'],  // camouflage — dark forest
+  ['#080C16', '#101422', '#040608'],  // soin — midnight blue
 ];
+
+export const SERVICES = [
+  { id: 'signature', apiId: 1, cat: 'COUPE HOMME', name: 'Signature WilloBarber',    short: 'Diagnostic, shampooing, coupe ciseaux & finition rasoir.',        dur: '45 min', price: 45, popular: true  },
+  { id: 'barbe',     apiId: 2, cat: 'BARBE',       name: 'Taille & rasage à l\'ancienne', short: 'Serviette chaude, huile pré-rasage, rasoir droit.',              dur: '30 min', price: 28, popular: false },
+  { id: 'rituel',    apiId: 3, cat: 'PACKAGE',     name: 'Le Rituel',                short: 'Coupe signature + barbe + soin du visage.',                        dur: '1h15',   price: 75, popular: true  },
+  { id: 'express',   apiId: 4, cat: 'COUPE HOMME', name: 'Coupe express',            short: 'Pour les habitués pressés. Le savoir-faire, version concentrée.',  dur: '25 min', price: 28, popular: false },
+  { id: 'camouflage',apiId: 5, cat: 'COLORATION',  name: 'Camouflage gris',          short: 'Pigmentation sur-mesure, sans ammoniaque.',                        dur: '40 min', price: 35, popular: false },
+  { id: 'soin',      apiId: 6, cat: 'SOIN',        name: 'Soin du visage',           short: 'Gommage, masque à l\'argile, modelage.',                           dur: '30 min', price: 32, popular: false },
+] as const;
+
+export type ServiceId = (typeof SERVICES)[number]['id'];
 
 export function ServiceCarousel() {
   const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
-  const cardWidth = screenWidth - 2 * Spacing.xl;
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
   const progress = useSharedValue(0);
   const slideX = useSharedValue(0);
-  const trackWidthSV = useSharedValue(cardWidth);
+  const trackWidth = useSharedValue(SLIDE_W);
+
+  const goToSlide = useCallback((index: number) => {
+    setCurrentSlide(index);
+    slideX.value = withTiming(-index * (SLIDE_W + GAP), { duration: 300 });
+  }, [slideX]);
 
   const handleAutoAdvance = useCallback(() => {
-    setCurrentSlide((prev) => (prev + 1) % SERVICES.length);
-  }, []);
+    setCurrentSlide(prev => {
+      const next = (prev + 1) % SERVICES.length;
+      slideX.value = withTiming(-next * (SLIDE_W + GAP), { duration: 300 });
+      return next;
+    });
+  }, [slideX]);
 
-  // La barre de progression se remplit en 6 secondes puis le slide change.
-  // Au changement de slide la barre repart de zéro.
   useEffect(() => {
+    if (isPaused) return;
     progress.value = 0;
-    progress.value = withTiming(1, { duration: SLIDE_DURATION }, (finished) => {
+    progress.value = withTiming(1, { duration: SLIDE_DURATION }, finished => {
       if (finished) runOnJS(handleAutoAdvance)();
     });
-    return () => {
-      cancelAnimation(progress);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSlide]);
+    return () => cancelAnimation(progress);
+  }, [currentSlide, isPaused, progress, handleAutoAdvance]);
 
-  // Slide transition
-  useEffect(() => {
-    slideX.value = withTiming(-currentSlide * cardWidth, { duration: 320 });
-  }, [currentSlide, cardWidth, slideX]);
-
-  // Pause : stoppe la barre exactement là où elle est.
-  // Play  : reprend avec le temps restant (pas de reset).
   const handlePausePlay = useCallback(() => {
     if (isPaused) {
       const remaining = (1 - progress.value) * SLIDE_DURATION;
-      progress.value = withTiming(1, { duration: remaining }, (finished) => {
+      progress.value = withTiming(1, { duration: remaining }, finished => {
         if (finished) runOnJS(handleAutoAdvance)();
       });
       setIsPaused(false);
@@ -116,200 +91,275 @@ export function ServiceCarousel() {
       cancelAnimation(progress);
       setIsPaused(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPaused]);
+  }, [isPaused, progress, handleAutoAdvance]);
 
-  // Changer de slide via un dot reprend automatiquement la lecture
-  const handleDotPress = useCallback((index: number) => {
-    setIsPaused(false);
-    setCurrentSlide(index);
-  }, []);
-
-  const progressStyle = useAnimatedStyle(() => ({
-    width: progress.value * trackWidthSV.value,
+  const progressFillStyle = useAnimatedStyle(() => ({
+    width: progress.value * trackWidth.value,
   }));
-
   const slidesStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: slideX.value }],
   }));
 
   return (
     <View style={styles.wrapper}>
-      {/* Slides viewport */}
-      <View style={[styles.viewport, { width: cardWidth }]}>
-        <Animated.View
-          style={[styles.slidesRow, { width: cardWidth * SERVICES.length }, slidesStyle]}
-        >
-          {SERVICES.map((service) => (
-            <Pressable
-              key={service.id}
-              style={({ pressed }) => [
-                styles.slide,
-                { width: cardWidth },
-                pressed && styles.slidePressed,
-              ]}
-              onPress={() => router.push('/(tabs)/book')}
-            >
-              <View style={styles.tagRow}>
-                <View style={styles.tag}>
-                  <Text style={styles.tagText}>{service.tag}</Text>
+      <View style={styles.viewport}>
+        <Animated.View style={[styles.slidesRow, slidesStyle]}>
+          {SERVICES.map((svc, idx) => (
+            <View key={svc.id} style={styles.slide}>
+
+              {/* ── Dark gradient image area ── */}
+              <View style={styles.imagePlaceholder}>
+                {/* Base per-service gradient */}
+                <LinearGradient
+                  colors={GRADIENTS[idx]}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                {/* Bottom text scrim for readability */}
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.65)']}
+                  start={{ x: 0, y: 0.2 }}
+                  end={{ x: 0, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+
+                {/* Category & popular badges */}
+                <View style={styles.badgesRow}>
+                  <View style={styles.badgeCat}>
+                    <Text style={styles.badgeCatText}>{svc.cat}</Text>
+                  </View>
+                  {svc.popular && (
+                    <View style={styles.badgePopular}>
+                      <Text style={styles.badgePopularText}>POPULAIRE</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Service name overlay */}
+                <View style={styles.imageNameWrap}>
+                  <View style={styles.imageGoldLine} />
+                  <Text style={styles.imageName} numberOfLines={2}>{svc.name}</Text>
                 </View>
               </View>
-              <Text style={styles.slideIcon}>{service.icon}</Text>
-              <Text style={styles.slideTitle}>{service.title}</Text>
-              <Text style={styles.slideDesc}>{service.description}</Text>
-              <View style={styles.slideFooter}>
-                <View style={styles.priceBadge}>
-                  <Text style={styles.priceText}>{service.price}</Text>
+
+              {/* ── Cream content area ── */}
+              <View style={styles.cardContent}>
+                <Text style={styles.serviceDesc}>{svc.short}</Text>
+                <View style={styles.goldSep} />
+                <View style={styles.metaRow}>
+                  <Text style={styles.duration}>⏱ {svc.dur}</Text>
+                  <Text style={styles.price}>{svc.price} €</Text>
                 </View>
-                <Text style={styles.ctaText}>Réserver →</Text>
+                <TouchableOpacity
+                  style={styles.selectBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } });
+                  }}
+                >
+                  <Text style={styles.selectBtnText}>Sélectionner  →</Text>
+                </TouchableOpacity>
+
+                {/* Progress dots + pause */}
+                <View style={styles.playerRow}>
+                  {SERVICES.map((_, i) => {
+                    if (i === currentSlide) {
+                      return (
+                        <View
+                          key={i}
+                          style={styles.progressPill}
+                          onLayout={e => { trackWidth.value = e.nativeEvent.layout.width; }}
+                        >
+                          <Animated.View style={[styles.progressFill, progressFillStyle]} />
+                        </View>
+                      );
+                    }
+                    return (
+                      <Pressable key={i} onPress={() => { setIsPaused(false); goToSlide(i); }} hitSlop={10}>
+                        <View style={styles.dot} />
+                      </Pressable>
+                    );
+                  })}
+                  <Pressable onPress={handlePausePlay} hitSlop={10} style={styles.pauseBtn}>
+                    <Text style={styles.pauseIcon}>{isPaused ? '▶' : '⏸'}</Text>
+                  </Pressable>
+                </View>
               </View>
-            </Pressable>
+
+            </View>
           ))}
         </Animated.View>
-      </View>
-
-      {/* Dots + bouton pause/play */}
-      <View style={styles.controlsRow}>
-        {SERVICES.map((_, i) => (
-          <Pressable key={i} onPress={() => handleDotPress(i)} hitSlop={8}>
-            <View style={[styles.dot, i === currentSlide && styles.dotActive]} />
-          </Pressable>
-        ))}
-        <Pressable onPress={handlePausePlay} hitSlop={8} style={styles.pauseBtn}>
-          <Text style={styles.pauseIcon}>{isPaused ? '▶' : '⏸'}</Text>
-        </Pressable>
-      </View>
-
-      {/* Progress bar — se met en pause / reprend exactement là où elle s'est arrêtée */}
-      <View
-        style={styles.progressTrack}
-        onLayout={(e) => {
-          trackWidthSV.value = e.nativeEvent.layout.width;
-        }}
-      >
-        <Animated.View style={[styles.progressFill, progressStyle]} />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    gap: Spacing.md,
-  },
+  wrapper: { paddingLeft: PADDING_H },
   viewport: {
+    width: SCREEN_W - PADDING_H,
     overflow: 'hidden',
-    borderRadius: BorderRadius.xl,
   },
   slidesRow: {
     flexDirection: 'row',
+    gap: GAP,
   },
   slide: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    gap: Spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.15)',
-    minHeight: 220,
+    width: SLIDE_W,
+    backgroundColor: '#F5F0E8',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 5,
   },
-  slidePressed: {
-    backgroundColor: Colors.surfaceElevated,
+
+  // Image area
+  imagePlaceholder: {
+    height: IMAGE_H,
+    justifyContent: 'flex-end',
   },
-  tagRow: {
+  badgesRow: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
     flexDirection: 'row',
+    gap: 8,
+    zIndex: 10,
   },
-  tag: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.goldSubtle,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.3)',
+  badgeCat: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
-  tagText: {
-    fontSize: FontSize.xs,
-    fontWeight: FontWeight.bold,
-    color: Colors.gold,
+  badgeCatText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
     letterSpacing: 1.5,
   },
-  slideIcon: {
-    fontSize: 44,
-    textAlign: 'center',
+  badgePopular: {
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.4)',
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  slideTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
-    textAlign: 'center',
+  badgePopularText: {
+    color: '#C9A84C',
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  slideDesc: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    flex: 1,
+  imageNameWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
-  slideFooter: {
+  imageGoldLine: {
+    width: 32,
+    height: 1.5,
+    backgroundColor: '#C9A84C',
+    marginBottom: 8,
+  },
+  imageName: {
+    fontFamily: SERIF,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#fff',
+    lineHeight: 27,
+    letterSpacing: 0.2,
+  },
+
+  // Content area
+  cardContent: {
+    backgroundColor: '#F5F0E8',
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+  },
+  serviceDesc: {
+    fontSize: 13,
+    color: '#6B6560',
+    lineHeight: 19,
+    marginBottom: 13,
+  },
+  goldSep: {
+    height: 1,
+    backgroundColor: '#C9A84C',
+    opacity: 0.4,
+    marginBottom: 11,
+  },
+  metaRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: Spacing.sm,
-  },
-  priceBadge: {
-    backgroundColor: Colors.gold,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-  },
-  priceText: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.bold,
-    color: Colors.textInverse,
-  },
-  ctaText: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semiBold,
-    color: Colors.gold,
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: Spacing.sm,
+    marginBottom: 13,
+  },
+  duration: {
+    fontSize: 13,
+    color: '#8B6914',
+    fontWeight: '500',
+  },
+  price: {
+    fontFamily: SERIF,
+    fontSize: 23,
+    fontWeight: '700',
+    color: '#8B6914',
+  },
+  selectBtn: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 14,
+    shadowColor: '#C9A84C',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  selectBtnText: {
+    color: '#1A1208',
+    fontWeight: '700',
+    fontSize: 14.5,
+    letterSpacing: 0.3,
+  },
+
+  // Player row
+  playerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.surfaceBorder,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#D4CFC9',
   },
-  dotActive: {
-    width: 20,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.gold,
-  },
-  pauseBtn: {
-    marginLeft: Spacing.xs,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pauseIcon: {
-    fontSize: 10,
-    color: Colors.textMuted,
-  },
-  progressTrack: {
-    height: 3,
-    backgroundColor: Colors.surfaceBorder,
-    borderRadius: 2,
+  progressPill: {
+    width: 54,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#D4CFC9',
     overflow: 'hidden',
   },
   progressFill: {
-    height: 3,
-    backgroundColor: Colors.gold,
-    borderRadius: 2,
+    height: '100%',
+    backgroundColor: '#C9A84C',
+  },
+  pauseBtn: {
+    marginLeft: 4,
+    padding: 4,
+  },
+  pauseIcon: {
+    fontSize: 11,
+    color: '#a89f93',
   },
 });

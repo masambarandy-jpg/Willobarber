@@ -1,21 +1,28 @@
 import React, { useState } from 'react';
 import {
-  Alert,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Colors, FontSize, FontWeight, Spacing, BorderRadius } from '@/constants';
+
+const { height: SCREEN_H } = Dimensions.get('window');
+const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
+
+const STATS = [
+  { num: '2 412', label: 'clients fidèles' },
+  { num: '4,8 ★', label: 'note moyenne' },
+  { num: '386', label: 'RDV ce mois' },
+];
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -23,206 +30,347 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
-
-  const validate = () => {
-    const e: typeof errors = {};
-    if (!email.trim()) e.email = 'Email requis';
-    if (!password) e.password = 'Mot de passe requis';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
+  const [error, setError] = useState('');
 
   const handleLogin = async () => {
-    if (!validate()) return;
+    if (!email.trim() || !password) {
+      setError('Email et mot de passe requis.');
+      return;
+    }
     setLoading(true);
-    setErrors({});
+    setError('');
     try {
       await login({ username: email.trim(), password });
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        'Identifiants invalides. Veuillez réessayer.';
-      setErrors({ general: msg });
+        'Identifiants invalides.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.root}>
+      {/* ── Dark top panel ── */}
+      <LinearGradient
+        colors={['#2e2313', '#1a1508', '#0D0C0A']}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.darkPanel}
+      >
+        {/* Logo */}
+        <View style={styles.logoRow}>
+          <Text style={styles.logoMark}>{'{w}'}</Text>
+          <Text style={styles.logoText}>willobarber</Text>
+        </View>
+        {/* Kicker */}
+        <Text style={styles.kicker}>ESPACE CLIENT</Text>
+        {/* Title */}
+        <Text style={styles.heroTitle}>
+          Votre style,{'\n'}
+          <Text style={styles.heroTitleGold}>entre de bonnes{'\n'}mains.</Text>
+        </Text>
+        {/* Stats */}
+        <View style={styles.statsRow}>
+          {STATS.map(s => (
+            <View key={s.label} style={styles.statItem}>
+              <Text style={styles.statNum}>{s.num}</Text>
+              <Text style={styles.statLabel}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
+      </LinearGradient>
+
+      {/* ── Cream form panel ── */}
       <KeyboardAvoidingView
-        style={styles.kav}
+        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          style={styles.creamPanel}
+          contentContainerStyle={styles.formContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <LinearGradient
-                colors={[Colors.goldDark, Colors.gold, Colors.goldLight]}
-                style={styles.logoGradient}
-              >
-                <Text style={styles.logoEmoji}>💈</Text>
-              </LinearGradient>
+          <Text style={styles.formTitle}>Bon retour.</Text>
+          <Text style={styles.formSubtitle}>Connectez-vous pour réserver votre prochain rendez-vous.</Text>
+
+          {!!error && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{error}</Text>
             </View>
-            <Text style={styles.brand}>WilloBarber</Text>
-            <Text style={styles.tagline}>Le salon de coiffure à Bruxelles</Text>
-          </View>
+          )}
 
-          {/* Form */}
-          <View style={styles.form}>
-            <Text style={styles.title}>Connexion</Text>
-            <Text style={styles.subtitle}>Bienvenue ! Connectez-vous pour réserver.</Text>
+          {/* Email */}
+          <Text style={styles.fieldLabel}>Adresse email</Text>
+          <TextInput
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            placeholder="votre@email.com"
+            placeholderTextColor="#b8afa2"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="next"
+          />
 
-            {errors.general && (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>⚠️ {errors.general}</Text>
-              </View>
-            )}
-
-            <Input
-              label="Email ou nom d'utilisateur"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="votre@email.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              error={errors.email}
-              returnKeyType="next"
-            />
-
-            <Input
-              label="Mot de passe"
+          {/* Password */}
+          <Text style={styles.fieldLabel}>Mot de passe</Text>
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={[styles.input, styles.inputPasswordField]}
               value={password}
               onChangeText={setPassword}
               placeholder="••••••••"
-              secureTextEntry
-              error={errors.password}
+              placeholderTextColor="#b8afa2"
+              secureTextEntry={!showPw}
+              autoCapitalize="none"
               returnKeyType="done"
               onSubmitEditing={handleLogin}
             />
-
-            <Button
-              label="Se connecter"
-              onPress={handleLogin}
-              loading={loading}
-              size="lg"
-            />
+            <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPw(v => !v)}>
+              <Text style={styles.eyeIcon}>{showPw ? '🙈' : '👁'}</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Pas encore de compte ?</Text>
+          {/* Forgot password */}
+          <View style={styles.forgotRow}>
+            <Text style={styles.forgotLink}>Mot de passe oublié ?</Text>
+          </View>
+
+          {/* Submit */}
+          <TouchableOpacity
+            style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.btnPrimaryText}>{loading ? 'Connexion…' : 'Se connecter  →'}</Text>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>ou</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Register link */}
+          <View style={styles.signupRow}>
+            <Text style={styles.signupText}>Pas encore de compte ?</Text>
             <Pressable onPress={() => router.push('/(auth)/register')}>
-              <Text style={styles.footerLink}> Créer un compte</Text>
+              <Text style={styles.signupLink}> Créer un compte</Text>
             </Pressable>
           </View>
-
-          <Text style={styles.legal}>
-            En vous connectant, vous acceptez nos conditions d'utilisation et notre politique de confidentialité.
-          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  root: { flex: 1, backgroundColor: '#F5F0E8' },
+
+  // Dark panel
+  darkPanel: {
+    height: SCREEN_H * 0.42,
+    paddingTop: Platform.OS === 'ios' ? 56 : 40,
+    paddingHorizontal: 24,
+    paddingBottom: 22,
+    justifyContent: 'space-between',
   },
-  kav: { flex: 1 },
-  scroll: {
-    flexGrow: 1,
-    padding: Spacing.xl,
-    justifyContent: 'center',
-    gap: Spacing.xl,
-  },
-  header: {
+  logoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.xl,
+    gap: 9,
   },
-  logoContainer: {
-    ...{
-      shadowColor: Colors.gold,
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.4,
-      shadowRadius: 20,
-      elevation: 12,
-    },
-  },
-  logoGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoEmoji: { fontSize: 40 },
-  brand: {
-    fontSize: FontSize.xxl,
-    fontWeight: FontWeight.extraBold,
-    color: Colors.textPrimary,
+  logoMark: {
+    fontFamily: SERIF,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#C9A84C',
     letterSpacing: 1,
   },
-  tagline: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    letterSpacing: 0.5,
+  logoText: {
+    fontFamily: SERIF,
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#fff',
   },
-  form: {
-    gap: Spacing.base,
+  kicker: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2.5,
+    color: '#C9A84C',
+    textTransform: 'uppercase',
+    marginTop: 4,
   },
-  title: {
-    fontSize: FontSize.xl,
-    fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
+  heroTitle: {
+    fontFamily: SERIF,
+    fontSize: 32,
+    fontWeight: '600',
+    color: '#fff',
+    lineHeight: 38,
+    flex: 1,
+    marginTop: 10,
   },
-  subtitle: {
-    fontSize: FontSize.base,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.sm,
+  heroTitleGold: {
+    color: '#C9A84C',
+    fontStyle: 'italic',
   },
-  errorBanner: {
-    backgroundColor: Colors.errorSubtle,
-    borderRadius: BorderRadius.md,
+  statsRow: {
+    flexDirection: 'row',
+    gap: 22,
+    marginTop: 4,
+  },
+  statItem: {},
+  statNum: {
+    fontFamily: SERIF,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#C9A84C',
+    lineHeight: 26,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.55)',
+    marginTop: 3,
+  },
+
+  // Cream panel
+  creamPanel: {
+    flex: 1,
+    backgroundColor: '#F5F0E8',
+  },
+  formContent: {
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 28,
+    gap: 0,
+  },
+  formTitle: {
+    fontFamily: SERIF,
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#1A1208',
+    marginBottom: 7,
+    letterSpacing: 0.2,
+  },
+  formSubtitle: {
+    fontSize: 14,
+    color: '#6B6560',
+    marginBottom: 22,
+    lineHeight: 20,
+  },
+  errorBox: {
+    backgroundColor: '#FDECEA',
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.error,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
+    borderColor: '#C0392B',
+    padding: 12,
+    marginBottom: 16,
   },
-  errorBannerText: {
-    fontSize: FontSize.sm,
-    color: Colors.error,
+  errorText: {
+    fontSize: 13,
+    color: '#C0392B',
+    lineHeight: 18,
   },
-  footer: {
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E0D9CE',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 14.5,
+    color: '#1a1a1a',
+    marginBottom: 16,
+  },
+  inputWrap: {
+    position: 'relative',
+    marginBottom: 10,
+  },
+  inputPasswordField: {
+    marginBottom: 0,
+    paddingRight: 48,
+  },
+  eyeBtn: {
+    position: 'absolute',
+    right: 14,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
+  eyeIcon: {
+    fontSize: 16,
+  },
+  forgotRow: {
+    alignItems: 'flex-end',
+    marginBottom: 22,
+    marginTop: 6,
+  },
+  forgotLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8B6914',
+  },
+  btnPrimary: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: '#C9A84C',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 6,
+    marginBottom: 20,
+  },
+  btnPrimaryText: {
+    color: '#1A1208',
+    fontWeight: '700',
+    fontSize: 15.5,
+    letterSpacing: 0.2,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E0D9CE',
+  },
+  dividerText: {
+    fontSize: 12.5,
+    color: '#a89f93',
+  },
+  signupRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  footerText: {
-    fontSize: FontSize.base,
-    color: Colors.textSecondary,
+  signupText: {
+    fontSize: 13.5,
+    color: '#6B6560',
   },
-  footerLink: {
-    fontSize: FontSize.base,
-    color: Colors.gold,
-    fontWeight: FontWeight.semiBold,
-  },
-  legal: {
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 18,
+  signupLink: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#8B6914',
   },
 });
