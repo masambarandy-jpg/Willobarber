@@ -10,10 +10,16 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
+    password2 = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'role', 'phone']
+        fields = ['first_name', 'last_name', 'username', 'email', 'password', 'password2', 'phone']
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs.pop('password2'):
+            raise serializers.ValidationError({'password2': 'Les mots de passe ne correspondent pas.'})
+        return attrs
 
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
