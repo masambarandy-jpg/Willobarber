@@ -48,7 +48,7 @@ class LoginView(APIView):
     def post(self, request):
         username = request.data.get('username')
         password = request.data.get('password')
-        user = authenticate(username=username, password=password)
+        user = authenticate(request=request, username=username, password=password)
         if user:
             refresh = RefreshToken.for_user(user)
             return Response({
@@ -56,7 +56,10 @@ class LoginView(APIView):
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
             })
-        return Response({'detail': 'Identifiants invalides.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response(
+            {'detail': 'Identifiants invalides.', 'debug': {'username_received': username, 'password_empty': not password}},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
 
 
 class LogoutView(APIView):
