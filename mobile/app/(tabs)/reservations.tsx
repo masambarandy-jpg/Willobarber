@@ -18,8 +18,8 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useReservations } from '@/hooks/useReservations';
 import type { Reservation } from '@/types';
+import { Fonts } from '@/constants';
 
-const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'En attente',
@@ -40,7 +40,7 @@ const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
 };
 
 function GoldItalic({ children }: { children: React.ReactNode }) {
-  return <Text style={{ color: '#C9A84C', fontStyle: 'italic', fontFamily: SERIF, fontWeight: '500' }}>{children}</Text>;
+  return <Text style={{ color: '#C9A84C', fontStyle: 'italic', fontFamily: Fonts.italic, fontWeight: '500' }}>{children}</Text>;
 }
 
 function Avatar({ initial, size = 44 }: { initial: string; size?: number }) {
@@ -289,15 +289,15 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.07)',
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  headerLogo: { fontFamily: SERIF, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
-  headerBrand: { fontFamily: SERIF, fontSize: 19, fontWeight: '600', color: '#fff' },
+  headerLogo: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
+  headerBrand: { fontFamily: Fonts.semiBold, fontSize: 19, fontWeight: '600', color: '#fff' },
   headerRight: {},
 
   scroll: { flex: 1 },
   scrollContent: { padding: 22, paddingBottom: 40 },
 
   kicker: { fontSize: 11, fontWeight: '600', letterSpacing: 2, color: '#C9A84C', textTransform: 'uppercase', marginBottom: 6 },
-  pageTitle: { fontFamily: SERIF, fontSize: 32, fontWeight: '600', color: '#fff', lineHeight: 38, marginBottom: 18 },
+  pageTitle: { fontFamily: Fonts.semiBold, fontSize: 32, fontWeight: '600', color: '#fff', lineHeight: 38, marginBottom: 18 },
 
   newRdvBtn: {
     backgroundColor: '#C9A84C',
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   // Stats
   statsGrid: { flexDirection: 'row', gap: 10, marginBottom: 22 },
   statCard: { flex: 1, backgroundColor: '#1A1814', borderRadius: 14, padding: 14, alignItems: 'center' },
-  statNum: { fontFamily: SERIF, fontSize: 28, fontWeight: '700', color: '#fff', lineHeight: 32 },
+  statNum: { fontFamily: Fonts.bold, fontSize: 28, fontWeight: '700', color: '#fff', lineHeight: 32 },
   statUnit: { fontSize: 10.5, color: '#C9A84C', marginTop: 1 },
   statLabel: { fontSize: 8, fontWeight: '600', letterSpacing: 0.8, color: 'rgba(255,255,255,0.45)', marginTop: 6, textAlign: 'center', textTransform: 'uppercase' },
 
@@ -338,11 +338,11 @@ const styles = StyleSheet.create({
 
   nextRdvMain: { flexDirection: 'row', gap: 16, marginBottom: 12, alignItems: 'flex-start' },
   dateBox: { borderWidth: 1, borderColor: 'rgba(201,168,76,0.3)', borderRadius: 12, padding: 12, alignItems: 'center', flexShrink: 0 },
-  dateNum: { fontFamily: SERIF, fontSize: 26, fontWeight: '700', color: '#C9A84C', lineHeight: 30 },
+  dateNum: { fontFamily: Fonts.bold, fontSize: 26, fontWeight: '700', color: '#C9A84C', lineHeight: 30 },
   dateMon: { fontSize: 10, letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
   dateWeekday: { fontSize: 9, color: 'rgba(255,255,255,0.45)', marginTop: 1 },
 
-  nextRdvService: { fontFamily: SERIF, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 6, lineHeight: 26 },
+  nextRdvService: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 6, lineHeight: 26 },
   nextRdvInfo: { flexDirection: 'row', gap: 8, marginTop: 2 },
   nextRdvInfoKey: { fontSize: 12, color: 'rgba(255,255,255,0.5)', width: 50 },
   nextRdvInfoVal: { fontSize: 12, color: 'rgba(255,255,255,0.85)', flex: 1 },
@@ -373,11 +373,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
-  emptyTitle: { fontFamily: SERIF, fontSize: 20, fontWeight: '600', color: '#fff', textAlign: 'center' },
+  emptyTitle: { fontFamily: Fonts.semiBold, fontSize: 20, fontWeight: '600', color: '#fff', textAlign: 'center' },
   emptySub: { fontSize: 13.5, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 6, lineHeight: 19 },
 
   // Section title
-  sectionTitle: { fontFamily: SERIF, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 12 },
+  sectionTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 12 },
 
   // History
   filterChip: {
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   histDateBox: { width: 42, alignItems: 'center', flexShrink: 0 },
-  histDateNum: { fontFamily: SERIF, fontSize: 21, fontWeight: '700', color: '#fff', lineHeight: 24 },
+  histDateNum: { fontFamily: Fonts.bold, fontSize: 21, fontWeight: '700', color: '#fff', lineHeight: 24 },
   histDateMon: { fontSize: 9, letterSpacing: 0.5, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
   histService: { fontSize: 14, fontWeight: '500', color: '#fff' },
   histMeta: { fontSize: 11.5, color: 'rgba(255,255,255,0.5)' },
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
 
   // Avatar
   avatar: { backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 1.5, borderColor: '#C9A84C', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#C9A84C', fontFamily: SERIF, fontWeight: '600' },
+  avatarText: { color: '#C9A84C', fontFamily: Fonts.semiBold, fontWeight: '600' },
 
   // Buttons
   btnPrimary: {
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
-  modalTitle: { fontFamily: SERIF, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 8 },
+  modalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 8 },
   modalSub: { fontSize: 13.5, color: 'rgba(255,255,255,0.5)', marginBottom: 18, lineHeight: 19 },
   fieldLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1.5, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: 8 },
   modalInput: {

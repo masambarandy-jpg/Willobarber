@@ -14,9 +14,9 @@ import {
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/hooks/useAuth';
+import { Fonts } from '@/constants';
 
 const { height: SCREEN_H } = Dimensions.get('window');
-const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
 interface FormErrors {
   first_name?: string;
@@ -231,17 +231,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  logoMark: { fontFamily: SERIF, fontSize: 22, fontWeight: '700', color: '#C9A84C', letterSpacing: 1 },
-  logoText: { fontFamily: SERIF, fontSize: 20, fontWeight: '600', color: '#fff' },
+  logoMark: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#C9A84C', letterSpacing: 1 },
+  logoText: { fontFamily: Fonts.semiBold, fontSize: 20, fontWeight: '600', color: '#fff' },
   kicker: { fontSize: 11, fontWeight: '600', letterSpacing: 2.5, color: '#C9A84C', textTransform: 'uppercase' },
-  heroTitle: { fontFamily: SERIF, fontSize: 27, fontWeight: '600', color: '#fff', lineHeight: 33 },
+  heroTitle: { fontFamily: Fonts.semiBold, fontSize: 27, fontWeight: '600', color: '#fff', lineHeight: 33 },
   heroTitleGold: { color: '#C9A84C', fontStyle: 'italic' },
   heroSub: { fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 19 },
 
   creamPanel: { flex: 1, backgroundColor: '#F5F0E8' },
   formContent: { paddingHorizontal: 24, paddingTop: 26, paddingBottom: 32 },
 
-  formTitle: { fontFamily: SERIF, fontSize: 30, fontWeight: '700', color: '#1A1208', marginBottom: 6 },
+  formTitle: { fontFamily: Fonts.bold, fontSize: 30, fontWeight: '700', color: '#1A1208', marginBottom: 6 },
   formSubtitle: { fontSize: 14, color: '#6B6560', marginBottom: 20, lineHeight: 20 },
 
   errorBox: { backgroundColor: '#FDECEA', borderRadius: 10, borderWidth: 1, borderColor: '#C0392B', padding: 12, marginBottom: 16 },

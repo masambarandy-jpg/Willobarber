@@ -14,9 +14,9 @@ import {
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/hooks/useAuth';
+import { Fonts } from '@/constants';
 
 const { height: SCREEN_H } = Dimensions.get('window');
-const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
 const STATS = [
   { num: '2 412', label: 'clients fidèles' },
@@ -189,14 +189,14 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   logoMark: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.bold,
     fontSize: 22,
     fontWeight: '700',
     color: '#C9A84C',
     letterSpacing: 1,
   },
   logoText: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 20,
     fontWeight: '600',
     color: '#fff',
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   heroTitle: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 32,
     fontWeight: '600',
     color: '#fff',
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   },
   statItem: {},
   statNum: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.bold,
     fontSize: 22,
     fontWeight: '700',
     color: '#C9A84C',
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   formTitle: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.bold,
     fontSize: 32,
     fontWeight: '700',
     color: '#1A1208',

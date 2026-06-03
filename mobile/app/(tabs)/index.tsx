@@ -12,9 +12,9 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/hooks/useAuth';
 import { ServiceCarousel } from '@/components/home/ServiceCarousel';
+import { Fonts } from '@/constants';
 
 const { width: SCREEN_W } = Dimensions.get('window');
-const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
 // Static team data matching design
 const BARBERS = [
@@ -87,7 +87,12 @@ export default function HomeScreen() {
           </Text>
           <View style={styles.heroBtns}>
             <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-              <Text style={styles.btnPrimaryText}>Réserver maintenant  →</Text>
+              <View style={styles.btnPrimaryInner}>
+                <Text style={styles.btnPrimaryText}>Réserver maintenant</Text>
+                <View style={styles.btnArrowCircle}>
+                  <Text style={styles.btnArrowText}>→</Text>
+                </View>
+              </View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnOutline} onPress={() => scrollRef.current?.scrollTo({ y: servicesY, animated: true })} activeOpacity={0.85}>
               <Text style={styles.btnOutlineText}>↓  Nos prestations</Text>
@@ -150,7 +155,7 @@ export default function HomeScreen() {
         {/* ── Reviews section (cream) ── */}
         <View style={styles.creamSection}>
           <Text style={styles.sectionKicker}>ILS EN PARLENT</Text>
-          <Text style={[styles.sectionTitleGold, { fontFamily: SERIF, fontSize: 26, marginBottom: 20, textAlign: 'center' }]}>
+          <Text style={[styles.sectionTitleGold, { fontFamily: Fonts.italic, fontSize: 26, marginBottom: 20, textAlign: 'center' }]}>
             4,9 / 5 sur 720 avis vérifiés.
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
@@ -179,7 +184,12 @@ export default function HomeScreen() {
             Plage horaire en quelques clics. Acompte sécurisé. Confirmation immédiate.
           </Text>
           <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-            <Text style={styles.btnPrimaryText}>Réserver une plage  →</Text>
+            <View style={styles.btnPrimaryInner}>
+              <Text style={styles.btnPrimaryText}>Réserver une plage</Text>
+              <View style={styles.btnArrowCircle}>
+                <Text style={styles.btnArrowText}>→</Text>
+              </View>
+            </View>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -203,8 +213,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.07)',
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  headerLogo: { fontFamily: SERIF, fontSize: 22, fontWeight: '700', color: '#C9A84C', letterSpacing: 1 },
-  headerBrand: { fontFamily: SERIF, fontSize: 19, fontWeight: '600', color: '#fff' },
+  headerLogo: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#C9A84C', letterSpacing: 1 },
+  headerBrand: { fontFamily: Fonts.semiBold, fontSize: 19, fontWeight: '600', color: '#fff' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   headerIcon: {},
   headerIconText: { fontSize: 20, color: '#fff' },
@@ -213,7 +223,7 @@ const styles = StyleSheet.create({
 
   // Avatar
   avatarBase: { alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
-  avatarInitial: { fontFamily: SERIF, fontWeight: '600' },
+  avatarInitial: { fontFamily: Fonts.semiBold, fontWeight: '600' },
 
   // Hero dark section
   hero: {
@@ -230,14 +240,14 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   heroTitle: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 50,
     fontWeight: '600',
     color: '#fff',
     lineHeight: 54,
     letterSpacing: 0.3,
   },
-  heroTitleGold: { color: '#C9A84C', fontStyle: 'italic' },
+  heroTitleGold: { fontFamily: Fonts.semiBoldItalic, color: '#C9A84C', fontStyle: 'italic' },
   heroSub: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.55)',
@@ -250,16 +260,35 @@ const styles = StyleSheet.create({
   btnPrimary: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
-    paddingVertical: 16,
-    paddingHorizontal: 26,
-    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     shadowColor: '#C9A84C',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 6,
   },
-  btnPrimaryText: { color: '#1A1208', fontWeight: '700', fontSize: 15.5 },
+  btnPrimaryInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  btnPrimaryText: {
+    fontFamily: Fonts.semiBold,
+    color: '#1A1208',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  btnArrowCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(26,18,8,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnArrowText: { color: '#1A1208', fontSize: 13, lineHeight: 16 },
   btnOutline: {
     borderRadius: 100,
     paddingVertical: 15,
@@ -268,7 +297,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.28)',
     alignItems: 'center',
   },
-  btnOutlineText: { color: 'rgba(255,255,255,0.8)', fontWeight: '500', fontSize: 14.5 },
+  btnOutlineText: { fontFamily: Fonts.semiBold, color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: 16 },
 
   // Social proof card
   proofCard: {
@@ -280,7 +309,7 @@ const styles = StyleSheet.create({
   },
   proofAvatars: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   proofAvatar: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
-  proofCount: { fontFamily: SERIF, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
+  proofCount: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
   proofText: { fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 19 },
 
   // Sections
@@ -288,9 +317,9 @@ const styles = StyleSheet.create({
   darkSection: { backgroundColor: '#0D0C0A', paddingHorizontal: 22, paddingTop: 34, paddingBottom: 30 },
 
   sectionKicker: { fontSize: 11, fontWeight: '600', letterSpacing: 3, color: '#C9A84C', textTransform: 'uppercase', textAlign: 'center', marginBottom: 12 },
-  sectionTitleDark: { fontFamily: SERIF, fontSize: 28, fontWeight: '600', color: '#1A1208', textAlign: 'center', marginBottom: 8, lineHeight: 34 },
-  sectionTitleLight: { fontFamily: SERIF, fontSize: 28, fontWeight: '600', color: '#fff', textAlign: 'center', marginBottom: 20, lineHeight: 34 },
-  sectionTitleGold: { color: '#C9A84C', fontStyle: 'italic' },
+  sectionTitleDark: { fontFamily: Fonts.semiBold, fontSize: 28, fontWeight: '600', color: '#1A1208', textAlign: 'center', marginBottom: 8, lineHeight: 34 },
+  sectionTitleLight: { fontFamily: Fonts.semiBold, fontSize: 28, fontWeight: '600', color: '#fff', textAlign: 'center', marginBottom: 20, lineHeight: 34 },
+  sectionTitleGold: { fontFamily: Fonts.semiBoldItalic, color: '#C9A84C', fontStyle: 'italic' },
   sectionSub: { fontSize: 13.5, color: '#6B6560', textAlign: 'center', lineHeight: 20, marginBottom: 20 },
 
   // Horizontal scroll
@@ -305,7 +334,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  barberName: { fontFamily: SERIF, fontSize: 22, fontWeight: '600', color: '#fff', marginTop: 8 },
+  barberName: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginTop: 8 },
   barberRole: { fontSize: 10, fontWeight: '600', letterSpacing: 2, color: '#C9A84C', textTransform: 'uppercase', textAlign: 'center' },
   barberDesc: { fontSize: 12.5, color: 'rgba(255,255,255,0.55)', lineHeight: 19, textAlign: 'center', marginTop: 4 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, justifyContent: 'center', marginTop: 6 },
@@ -326,7 +355,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   stars: { fontSize: 14, color: '#C9A84C', marginBottom: 12 },
-  reviewQuote: { fontFamily: SERIF, fontStyle: 'italic', fontSize: 17, color: '#2a2118', lineHeight: 24, marginBottom: 16 },
+  reviewQuote: { fontFamily: Fonts.italic, fontStyle: 'italic', fontSize: 17, color: '#2a2118', lineHeight: 24, marginBottom: 16 },
   reviewAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   reviewAuthor: { fontSize: 13.5, fontWeight: '600', color: '#1A1208' },
   reviewService: { fontSize: 11.5, color: '#a89f93', marginTop: 1 },

@@ -17,9 +17,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { useBarbers } from '@/hooks/useBarbers';
 import { reservationsApi } from '@/services/api';
 import { SERVICES } from '@/components/home/ServiceCarousel';
+import { Fonts } from '@/constants';
 
 const { width: SCREEN_W } = Dimensions.get('window');
-const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
 const STEP_LABELS = ['Prestation', 'Barbier', 'Date & heure', 'Paiement'];
 
@@ -347,7 +347,7 @@ function CustomCalendar({ selectedDate, onSelectDate, minDate, maxDate }: {
         <TouchableOpacity onPress={prevMonth} disabled={!canGoPrev} style={{ padding: 8 }}>
           <Text style={{ fontSize: 22, color: canGoPrev ? '#C9A84C' : 'rgba(255,255,255,0.15)', fontWeight: '300', lineHeight: 24 }}>‹</Text>
         </TouchableOpacity>
-        <Text style={{ fontFamily: SERIF, fontSize: 17, fontWeight: '600', color: '#fff' }}>
+        <Text style={{ fontFamily: Fonts.semiBold, fontSize: 17, fontWeight: '600', color: '#fff' }}>
           {MONTHS_CAP[viewMonth]} {viewYear}
         </Text>
         <TouchableOpacity onPress={nextMonth} disabled={!canGoNext} style={{ padding: 8 }}>
@@ -897,8 +897,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.07)',
   },
   bookHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoMark: { fontFamily: SERIF, fontSize: 20, fontWeight: '700', color: '#C9A84C' },
-  logoBrand: { fontFamily: SERIF, fontSize: 17, fontWeight: '600', color: '#fff' },
+  logoMark: { fontFamily: Fonts.bold, fontSize: 20, fontWeight: '700', color: '#C9A84C' },
+  logoBrand: { fontFamily: Fonts.semiBold, fontSize: 17, fontWeight: '600', color: '#fff' },
   secureBadge: {
     borderWidth: 1,
     borderColor: 'rgba(45,106,79,0.5)',
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bookTitle: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 38,
     fontWeight: '600',
     color: '#fff',
@@ -930,7 +930,7 @@ const styles = StyleSheet.create({
   goldItalic: {
     color: '#C9A84C',
     fontStyle: 'italic',
-    fontFamily: SERIF,
+    fontFamily: Fonts.italic,
     fontWeight: '500',
   },
   bookSub: {
@@ -945,7 +945,7 @@ const styles = StyleSheet.create({
     marginVertical: 18,
   },
   stepTitle: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 22,
     fontWeight: '600',
     color: '#fff',
@@ -968,7 +968,7 @@ const styles = StyleSheet.create({
   },
   stepCircleActive: { backgroundColor: '#C9A84C', borderColor: '#C9A84C', shadowColor: '#C9A84C', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 },
   stepCircleDone: { borderColor: '#C9A84C' },
-  stepNum: { fontSize: 14, fontFamily: SERIF, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
+  stepNum: { fontSize: 14, fontFamily: Fonts.semiBold, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
   stepNumActive: { color: '#1A1208' },
   stepNumDone: { color: '#C9A84C', fontSize: 13 },
   stepLabel: { fontSize: 9.5, fontWeight: '500', color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
@@ -1044,11 +1044,11 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   popularBadgeText: { fontSize: 9, fontWeight: '700', color: '#C9A84C', letterSpacing: 0.5 },
-  cardName: { fontFamily: SERIF, fontSize: 20, fontWeight: '600', color: '#fff', marginBottom: 6, lineHeight: 24 },
+  cardName: { fontFamily: Fonts.semiBold, fontSize: 20, fontWeight: '600', color: '#fff', marginBottom: 6, lineHeight: 24 },
   cardDesc: { fontSize: 12.5, color: 'rgba(255,255,255,0.55)', lineHeight: 19, marginBottom: 0 },
   cardMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', marginTop: 12, paddingTop: 12 },
   cardDur: { fontSize: 13, color: 'rgba(255,255,255,0.6)' },
-  cardPrice: { fontFamily: SERIF, fontSize: 20, fontWeight: '700', color: '#C9A84C' },
+  cardPrice: { fontFamily: Fonts.bold, fontSize: 20, fontWeight: '700', color: '#C9A84C' },
   radioCircle: {
     width: 24,
     height: 24,
@@ -1090,7 +1090,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
-  barberInitial: { fontFamily: SERIF, fontSize: 28, fontWeight: '700' },
+  barberInitial: { fontFamily: Fonts.bold, fontSize: 28, fontWeight: '700' },
   barberInfo: { flex: 1, paddingTop: 2 },
   barberTopRow: {
     flexDirection: 'row',
@@ -1099,7 +1099,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   barberFullName: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.bold,
     fontSize: 19,
     fontWeight: '700',
     color: '#fff',
@@ -1141,7 +1141,7 @@ const styles = StyleSheet.create({
   },
   barberAnyIcon: { fontSize: 22 },
   barberAnyName: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 14.5,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.5)',
@@ -1155,7 +1155,7 @@ const styles = StyleSheet.create({
     width: 56, height: 56, borderRadius: 28,
     borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  barberAvatarText: { fontFamily: SERIF, fontSize: 22, fontWeight: '600' },
+  barberAvatarText: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600' },
 
   // Calendar card (Step 3)
   calendarCard: {
@@ -1280,7 +1280,7 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 16,
   },
-  summaryTitle: { fontFamily: SERIF, fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 14 },
+  summaryTitle: { fontFamily: Fonts.semiBold, fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 14 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   summaryKey: { fontSize: 13, color: 'rgba(255,255,255,0.55)' },
   summaryVal: { fontSize: 13.5, fontWeight: '500', color: '#fff' },
@@ -1346,7 +1346,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   confirmTitle: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 30,
     fontWeight: '600',
     color: '#fff',
@@ -1383,7 +1383,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   confirmRefNum: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.bold,
     fontSize: 20,
     fontWeight: '700',
     color: '#C9A84C',
@@ -1403,7 +1403,7 @@ const styles = StyleSheet.create({
     color: '#4CAF8A',
   },
   confirmCardTitle: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 17,
     fontWeight: '600',
     color: '#fff',
@@ -1460,13 +1460,13 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.1)',
   },
   confirmSoldeKey: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 15,
     fontWeight: '600',
     color: '#fff',
   },
   confirmSoldeVal: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.bold,
     fontSize: 20,
     fontWeight: '700',
     color: '#C9A84C',
@@ -1486,7 +1486,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   summaryBannerLabel: { fontSize: 13.5, fontWeight: '500', color: 'rgba(255,255,255,0.75)' },
-  summaryBannerPrice: { fontFamily: SERIF, fontSize: 19, fontWeight: '700', color: '#C9A84C' },
+  summaryBannerPrice: { fontFamily: Fonts.bold, fontSize: 19, fontWeight: '700', color: '#C9A84C' },
   summaryBannerChev: { fontSize: 9, color: 'rgba(255,255,255,0.35)' },
   summaryDropdown: {
     backgroundColor: '#1A1814',
@@ -1504,7 +1504,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   sectionTitle: {
-    fontFamily: SERIF,
+    fontFamily: Fonts.semiBold,
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
@@ -1575,7 +1575,7 @@ const styles = StyleSheet.create({
     left: -30,
   },
   vcTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  vcBrand: { fontFamily: SERIF, fontSize: 13, fontWeight: '700', color: '#C9A84C', letterSpacing: 2 },
+  vcBrand: { fontFamily: Fonts.bold, fontSize: 13, fontWeight: '700', color: '#C9A84C', letterSpacing: 2 },
   vcChip: { width: 30, height: 22, borderRadius: 4, backgroundColor: '#C9A84C', opacity: 0.85 },
   vcNumber: {
     fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
@@ -1610,7 +1610,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  amtValue: { fontFamily: SERIF, fontSize: 20, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
+  amtValue: { fontFamily: Fonts.bold, fontSize: 20, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
   amtBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,

@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { authApi } from '@/services/api';
+import { Fonts } from '@/constants';
 
-const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
 function Avatar({ initial, size = 72 }: { initial: string; size?: number }) {
   return (
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 4,
   },
-  avatarText: { color: '#C9A84C', fontFamily: SERIF, fontWeight: '600' },
+  avatarText: { color: '#C9A84C', fontFamily: Fonts.semiBold, fontWeight: '600' },
   rolePill: {
     backgroundColor: 'rgba(201,168,76,0.12)',
     borderRadius: 100,
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   roleText: { fontSize: 9.5, color: '#C9A84C', fontWeight: '700', letterSpacing: 1 },
-  heroName: { fontFamily: SERIF, fontSize: 26, fontWeight: '600', color: '#fff', textAlign: 'center' },
+  heroName: { fontFamily: Fonts.semiBold, fontSize: 26, fontWeight: '600', color: '#fff', textAlign: 'center' },
   heroEmail: { fontSize: 14, color: 'rgba(255,255,255,0.55)', textAlign: 'center' },
   heroPhone: { fontSize: 13, color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
 
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   statItem: { flex: 1, alignItems: 'center' },
-  statNum: { fontFamily: SERIF, fontSize: 18, fontWeight: '700', color: '#fff', lineHeight: 22 },
+  statNum: { fontFamily: Fonts.bold, fontSize: 18, fontWeight: '700', color: '#fff', lineHeight: 22 },
   statLabel: { fontSize: 9.5, color: 'rgba(255,255,255,0.45)', textAlign: 'center', marginTop: 3, lineHeight: 13 },
   statDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.08)' },
 
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  modalTitle: { fontFamily: SERIF, fontSize: 22, fontWeight: '600', color: '#fff' },
+  modalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff' },
   modalClose: { fontSize: 18, color: 'rgba(255,255,255,0.45)', padding: 4 },
 
   mfWrap: { marginBottom: 14 },
