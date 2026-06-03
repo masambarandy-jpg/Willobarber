@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Redirect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { authApi } from '@/services/api';
 import { Fonts } from '@/constants';
@@ -75,7 +76,7 @@ function ModalField({ label, value, onChangeText, placeholder, secureTextEntry, 
 }
 
 export default function ProfileScreen() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, isAuthenticated, logout, refreshUser } = useAuth();
   const [editModal, setEditModal] = useState(false);
   const [pwModal, setPwModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -90,7 +91,7 @@ export default function ProfileScreen() {
   const [newPw, setNewPw] = useState('');
   const [newPw2, setNewPw2] = useState('');
 
-  if (!user) return null;
+  if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
 
   const fullName = `${user.first_name} ${user.last_name}`.trim() || user.username;
   const initial = (user.first_name?.[0] ?? user.username?.[0] ?? 'U').toUpperCase();

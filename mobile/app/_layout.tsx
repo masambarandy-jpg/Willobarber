@@ -5,6 +5,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import {
+  CormorantGaramond_300Light,
+  CormorantGaramond_300Light_Italic,
   CormorantGaramond_400Regular,
   CormorantGaramond_400Regular_Italic,
   CormorantGaramond_600SemiBold,
@@ -44,6 +46,8 @@ function RootNavigation() {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
+    CormorantGaramond_300Light,
+    CormorantGaramond_300Light_Italic,
     CormorantGaramond_400Regular,
     CormorantGaramond_400Regular_Italic,
     CormorantGaramond_600SemiBold,

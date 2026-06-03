@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useReservations } from '@/hooks/useReservations';
 import type { Reservation } from '@/types';
@@ -99,11 +99,13 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
 
 export default function ReservationsScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { upcoming, past, isLoading, refetch, cancel } = useReservations();
   const [histFilter, setHistFilter] = useState('Tous');
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
+
+  if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
 
   const firstName = user?.first_name || user?.username || '';
   const loyaltyPoints = user?.loyalty_points ?? 0;

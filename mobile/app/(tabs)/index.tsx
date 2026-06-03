@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/hooks/useAuth';
 import { ServiceCarousel } from '@/components/home/ServiceCarousel';
+import { HamburgerMenu } from '@/components/HamburgerMenu';
 import { Fonts } from '@/constants';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -48,9 +49,12 @@ export default function HomeScreen() {
   const firstName = user?.first_name || user?.username || 'vous';
   const scrollRef = useRef<ScrollView>(null);
   const [servicesY, setServicesY] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <View style={styles.root}>
+      <HamburgerMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
+
       {/* Fixed header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -58,7 +62,7 @@ export default function HomeScreen() {
           <Text style={styles.headerBrand}>willobarber</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerIcon}>
+          <TouchableOpacity style={styles.headerIcon} onPress={() => setMenuOpen(true)}>
             <Text style={styles.headerIconText}>☰</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
@@ -177,8 +181,8 @@ export default function HomeScreen() {
 
         {/* ── CTA final (dark) ── */}
         <View style={[styles.darkSection, { paddingVertical: 40, alignItems: 'center' }]}>
-          <Text style={[styles.sectionTitleLight, { textAlign: 'center', fontSize: 30, marginBottom: 12 }]}>
-            Votre prochain rendez-vous <Text style={styles.sectionTitleGold}>commence ici.</Text>
+          <Text style={[styles.sectionTitleLight, { textAlign: 'center', fontSize: 30, marginBottom: 12, fontFamily: Fonts.light }]}>
+            Votre prochain rendez-vous <Text style={[styles.sectionTitleGold, { fontFamily: Fonts.lightItalic }]}>commence ici.</Text>
           </Text>
           <Text style={[styles.sectionSub, { color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 24, maxWidth: 280 }]}>
             Plage horaire en quelques clics. Acompte sécurisé. Confirmation immédiate.

@@ -1,6 +1,5 @@
-import { Redirect, Tabs } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { Platform, StyleSheet, Text, View } from 'react-native';
-import { useAuth } from '@/hooks/useAuth';
 
 // Icon paths for each tab — using SVG path strings rendered as Text approximations
 // since no vector-icons package is installed
@@ -35,12 +34,6 @@ function TabIcon({ id, label, focused }: { id: string; label: string; focused: b
 }
 
 export default function TabsLayout() {
-  const { isAuthenticated } = useAuth();
-
-  if (!isAuthenticated) {
-    return <Redirect href="/(auth)/login" />;
-  }
-
   return (
     <Tabs
       screenOptions={{

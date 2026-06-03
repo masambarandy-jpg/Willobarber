@@ -42,6 +42,8 @@ export default function LoginScreen() {
     setLoading(true);
     setError('');
     try {
+      console.log('PAYLOAD:', { username: email.trim(), password });
+      console.log('BASE URL:', process.env.EXPO_PUBLIC_API_URL);
       await login({ username: email.trim(), password });
     } catch (err: unknown) {
       const data = (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data;
@@ -113,8 +115,10 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             placeholder="votre_username"
             placeholderTextColor="#b8afa2"
+            keyboardType="default"
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="off"
             returnKeyType="next"
           />
 

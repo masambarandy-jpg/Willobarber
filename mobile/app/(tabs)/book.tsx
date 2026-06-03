@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useBarbers } from '@/hooks/useBarbers';
 import { reservationsApi } from '@/services/api';
@@ -804,7 +804,7 @@ function ConfirmationView({ booking, total, deposit, bookingRef, onReset }: {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function BookScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { barbers } = useBarbers();
   const { serviceId: paramServiceId } = useLocalSearchParams<{ serviceId?: string }>();
 
@@ -841,6 +841,8 @@ export default function BookScreen() {
       ?? STATIC_BARBER_NAMES[booking.barberId ?? ''];
     return { ...booking, serviceName: svcName, barberName: brName || 'Premier disponible' };
   }, [booking, barbers]);
+
+  if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
 
   const handleNext = () => {
     if (step === 1 && !booking.serviceId) { Alert.alert('Sélectionnez une prestation'); return; }

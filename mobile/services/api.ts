@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 import { API_BASE_URL } from '@/constants';
 import type {
   AuthResponse,
@@ -101,7 +102,7 @@ http.interceptors.response.use(
         if (!refresh) throw new Error('No refresh token');
 
         const { data } = await axios.post<{ access: string }>(
-          `${API_BASE_URL}/auth/refresh/`,
+          `${API_BASE_URL}/auth/token/refresh/`,
           { refresh },
         );
 
@@ -113,6 +114,7 @@ http.interceptors.response.use(
       } catch (err) {
         processQueue(err, null);
         await TokenStorage.clear();
+        router.replace('/(auth)/login');
         return Promise.reject(err);
       } finally {
         isRefreshing = false;
@@ -126,8 +128,11 @@ http.interceptors.response.use(
 // ─── Auth API ────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  login: (payload: LoginPayload) =>
-    http.post<AuthResponse>('/auth/login/', payload).then((r) => r.data),
+  login: (payload: LoginPayload) => {
+    console.log('LOGIN PAYLOAD:', JSON.stringify({ username: payload.username, password: payload.password }));
+    console.log('LOGIN URL:', http.defaults.baseURL + '/auth/login/');
+    return http.post<AuthResponse>('/auth/login/', payload).then((r) => r.data);
+  },
 
   register: (payload: RegisterPayload) =>
     http.post<AuthResponse>('/auth/register/', payload).then((r) => r.data),
