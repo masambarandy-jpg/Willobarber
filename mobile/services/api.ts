@@ -137,6 +137,9 @@ export const authApi = {
   register: (payload: RegisterPayload) =>
     http.post<AuthResponse>('/auth/register/', payload).then((r) => r.data),
 
+  passwordlessLogin: (email: string) =>
+    http.post<AuthResponse>('/auth/passwordless-login/', { email }).then((r) => r.data),
+
   logout: (refresh: string) =>
     http.post('/auth/logout/', { refresh }),
 

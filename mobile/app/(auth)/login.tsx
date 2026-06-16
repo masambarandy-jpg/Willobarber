@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { appointmentsApi } from '@/services/api';
+import { appointmentsApi, authApi, TokenStorage } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
 import { Fonts } from '@/constants';
 
 const { height: SCREEN_H } = Dimensions.get('window');
@@ -30,6 +31,7 @@ type Step = 'idle' | 'exists' | 'new';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { refreshUser } = useAuth();
 
   const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
@@ -80,8 +82,19 @@ export default function LoginScreen() {
     }
   };
 
-  const handleConfirm = () => {
-    router.replace('/(tabs)');
+  const handleConfirm = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { access, refresh } = await authApi.passwordlessLogin(identifier.trim());
+      await TokenStorage.save(access, refresh);
+      await refreshUser();
+      router.replace('/(tabs)');
+    } catch {
+      setError('Connexion impossible. Veuillez réessayer.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateAccount = () => {
@@ -211,8 +224,16 @@ export default function LoginScreen() {
           )}
 
           {step === 'exists' && (
-            <TouchableOpacity style={styles.btnPrimary} onPress={handleConfirm} activeOpacity={0.85}>
-              <Text style={styles.btnPrimaryText}>Confirmer  →</Text>
+            <TouchableOpacity
+              style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
+              onPress={handleConfirm}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              {loading
+                ? <ActivityIndicator color="#1A1208" size="small" />
+                : <Text style={styles.btnPrimaryText}>Confirmer  →</Text>
+              }
             </TouchableOpacity>
           )}
 

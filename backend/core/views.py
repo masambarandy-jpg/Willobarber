@@ -93,6 +93,28 @@ class ChangePasswordView(APIView):
         return Response({'detail': 'Mot de passe mis à jour.'})
 
 
+class PasswordlessLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        if not email:
+            return Response({'error': 'email requis'}, status=400)
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({'error': 'Utilisateur non trouvé'}, status=404)
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+            },
+        })
+
+
 class CheckClientView(APIView):
     permission_classes = [AllowAny]
 
