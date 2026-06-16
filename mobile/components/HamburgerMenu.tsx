@@ -1,12 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import {
   Animated,
+  BackHandler,
   Dimensions,
   Modal,
   Platform,
   Pressable,
+  StatusBar,
   StyleSheet,
   Text,
+  TouchableNativeFeedback,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -39,7 +42,7 @@ function Avatar({ initial, color, ring, size = 44 }: { initial: string; color: s
 
 export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const firstName = user?.first_name || user?.username || 'Vous';
   const email = user?.email ?? '';
 
@@ -76,6 +79,15 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
       ]).start();
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (visible) { onClose(); return true; }
+      return false;
+    });
+    return () => sub.remove();
+  }, [visible, onClose]);
 
   const navigate = (route: string) => {
     onClose();
@@ -133,16 +145,30 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
         {/* Navigation items */}
         <View style={styles.navList}>
           {NAV_ITEMS.map((item) => (
-            <TouchableOpacity
-              key={item.route}
-              style={styles.navItem}
-              onPress={() => navigate(item.route)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.navKicker}>{item.kicker}</Text>
-              <Text style={styles.navLabel}>{item.label}</Text>
-              <Text style={styles.navArrow}>→</Text>
-            </TouchableOpacity>
+            Platform.OS === 'android' ? (
+              <TouchableNativeFeedback
+                key={item.route}
+                onPress={() => navigate(item.route)}
+                background={TouchableNativeFeedback.Ripple('rgba(201,168,76,0.15)', false)}
+              >
+                <View style={styles.navItem}>
+                  <Text style={styles.navKicker}>{item.kicker}</Text>
+                  <Text style={styles.navLabel}>{item.label}</Text>
+                  <Text style={styles.navArrow}>→</Text>
+                </View>
+              </TouchableNativeFeedback>
+            ) : (
+              <TouchableOpacity
+                key={item.route}
+                style={styles.navItem}
+                onPress={() => navigate(item.route)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.navKicker}>{item.kicker}</Text>
+                <Text style={styles.navLabel}>{item.label}</Text>
+                <Text style={styles.navArrow}>→</Text>
+              </TouchableOpacity>
+            )
           ))}
         </View>
 
@@ -150,9 +176,41 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
 
         {/* Footer actions */}
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.75}>
-            <Text style={styles.logoutText}>Se déconnecter</Text>
-          </TouchableOpacity>
+          {isAuthenticated ? (
+            Platform.OS === 'android' ? (
+              <View style={[styles.logoutBtn, { overflow: 'hidden', paddingVertical: 0 }]}>
+                <TouchableNativeFeedback
+                  onPress={handleLogout}
+                  background={TouchableNativeFeedback.Ripple('rgba(255,255,255,0.2)', false)}
+                >
+                  <View style={{ paddingVertical: 13, alignItems: 'center' }}>
+                    <Text style={styles.logoutText}>Se déconnecter</Text>
+                  </View>
+                </TouchableNativeFeedback>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.75}>
+                <Text style={styles.logoutText}>Se déconnecter</Text>
+              </TouchableOpacity>
+            )
+          ) : (
+            Platform.OS === 'android' ? (
+              <View style={[styles.loginBtn, { overflow: 'hidden', paddingVertical: 0 }]}>
+                <TouchableNativeFeedback
+                  onPress={() => navigate('/(auth)/login')}
+                  background={TouchableNativeFeedback.Ripple('rgba(201,168,76,0.25)', false)}
+                >
+                  <View style={{ paddingVertical: 13, alignItems: 'center' }}>
+                    <Text style={styles.loginText}>Se connecter</Text>
+                  </View>
+                </TouchableNativeFeedback>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.loginBtn} onPress={() => navigate('/(auth)/login')} activeOpacity={0.75}>
+                <Text style={styles.loginText}>Se connecter</Text>
+              </TouchableOpacity>
+            )
+          )}
           <Text style={styles.footerAddress}>Rue Auguste Van Zande 78 · Bruxelles</Text>
         </View>
       </Animated.View>
@@ -174,7 +232,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#111009',
     borderLeftWidth: 1,
     borderLeftColor: 'rgba(201,168,76,0.14)',
-    paddingTop: Platform.OS === 'ios' ? 56 : 36,
+    paddingTop: Platform.OS === 'ios' ? 56 : (StatusBar.currentHeight ?? 0) + 8,
     paddingBottom: 40,
     paddingHorizontal: 28,
   },
@@ -246,5 +304,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutText: { fontFamily: Fonts.semiBold, fontSize: 15, color: 'rgba(255,255,255,0.6)' },
+  loginBtn: {
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.5)',
+    borderRadius: 100,
+    paddingVertical: 13,
+    alignItems: 'center',
+    backgroundColor: 'rgba(201,168,76,0.08)',
+  },
+  loginText: { fontFamily: Fonts.semiBold, fontSize: 15, color: '#C9A84C' },
   footerAddress: { fontSize: 11, color: 'rgba(255,255,255,0.25)', textAlign: 'center', letterSpacing: 0.5 },
 });

@@ -2,18 +2,22 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Dimensions,
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
+  TouchableNativeFeedback,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { IdentifierInput, type ClientInfo } from '@/components/IdentifierInput';
 import { useBarbers } from '@/hooks/useBarbers';
 import { reservationsApi } from '@/services/api';
 import { SERVICES } from '@/components/home/ServiceCarousel';
@@ -103,11 +107,21 @@ function GoldItalic({ children }: { children: React.ReactNode }) {
 }
 
 function BtnPrimary({ label, onPress, disabled, loading }: { label: string; onPress: () => void; disabled?: boolean; loading?: boolean }) {
+  const content = loading
+    ? <ActivityIndicator color="#1A1208" size="small" />
+    : <Text style={styles.btnPrimaryText}>{label}</Text>;
+  if (Platform.OS === 'android') {
+    return (
+      <View style={[styles.btnPrimaryContainer, (disabled || loading) && styles.btnDisabled]}>
+        <TouchableNativeFeedback onPress={onPress} disabled={disabled || loading} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.25)', false)}>
+          <View style={styles.btnPrimaryInner}>{content}</View>
+        </TouchableNativeFeedback>
+      </View>
+    );
+  }
   return (
     <TouchableOpacity style={[styles.btnPrimary, (disabled || loading) && styles.btnDisabled]} onPress={onPress} disabled={disabled || loading} activeOpacity={0.85}>
-      {loading
-        ? <ActivityIndicator color="#1A1208" size="small" />
-        : <Text style={styles.btnPrimaryText}>{label}</Text>}
+      {content}
     </TouchableOpacity>
   );
 }
@@ -792,9 +806,19 @@ function ConfirmationView({ booking, total, deposit, bookingRef, onReset }: {
         </View>
 
         {/* ── CTA ── */}
-        <TouchableOpacity style={styles.btnPrimary} onPress={onReset} activeOpacity={0.85}>
-          <Text style={styles.btnPrimaryText}>Retour à l'accueil  →</Text>
-        </TouchableOpacity>
+        {Platform.OS === 'android' ? (
+          <View style={styles.btnPrimaryContainer}>
+            <TouchableNativeFeedback onPress={onReset} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.25)', false)}>
+              <View style={styles.btnPrimaryInner}>
+                <Text style={styles.btnPrimaryText}>Retour à l'accueil  →</Text>
+              </View>
+            </TouchableNativeFeedback>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.btnPrimary} onPress={onReset} activeOpacity={0.85}>
+            <Text style={styles.btnPrimaryText}>Retour à l'accueil  →</Text>
+          </TouchableOpacity>
+        )}
 
       </ScrollView>
     </View>
@@ -803,12 +827,12 @@ function ConfirmationView({ booking, total, deposit, bookingRef, onReset }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function BookScreen() {
-  const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const { barbers } = useBarbers();
   const { serviceId: paramServiceId } = useLocalSearchParams<{ serviceId?: string }>();
 
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0);
+  const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmRef, setConfirmRef] = useState('');
@@ -827,9 +851,20 @@ export default function BookScreen() {
     useCallback(() => {
       if (paramServiceId) {
         setBooking(prev => ({ ...prev, serviceId: paramServiceId }));
-        setStep(1);
       }
     }, [paramServiceId])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') return;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (confirmed) return false;
+        if (step > 0) { setStep(s => s - 1); return true; }
+        return false;
+      });
+      return () => sub.remove();
+    }, [step, confirmed])
   );
 
   const svc = SERVICES.find(s => s.id === booking.serviceId);
@@ -842,7 +877,16 @@ export default function BookScreen() {
     return { ...booking, serviceName: svcName, barberName: brName || 'Premier disponible' };
   }, [booking, barbers]);
 
-  if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
+  if (step === 0) {
+    return (
+      <IdentifierInput
+        onComplete={(info) => {
+          setClientInfo(info);
+          setStep(1);
+        }}
+      />
+    );
+  }
 
   const handleNext = () => {
     if (step === 1 && !booking.serviceId) { Alert.alert('Sélectionnez une prestation'); return; }
@@ -859,7 +903,8 @@ export default function BookScreen() {
   };
 
   const handleReset = () => {
-    setStep(1);
+    setStep(0);
+    setClientInfo(null);
     setConfirmed(false);
     setBooking({ serviceId: null, barberId: 'willo', date: null, time: null });
   };
@@ -878,7 +923,7 @@ export default function BookScreen() {
 
   const b = enrichBooking();
 
-  if (step === 1) return <Step1 booking={b} setBooking={setBooking} onBack={() => router.navigate('/(tabs)')} onNext={handleNext} />;
+  if (step === 1) return <Step1 booking={b} setBooking={setBooking} onBack={() => setStep(0)} onNext={handleNext} />;
   if (step === 2) return <Step2 booking={b} setBooking={setBooking} onBack={() => setStep(1)} onNext={handleNext} />;
   if (step === 3) return <Step3 booking={b} setBooking={setBooking} onBack={() => setStep(2)} onNext={handleNext} />;
   return <Step4 booking={b} total={total} user={user} onBack={() => setStep(3)} onConfirm={handleConfirm} loading={submitting} />;
@@ -893,7 +938,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'ios' ? 52 : 32,
+    paddingTop: Platform.OS === 'ios' ? 52 : (StatusBar.currentHeight ?? 0),
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.07)',
@@ -968,7 +1013,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.25)',
   },
-  stepCircleActive: { backgroundColor: '#C9A84C', borderColor: '#C9A84C', shadowColor: '#C9A84C', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 },
+  stepCircleActive: { backgroundColor: '#C9A84C', borderColor: '#C9A84C', ...Platform.select({ ios: { shadowColor: '#C9A84C', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 }, android: { elevation: 4 } }) },
   stepCircleDone: { borderColor: '#C9A84C' },
   stepNum: { fontSize: 14, fontFamily: Fonts.semiBold, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
   stepNumActive: { color: '#1A1208' },
@@ -1001,6 +1046,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 5,
+  },
+  btnPrimaryContainer: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    elevation: 5,
+    overflow: 'hidden',
+  },
+  btnPrimaryInner: {
+    paddingVertical: 15,
+    alignItems: 'center',
   },
   btnPrimaryText: { color: '#1A1208', fontWeight: '700', fontSize: 15, letterSpacing: 0.2 },
   btnDisabled: { opacity: 0.6 },
@@ -1313,7 +1368,7 @@ const styles = StyleSheet.create({
   // Confirmation
   confirmScroll: {
     padding: 20,
-    paddingTop: Platform.OS === 'ios' ? 52 : 32,
+    paddingTop: Platform.OS === 'ios' ? 52 : (StatusBar.currentHeight ?? 0),
     paddingBottom: 36,
     gap: 14,
   },

@@ -14,7 +14,6 @@ import {
   CormorantGaramond_700Bold,
 } from '@expo-google-fonts/cormorant-garamond';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
-import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { Colors } from '@/constants';
 
 SplashScreen.preventAutoHideAsync();
@@ -28,14 +27,11 @@ function RootNavigation() {
     }
   }, [isLoading]);
 
-  if (isLoading) {
-    return <LoadingScreen message="Chargement..." />;
-  }
-
   return (
     <>
       <StatusBar style="light" backgroundColor={Colors.background} />
       <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(booking)" />

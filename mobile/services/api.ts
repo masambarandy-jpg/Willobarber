@@ -212,6 +212,15 @@ export const recommendationsApi = {
   get: () => http.get('/recommendations/').then((r) => r.data),
 };
 
+// ─── Appointments API ────────────────────────────────────────────────────────
+
+export const appointmentsApi = {
+  checkClient: (identifier: string) =>
+    http
+      .post<{ status: 'exists' | 'new'; first_name?: string }>('/appointments/check-client/', { identifier })
+      .then((r) => r.data),
+};
+
 // ─── Waiting list API ────────────────────────────────────────────────────────
 
 export const waitingListApi = {

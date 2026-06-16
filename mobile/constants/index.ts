@@ -3,7 +3,7 @@ export * from './Fonts';
 export * from './Typography';
 export * from './Spacing';
 
-export const API_BASE_URL = 'https://willobarber-production.up.railway.app/api';
+export const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app/api';
 
 export const LANGUAGES = [
   { code: 'fr', label: 'Français' },

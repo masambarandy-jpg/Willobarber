@@ -8,9 +8,11 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
+  TouchableNativeFeedback,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -153,9 +155,19 @@ export default function ReservationsScreen() {
         </Text>
 
         {/* New RDV button */}
-        <TouchableOpacity style={styles.newRdvBtn} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-          <Text style={styles.newRdvBtnText}>📅  Nouveau rendez-vous</Text>
-        </TouchableOpacity>
+        {Platform.OS === 'android' ? (
+          <View style={[styles.newRdvBtn, { overflow: 'hidden', paddingVertical: 0 }]}>
+            <TouchableNativeFeedback onPress={() => router.push('/(tabs)/book')} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}>
+              <View style={{ paddingVertical: 15, alignItems: 'center' }}>
+                <Text style={styles.newRdvBtnText}>📅  Nouveau rendez-vous</Text>
+              </View>
+            </TouchableNativeFeedback>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.newRdvBtn} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
+            <Text style={styles.newRdvBtnText}>📅  Nouveau rendez-vous</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Stats grid */}
         <View style={styles.statsGrid}>
@@ -224,9 +236,19 @@ export default function ReservationsScreen() {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Aucun rendez-vous à venir</Text>
             <Text style={styles.emptySub}>Prenez rendez-vous en quelques clics.</Text>
-            <TouchableOpacity style={[styles.btnPrimary, { marginTop: 16, alignSelf: 'stretch' }]} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-              <Text style={styles.btnPrimaryText}>Réserver maintenant  →</Text>
-            </TouchableOpacity>
+            {Platform.OS === 'android' ? (
+              <View style={[styles.btnPrimary, { marginTop: 16, alignSelf: 'stretch', overflow: 'hidden', paddingVertical: 0 }]}>
+                <TouchableNativeFeedback onPress={() => router.push('/(tabs)/book')} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}>
+                  <View style={{ paddingVertical: 15, alignItems: 'center' }}>
+                    <Text style={styles.btnPrimaryText}>Réserver maintenant  →</Text>
+                  </View>
+                </TouchableNativeFeedback>
+              </View>
+            ) : (
+              <TouchableOpacity style={[styles.btnPrimary, { marginTop: 16, alignSelf: 'stretch' }]} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
+                <Text style={styles.btnPrimaryText}>Réserver maintenant  →</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -285,7 +307,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 52 : 32,
+    paddingTop: Platform.OS === 'ios' ? 52 : (StatusBar.currentHeight ?? 0),
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.07)',

@@ -5,10 +5,12 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Switch,
   Text,
   TextInput,
+  TouchableNativeFeedback,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -204,14 +206,28 @@ export default function ProfileScreen() {
         </View>
 
         {/* Logout */}
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={handleLogout}
-          disabled={loggingOut}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.logoutBtnText}>{loggingOut ? 'Déconnexion…' : 'Se déconnecter'}</Text>
-        </TouchableOpacity>
+        {Platform.OS === 'android' ? (
+          <View style={[styles.logoutBtn, { overflow: 'hidden', paddingVertical: 0 }]}>
+            <TouchableNativeFeedback
+              onPress={handleLogout}
+              disabled={loggingOut}
+              background={TouchableNativeFeedback.Ripple('rgba(192,57,43,0.15)', false)}
+            >
+              <View style={{ paddingVertical: 15, alignItems: 'center' }}>
+                <Text style={styles.logoutBtnText}>{loggingOut ? 'Déconnexion…' : 'Se déconnecter'}</Text>
+              </View>
+            </TouchableNativeFeedback>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={handleLogout}
+            disabled={loggingOut}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.logoutBtnText}>{loggingOut ? 'Déconnexion…' : 'Se déconnecter'}</Text>
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.version}>WilloBarber v1.0.0 · TFE 2025-2026</Text>
       </ScrollView>
@@ -232,9 +248,19 @@ export default function ProfileScreen() {
                 <Text style={styles.switchLabel}>Recommandations IA</Text>
                 <Switch value={aiRec} onValueChange={setAiRec} trackColor={{ false: 'rgba(255,255,255,0.12)', true: 'rgba(201,168,76,0.4)' }} thumbColor={aiRec ? '#C9A84C' : 'rgba(255,255,255,0.5)'} />
               </View>
-              <TouchableOpacity style={[styles.btnPrimary, saving && { opacity: 0.7 }]} onPress={handleSaveProfile} disabled={saving} activeOpacity={0.85}>
-                <Text style={styles.btnPrimaryText}>{saving ? 'Sauvegarde…' : 'Sauvegarder'}</Text>
-              </TouchableOpacity>
+              {Platform.OS === 'android' ? (
+                <View style={[styles.btnPrimary, saving && { opacity: 0.7 }, { overflow: 'hidden', paddingVertical: 0 }]}>
+                  <TouchableNativeFeedback onPress={handleSaveProfile} disabled={saving} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}>
+                    <View style={{ paddingVertical: 15, alignItems: 'center' }}>
+                      <Text style={styles.btnPrimaryText}>{saving ? 'Sauvegarde…' : 'Sauvegarder'}</Text>
+                    </View>
+                  </TouchableNativeFeedback>
+                </View>
+              ) : (
+                <TouchableOpacity style={[styles.btnPrimary, saving && { opacity: 0.7 }]} onPress={handleSaveProfile} disabled={saving} activeOpacity={0.85}>
+                  <Text style={styles.btnPrimaryText}>{saving ? 'Sauvegarde…' : 'Sauvegarder'}</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -251,9 +277,19 @@ export default function ProfileScreen() {
             <ModalField label="Mot de passe actuel" value={oldPw} onChangeText={setOldPw} placeholder="••••••••" secureTextEntry />
             <ModalField label="Nouveau mot de passe" value={newPw} onChangeText={setNewPw} placeholder="••••••••" secureTextEntry />
             <ModalField label="Confirmer" value={newPw2} onChangeText={setNewPw2} placeholder="••••••••" secureTextEntry />
-            <TouchableOpacity style={[styles.btnPrimary, saving && { opacity: 0.7 }]} onPress={handleChangePassword} disabled={saving} activeOpacity={0.85}>
-              <Text style={styles.btnPrimaryText}>{saving ? 'Modification…' : 'Changer le mot de passe'}</Text>
-            </TouchableOpacity>
+            {Platform.OS === 'android' ? (
+              <View style={[styles.btnPrimary, saving && { opacity: 0.7 }, { overflow: 'hidden', paddingVertical: 0 }]}>
+                <TouchableNativeFeedback onPress={handleChangePassword} disabled={saving} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}>
+                  <View style={{ paddingVertical: 15, alignItems: 'center' }}>
+                    <Text style={styles.btnPrimaryText}>{saving ? 'Modification…' : 'Changer le mot de passe'}</Text>
+                  </View>
+                </TouchableNativeFeedback>
+              </View>
+            ) : (
+              <TouchableOpacity style={[styles.btnPrimary, saving && { opacity: 0.7 }]} onPress={handleChangePassword} disabled={saving} activeOpacity={0.85}>
+                <Text style={styles.btnPrimaryText}>{saving ? 'Modification…' : 'Changer le mot de passe'}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>
@@ -268,7 +304,7 @@ const styles = StyleSheet.create({
   // Hero
   hero: {
     alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 60 : 42,
+    paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight ?? 0) + 10,
     paddingBottom: 28,
     paddingHorizontal: 22,
     backgroundColor: '#1A1814',

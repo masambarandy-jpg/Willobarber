@@ -3,8 +3,10 @@ import {
   Dimensions,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
+  TouchableNativeFeedback,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -30,6 +32,31 @@ const REVIEWS = [
   { name: 'Noé V.', color: '#b69ae0', ring: '#6b4fa0', stars: 5, quote: 'Idris a compris exactement ce que je voulais. Couleur impeccable et naturelle.', service: 'Camouflage gris' },
   { name: 'Antoine R.', color: '#C9A84C', ring: '#8B6914', stars: 5, quote: 'Réservation en deux clics, accueil parfait, résultat au-dessus de mes attentes.', service: 'Le Rituel' },
 ];
+
+function PrimaryBookButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const inner = (
+    <View style={styles.btnPrimaryInner}>
+      <Text style={styles.btnPrimaryText}>{label}</Text>
+      <View style={styles.btnArrowCircle}>
+        <Text style={styles.btnArrowText}>→</Text>
+      </View>
+    </View>
+  );
+  if (Platform.OS === 'android') {
+    return (
+      <View style={[styles.btnPrimary, { overflow: 'hidden', paddingVertical: 0, paddingHorizontal: 0 }]}>
+        <TouchableNativeFeedback onPress={onPress} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}>
+          <View style={{ paddingVertical: 14, paddingHorizontal: 20 }}>{inner}</View>
+        </TouchableNativeFeedback>
+      </View>
+    );
+  }
+  return (
+    <TouchableOpacity style={styles.btnPrimary} onPress={onPress} activeOpacity={0.85}>
+      {inner}
+    </TouchableOpacity>
+  );
+}
 
 function Stars({ n }: { n: number }) {
   return <Text style={styles.stars}>{'★'.repeat(n)}{'☆'.repeat(5 - n)}</Text>;
@@ -90,14 +117,7 @@ export default function HomeScreen() {
             WilloBarber élève la coupe masculine au rang de rituel. Une heure suspendue, un geste précis, un résultat sur mesure.
           </Text>
           <View style={styles.heroBtns}>
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-              <View style={styles.btnPrimaryInner}>
-                <Text style={styles.btnPrimaryText}>Réserver maintenant</Text>
-                <View style={styles.btnArrowCircle}>
-                  <Text style={styles.btnArrowText}>→</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
+            <PrimaryBookButton label="Réserver maintenant" onPress={() => router.push('/(tabs)/book')} />
             <TouchableOpacity style={styles.btnOutline} onPress={() => scrollRef.current?.scrollTo({ y: servicesY, animated: true })} activeOpacity={0.85}>
               <Text style={styles.btnOutlineText}>↓  Nos prestations</Text>
             </TouchableOpacity>
@@ -187,14 +207,7 @@ export default function HomeScreen() {
           <Text style={[styles.sectionSub, { color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 24, maxWidth: 280 }]}>
             Plage horaire en quelques clics. Acompte sécurisé. Confirmation immédiate.
           </Text>
-          <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-            <View style={styles.btnPrimaryInner}>
-              <Text style={styles.btnPrimaryText}>Réserver une plage</Text>
-              <View style={styles.btnArrowCircle}>
-                <Text style={styles.btnArrowText}>→</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
+          <PrimaryBookButton label="Réserver une plage" onPress={() => router.push('/(tabs)/book')} />
         </View>
       </ScrollView>
     </View>
@@ -210,7 +223,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 52 : 32,
+    paddingTop: Platform.OS === 'ios' ? 52 : (StatusBar.currentHeight ?? 0),
     paddingBottom: 12,
     backgroundColor: 'rgba(13,12,10,0.9)',
     borderBottomWidth: 1,
