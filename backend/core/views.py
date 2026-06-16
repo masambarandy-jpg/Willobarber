@@ -98,14 +98,12 @@ class CheckClientView(APIView):
 
     def post(self, request):
         identifier = request.data.get('identifier', '').strip()
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"CHECK-CLIENT called with: '{identifier}'")
+        print(f"DEBUG CHECK-CLIENT: identifier='{identifier}'")
 
         all_users = User.objects.all()
-        logger.warning(f"Total users in DB: {all_users.count()}")
-        for u in all_users[:5]:
-            logger.warning(f"User: {u.username} | email: {u.email}")
+        print(f"DEBUG USERS COUNT: {all_users.count()}")
+        for u in all_users[:3]:
+            print(f"DEBUG USER: username={u.username} email={u.email}")
 
         if not identifier:
             return Response({'error': 'identifier requis'}, status=400)
@@ -116,7 +114,7 @@ class CheckClientView(APIView):
             digits = ''.join(filter(str.isdigit, identifier))
             user = User.objects.filter(phone=digits).first() if digits else None
 
-        logger.warning(f"Found user: {user}")
+        print(f"DEBUG FOUND: {user}")
         if user:
             return Response({'status': 'exists', 'first_name': user.first_name or user.username})
         return Response({'status': 'new'})
