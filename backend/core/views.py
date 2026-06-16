@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, get_user_model
 from .models import Barbershop, Service, Reservation
 from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
@@ -91,3 +91,34 @@ class ChangePasswordView(APIView):
         user.set_password(request.data.get('new_password'))
         user.save()
         return Response({'detail': 'Mot de passe mis à jour.'})
+
+
+class CheckClientView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        identifier = (request.data.get('identifier') or '').strip()
+        if not identifier:
+            return Response({'detail': 'Identifiant requis.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+
+        if '@' in identifier:
+            try:
+                user = User.objects.get(email__iexact=identifier)
+                return Response({
+                    'status': 'exists',
+                    'first_name': user.first_name or user.username,
+                })
+            except User.DoesNotExist:
+                return Response({'status': 'new'})
+        else:
+            digits = ''.join(c for c in identifier if c.isdigit() or c == '+')
+            try:
+                user = User.objects.get(phone=digits)
+                return Response({
+                    'status': 'exists',
+                    'first_name': user.first_name or user.username,
+                })
+            except User.DoesNotExist:
+                return Response({'status': 'new'})

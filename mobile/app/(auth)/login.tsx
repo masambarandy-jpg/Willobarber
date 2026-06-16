@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Animated,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -13,7 +15,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAuth } from '@/hooks/useAuth';
+import { appointmentsApi } from '@/services/api';
 import { Fonts } from '@/constants';
 
 const { height: SCREEN_H } = Dimensions.get('window');
@@ -24,34 +26,70 @@ const STATS = [
   { num: '386', label: 'RDV ce mois' },
 ];
 
+type Step = 'idle' | 'exists' | 'new';
+
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPw, setShowPw] = useState(false);
+  const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [step, setStep] = useState<Step>('idle');
+  const [existingFirstName, setExistingFirstName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
 
-  const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      setError('Identifiant et mot de passe requis.');
+  const slideAnim = useRef(new Animated.Value(-20)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  const animateIn = () => {
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: 0, duration: 320, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const resetToIdle = (text: string) => {
+    setIdentifier(text);
+    setStep('idle');
+    setError('');
+    slideAnim.setValue(-20);
+    opacityAnim.setValue(0);
+  };
+
+  const handleContinue = async () => {
+    if (!identifier.trim()) {
+      setError('Veuillez saisir un e-mail ou numéro de téléphone.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      console.log('PAYLOAD:', { username: email.trim(), password });
-      console.log('BASE URL:', process.env.EXPO_PUBLIC_API_URL);
-      await login({ username: email.trim(), password });
-    } catch (err: unknown) {
-      const data = (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data;
-      const msg = data?.detail ?? data?.error ?? 'Identifiants invalides.';
-      setError(msg);
+      const res = await appointmentsApi.checkClient(identifier.trim());
+      if (res.status === 'exists') {
+        setExistingFirstName(res.first_name ?? '');
+        setStep('exists');
+      } else {
+        setStep('new');
+        animateIn();
+      }
+    } catch {
+      setError('Vérification impossible. Vérifiez votre connexion et réessayez.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirm = () => {
+    router.replace('/(tabs)');
+  };
+
+  const handleCreateAccount = () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('Prénom et nom requis.');
+      return;
+    }
+    router.replace('/(tabs)');
   };
 
   return (
@@ -63,19 +101,15 @@ export default function LoginScreen() {
         end={{ x: 1, y: 1 }}
         style={styles.darkPanel}
       >
-        {/* Logo */}
         <View style={styles.logoRow}>
           <Text style={styles.logoMark}>{'{w}'}</Text>
           <Text style={styles.logoText}>willobarber</Text>
         </View>
-        {/* Kicker */}
         <Text style={styles.kicker}>ESPACE CLIENT</Text>
-        {/* Title */}
         <Text style={styles.heroTitle}>
           Votre style,{'\n'}
           <Text style={styles.heroTitleGold}>entre de bonnes{'\n'}mains.</Text>
         </Text>
-        {/* Stats */}
         <View style={styles.statsRow}>
           {STATS.map(s => (
             <View key={s.label} style={styles.statItem}>
@@ -98,8 +132,14 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.formTitle}>Bon retour.</Text>
-          <Text style={styles.formSubtitle}>Connectez-vous pour réserver votre prochain rendez-vous.</Text>
+          <Text style={styles.formTitle}>
+            {step === 'exists' ? `Ravi de vous revoir,\n${existingFirstName} !` : 'Bon retour.'}
+          </Text>
+          <Text style={styles.formSubtitle}>
+            {step === 'exists'
+              ? 'Votre profil a été retrouvé. Confirmez pour continuer.'
+              : 'Entrez votre e-mail ou téléphone pour accéder à votre espace.'}
+          </Text>
 
           {!!error && (
             <View style={styles.errorBox}>
@@ -107,54 +147,80 @@ export default function LoginScreen() {
             </View>
           )}
 
-          {/* Username */}
-          <Text style={styles.fieldLabel}>Nom d'utilisateur</Text>
+          {/* Identifier field */}
           <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="votre_username"
+            style={[styles.input, step !== 'idle' && styles.inputLocked]}
+            value={identifier}
+            onChangeText={resetToIdle}
+            placeholder="E-mail ou numéro de téléphone"
             placeholderTextColor="#b8afa2"
-            keyboardType="default"
+            keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="off"
-            returnKeyType="next"
+            editable={step === 'idle'}
+            returnKeyType="done"
+            onSubmitEditing={step === 'idle' ? handleContinue : undefined}
           />
 
-          {/* Password */}
-          <Text style={styles.fieldLabel}>Mot de passe</Text>
-          <View style={styles.inputWrap}>
-            <TextInput
-              style={[styles.input, styles.inputPasswordField]}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              placeholderTextColor="#b8afa2"
-              secureTextEntry={!showPw}
-              autoCapitalize="none"
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-            />
-            <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPw(v => !v)}>
-              <Text style={styles.eyeIcon}>{showPw ? '🙈' : '👁'}</Text>
+          {/* New client — slide-down reveal */}
+          {step === 'new' && (
+            <Animated.View style={{ opacity: opacityAnim, transform: [{ translateY: slideAnim }] }}>
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>PREMIÈRE VISITE</Text>
+              </View>
+              <Text style={styles.newTitle}>
+                Bienvenue !{' '}
+                <Text style={styles.newTitleGold}>Créons votre profil.</Text>
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Prénom"
+                placeholderTextColor="#b8afa2"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+              <TextInput
+                style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Nom"
+                placeholderTextColor="#b8afa2"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={handleCreateAccount}
+              />
+            </Animated.View>
+          )}
+
+          {/* CTA */}
+          {step === 'idle' && (
+            <TouchableOpacity
+              style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
+              onPress={handleContinue}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              {loading
+                ? <ActivityIndicator color="#1A1208" size="small" />
+                : <Text style={styles.btnPrimaryText}>Continuer  →</Text>
+              }
             </TouchableOpacity>
-          </View>
+          )}
 
-          {/* Forgot password */}
-          <View style={styles.forgotRow}>
-            <Text style={styles.forgotLink}>Mot de passe oublié ?</Text>
-          </View>
+          {step === 'exists' && (
+            <TouchableOpacity style={styles.btnPrimary} onPress={handleConfirm} activeOpacity={0.85}>
+              <Text style={styles.btnPrimaryText}>Confirmer  →</Text>
+            </TouchableOpacity>
+          )}
 
-          {/* Submit */}
-          <TouchableOpacity
-            style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.btnPrimaryText}>{loading ? 'Connexion…' : 'Se connecter  →'}</Text>
-          </TouchableOpacity>
+          {step === 'new' && (
+            <TouchableOpacity style={styles.btnPrimary} onPress={handleCreateAccount} activeOpacity={0.85}>
+              <Text style={styles.btnPrimaryText}>Créer mon compte & continuer  →</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Divider */}
           <View style={styles.dividerRow}>
@@ -283,12 +349,6 @@ const styles = StyleSheet.create({
     color: '#C0392B',
     lineHeight: 18,
   },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 8,
-  },
   input: {
     backgroundColor: '#fff',
     borderWidth: 1,
@@ -300,33 +360,36 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     marginBottom: 16,
   },
-  inputWrap: {
-    position: 'relative',
-    marginBottom: 10,
+  inputLocked: {
+    opacity: 0.55,
+    borderColor: 'rgba(200,169,126,0.3)',
   },
-  inputPasswordField: {
-    marginBottom: 0,
-    paddingRight: 48,
+  newBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(139,105,20,0.4)',
+    borderRadius: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 12,
   },
-  eyeBtn: {
-    position: 'absolute',
-    right: 14,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-  },
-  eyeIcon: {
-    fontSize: 16,
-  },
-  forgotRow: {
-    alignItems: 'flex-end',
-    marginBottom: 22,
-    marginTop: 6,
-  },
-  forgotLink: {
-    fontSize: 13,
-    fontWeight: '600',
+  newBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 2,
     color: '#8B6914',
+  },
+  newTitle: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1A1208',
+    marginBottom: 18,
+    lineHeight: 26,
+  },
+  newTitleGold: {
+    color: '#8B6914',
+    fontStyle: 'italic',
   },
   btnPrimary: {
     backgroundColor: '#C9A84C',
