@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
-from .models import Barbershop, Service, Reservation
+from .models import Barbershop, Service, Reservation, User
 from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer,
@@ -97,28 +97,16 @@ class CheckClientView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        identifier = (request.data.get('identifier') or '').strip()
+        identifier = request.data.get('identifier', '').strip()
         if not identifier:
-            return Response({'detail': 'Identifiant requis.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        User = get_user_model()
+            return Response({'error': 'identifier requis'}, status=400)
 
         if '@' in identifier:
-            try:
-                user = User.objects.get(email__iexact=identifier)
-                return Response({
-                    'status': 'exists',
-                    'first_name': user.first_name or user.username,
-                })
-            except User.DoesNotExist:
-                return Response({'status': 'new'})
+            user = User.objects.filter(email__iexact=identifier).first()
         else:
-            digits = ''.join(c for c in identifier if c.isdigit() or c == '+')
-            try:
-                user = User.objects.get(phone=digits)
-                return Response({
-                    'status': 'exists',
-                    'first_name': user.first_name or user.username,
-                })
-            except User.DoesNotExist:
-                return Response({'status': 'new'})
+            digits = ''.join(filter(str.isdigit, identifier))
+            user = User.objects.filter(phone=digits).first() if digits else None
+
+        if user:
+            return Response({'status': 'exists', 'first_name': user.first_name or user.username})
+        return Response({'status': 'new'})
