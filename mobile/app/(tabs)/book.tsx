@@ -213,42 +213,46 @@ export default function BookScreen() {
         />
       )}
 
-      {/* Fixed CTA footer */}
+      {/* Fixed CTA footer — outer container is pointer-transparent so clicks pass through to cards */}
       {step === 4 ? (
         /* Step 4: full-width pay button, no back button */
-        <View style={[styles.footer, { paddingBottom }]}>
-          <TouchableOpacity
-            style={styles.ctaFull}
-            onPress={handleNext}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.ctaFullText}>
-              {(() => {
-                const price = booking.service?.price ?? 0;
-                const amt = amountChoice === 'full' ? price : calcDeposit(price);
-                return `Payer ${fmtPrice(amt)} et réserver →`;
-              })()}
-            </Text>
-          </TouchableOpacity>
+        <View style={styles.footerContainer} pointerEvents="box-none">
+          <View style={[styles.footerInner, { paddingBottom }]}>
+            <TouchableOpacity
+              style={styles.ctaFull}
+              onPress={handleNext}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.ctaFullText}>
+                {(() => {
+                  const price = booking.service?.price ?? 0;
+                  const amt = amountChoice === 'full' ? price : calcDeposit(price);
+                  return `Payer ${fmtPrice(amt)} et réserver →`;
+                })()}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         /* Steps 1-3: back button + CTA */
-        <View style={[styles.footer, { paddingBottom }]}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={handleBack}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.backBtnText}>← Retour</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.cta, !ctaEnabled && styles.ctaDisabled]}
-            onPress={handleNext}
-            disabled={!ctaEnabled}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.ctaText}>{CTA_LABELS[step]}</Text>
-          </TouchableOpacity>
+        <View style={styles.footerContainer} pointerEvents="box-none">
+          <View style={[styles.footerInner, { paddingBottom }]}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={handleBack}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.backBtnText}>← Retour</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cta, !ctaEnabled && styles.ctaDisabled]}
+              onPress={handleNext}
+              disabled={!ctaEnabled}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.ctaText}>{CTA_LABELS[step]}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
@@ -261,7 +265,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#0D0C0A',
   },
 
-  footer: {
+  footerContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+
+  footerInner: {
     flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 20,
@@ -269,6 +280,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(13,12,10,0.85)',
+    zIndex: 10,
   },
 
   backBtn: {

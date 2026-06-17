@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   Dimensions,
+  Image,
   Platform,
   ScrollView,
   StatusBar,
@@ -31,6 +32,37 @@ const REVIEWS = [
   { name: 'Karim B.', color: '#d8a06a', ring: '#8a5a35', stars: 5, quote: 'Un vrai rituel. La serviette chaude, le rasoir droit… on prend le temps.', service: 'Taille & rasage' },
   { name: 'Noé V.', color: '#b69ae0', ring: '#6b4fa0', stars: 5, quote: 'Idris a compris exactement ce que je voulais. Couleur impeccable et naturelle.', service: 'Camouflage gris' },
   { name: 'Antoine R.', color: '#C9A84C', ring: '#8B6914', stars: 5, quote: 'Réservation en deux clics, accueil parfait, résultat au-dessus de mes attentes.', service: 'Le Rituel' },
+];
+
+const NOS_PRODUITS = [
+  {
+    cat: 'COIFFANT', popular: true,
+    photo: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=600&q=80',
+    nom: 'Cire Mate Signature',
+    desc: 'Tenue forte, fini mat naturel. La cire des habitués de WilloBarber.',
+    prix: 18,
+  },
+  {
+    cat: 'SOIN', popular: false,
+    photo: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=600&q=80',
+    nom: 'Huile Barbe Cèdre',
+    desc: 'Huile nourrissante au cèdre et à la jojoba. Barbe douce, peau apaisée.',
+    prix: 24,
+  },
+  {
+    cat: 'SOIN', popular: true,
+    photo: 'https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=600&q=80',
+    nom: 'Sérum Visage',
+    desc: 'Hydratation profonde, anti-fatigue. Geste quotidien, résultat visible.',
+    prix: 32,
+  },
+  {
+    cat: 'STYLING', popular: false,
+    photo: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=600&q=80',
+    nom: 'Pomade Brillante',
+    desc: 'Look rétro, tenue souple et brillance contrôlée. Effet coiffeur à la maison.',
+    prix: 20,
+  },
 ];
 
 function PrimaryBookButton({ label, onPress }: { label: string; onPress: () => void }) {
@@ -199,6 +231,45 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
+        {/* ── Nos Produits section (dark) ── */}
+        <View style={styles.darkSection}>
+          <Text style={styles.sectionKicker}>WilloBarber · Bruxelles</Text>
+          <Text style={styles.sectionTitleLight}>
+            Nos <Text style={styles.sectionTitleGold}>Produits</Text>
+          </Text>
+          <Text style={[styles.sectionSub, { color: 'rgba(255,255,255,0.45)' }]}>
+            Des soins et produits sélectionnés par nos barbiers.
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+            {NOS_PRODUITS.map((prod, i) => (
+              <View key={i} style={styles.prodCard}>
+                <View style={styles.prodPhotoZone}>
+                  <Image source={{ uri: prod.photo }} style={styles.prodPhoto} resizeMode="cover" />
+                  <View style={styles.prodBadgesRow}>
+                    <View style={styles.prodBadgeCat}>
+                      <Text style={styles.prodBadgeCatText}>{prod.cat}</Text>
+                    </View>
+                    {prod.popular && (
+                      <View style={styles.prodBadgePopular}>
+                        <Text style={styles.prodBadgePopularText}>POPULAIRE</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.prodContent}>
+                  <Text style={styles.prodName}>{prod.nom}</Text>
+                  <Text style={styles.prodDesc}>{prod.desc}</Text>
+                  <View style={styles.prodSep} />
+                  <Text style={styles.prodPrice}>{prod.prix} €</Text>
+                  <TouchableOpacity style={styles.cartBtn} activeOpacity={0.85}>
+                    <Text style={styles.cartBtnText}>Ajouter au panier →</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+
         {/* ── CTA final (dark) ── */}
         <View style={[styles.darkSection, { paddingVertical: 40, alignItems: 'center' }]}>
           <Text style={[styles.sectionTitleLight, { textAlign: 'center', fontSize: 30, marginBottom: 12, fontFamily: Fonts.light }]}>
@@ -357,6 +428,103 @@ const styles = StyleSheet.create({
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, justifyContent: 'center', marginTop: 6 },
   tag: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', borderRadius: 100, paddingHorizontal: 12, paddingVertical: 5 },
   tagText: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
+
+  // Product cards
+  prodCard: {
+    width: 230,
+    backgroundColor: '#1A1814',
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  prodPhotoZone: {
+    height: 150,
+    position: 'relative',
+  },
+  prodPhoto: {
+    width: '100%',
+    height: 150,
+  },
+  prodBadgesRow: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  prodBadgeCat: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  prodBadgeCatText: {
+    fontFamily: Fonts.semiBold,
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 1.2,
+  },
+  prodBadgePopular: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  prodBadgePopularText: {
+    fontFamily: Fonts.semiBold,
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 1.2,
+  },
+  prodContent: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
+  },
+  prodName: {
+    fontFamily: Fonts.bold,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  prodDesc: {
+    fontSize: 12.5,
+    color: '#6B6560',
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  prodSep: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginBottom: 10,
+  },
+  prodPrice: {
+    fontFamily: Fonts.bold,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#C9A84C',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  cartBtn: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  cartBtnText: {
+    fontFamily: Fonts.semiBold,
+    color: '#1a1208',
+    fontSize: 13,
+    fontWeight: '600',
+  },
 
   // Review cards
   reviewCard: {
