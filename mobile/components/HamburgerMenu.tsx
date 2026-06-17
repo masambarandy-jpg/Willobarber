@@ -9,16 +9,16 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TouchableNativeFeedback,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { Fonts } from '@/constants';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const MENU_W = Math.min(SCREEN_W * 0.82, 340);
+const GOLD = '#C8A97E';
 
 interface HamburgerMenuProps {
   visible: boolean;
@@ -26,56 +26,33 @@ interface HamburgerMenuProps {
 }
 
 const NAV_ITEMS = [
-  { label: 'Accueil',       route: '/(tabs)/index' as const,        kicker: '01' },
-  { label: 'Réserver',      route: '/(tabs)/book' as const,         kicker: '02' },
-  { label: 'Mes réservations', route: '/(tabs)/reservations' as const, kicker: '03' },
-  { label: 'Mon profil',    route: '/(tabs)/profile' as const,      kicker: '04' },
+  { num: '01', label: 'Accueil',         sub: 'Votre espace client',  route: '/(tabs)/index'    },
+  { num: '02', label: 'Nos Prestations', sub: 'Coupes, soins & plus', route: '/(tabs)/services' },
+  { num: '03', label: "L'Équipe",        sub: 'Nos barbiers',          route: '/(tabs)/team'     },
+  { num: '04', label: 'Réserver',        sub: 'Prendre rendez-vous',  route: '/(tabs)/book'     },
 ] as const;
 
-function Avatar({ initial, color, ring, size = 44 }: { initial: string; color: string; ring: string; size?: number }) {
-  return (
-    <View style={[styles.avatarBase, { width: size, height: size, borderRadius: size / 2, backgroundColor: color + '22', borderColor: ring }]}>
-      <Text style={[styles.avatarInitial, { fontSize: size * 0.38, color }]}>{initial}</Text>
-    </View>
-  );
-}
-
 export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
-  const router = useRouter();
-  const { user, isAuthenticated, logout } = useAuth();
-  const firstName = user?.first_name || user?.username || 'Vous';
-  const email = user?.email ?? '';
+  const router   = useRouter();
+  const pathname = usePathname();
+  const { user, isAuthenticated } = useAuth();
 
-  const slideAnim = useRef(new Animated.Value(MENU_W)).current;
+  const displayName = user?.first_name || user?.username || '';
+  const initial     = (displayName[0] ?? 'U').toUpperCase();
+
+  const slideAnim   = useRef(new Animated.Value(MENU_W)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          useNativeDriver: true,
-          damping: 22,
-          stiffness: 180,
-        }),
-        Animated.timing(backdropAnim, {
-          toValue: 1,
-          duration: 220,
-          useNativeDriver: true,
-        }),
+        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 180 }),
+        Animated.timing(backdropAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: MENU_W,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(backdropAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
+        Animated.timing(slideAnim, { toValue: MENU_W, duration: 200, useNativeDriver: true }),
+        Animated.timing(backdropAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
@@ -94,125 +71,94 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
     setTimeout(() => router.push(route as any), 180);
   };
 
-  const handleLogout = async () => {
-    onClose();
-    await logout();
-  };
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+
       {/* Backdrop */}
-      <Animated.View
-        style={[styles.backdrop, { opacity: backdropAnim }]}
-        pointerEvents={visible ? 'auto' : 'none'}
-      >
+      <Animated.View style={[styles.backdrop, { opacity: backdropAnim }]} pointerEvents={visible ? 'auto' : 'none'}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
-      {/* Sliding panel */}
+      {/* Panel */}
       <Animated.View style={[styles.panel, { transform: [{ translateX: slideAnim }] }]}>
-        {/* Header row */}
-        <View style={styles.panelHeader}>
+
+        {/* ── Header ── */}
+        <View style={styles.header}>
           <View style={styles.logoRow}>
             <Text style={styles.logoMark}>{'{w}'}</Text>
-            <Text style={styles.logoBrand}>willobarber</Text>
+            <Text style={styles.logoText}>willobarber</Text>
           </View>
-          <TouchableOpacity onPress={onClose} hitSlop={12} style={styles.closeBtn}>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12} activeOpacity={0.7}>
             <Text style={styles.closeBtnText}>✕</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Divider */}
-        <View style={styles.divider} />
+        {/* ── MENU label ── */}
+        <Text style={styles.menuLabel}>MENU</Text>
 
-        {/* User identity */}
-        <View style={styles.userRow}>
-          <Avatar initial={(firstName[0] ?? 'U').toUpperCase()} color="#C9A84C" ring="#8B6914" size={48} />
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>{firstName}</Text>
-            {!!email && <Text style={styles.userEmail}>{email}</Text>}
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* Navigation items */}
+        {/* ── Nav items ── */}
         <View style={styles.navList}>
-          {NAV_ITEMS.map((item) => (
-            Platform.OS === 'android' ? (
-              <TouchableNativeFeedback
-                key={item.route}
-                onPress={() => navigate(item.route)}
-                background={TouchableNativeFeedback.Ripple('rgba(201,168,76,0.15)', false)}
-              >
-                <View style={styles.navItem}>
-                  <Text style={styles.navKicker}>{item.kicker}</Text>
-                  <Text style={styles.navLabel}>{item.label}</Text>
-                  <Text style={styles.navArrow}>→</Text>
-                </View>
-              </TouchableNativeFeedback>
-            ) : (
+          {NAV_ITEMS.map((item) => {
+            const isActive =
+              pathname === item.route ||
+              (item.route === '/(tabs)/index' && (pathname === '/' || pathname === '/(tabs)'));
+
+            return (
               <TouchableOpacity
-                key={item.route}
+                key={item.num}
                 style={styles.navItem}
                 onPress={() => navigate(item.route)}
-                activeOpacity={0.7}
+                activeOpacity={0.6}
               >
-                <Text style={styles.navKicker}>{item.kicker}</Text>
-                <Text style={styles.navLabel}>{item.label}</Text>
-                <Text style={styles.navArrow}>→</Text>
+                {/* Number column with dot */}
+                <View style={styles.numCol}>
+                  <View style={[styles.activeDot, { opacity: isActive ? 1 : 0 }]} />
+                  <Text style={[styles.navNum, isActive && styles.navNumActive]}>{item.num}</Text>
+                </View>
+
+                {/* Label + sub */}
+                <View style={styles.navTexts}>
+                  <Text style={[styles.navLabel, isActive && styles.navLabelActive]} numberOfLines={1}>
+                    {item.label}
+                  </Text>
+                  <Text style={styles.navSub}>{item.sub}</Text>
+                </View>
               </TouchableOpacity>
-            )
-          ))}
+            );
+          })}
         </View>
 
-        <View style={styles.divider} />
+        {/* ── Spacer ── */}
+        <View style={{ flex: 1 }} />
 
-        {/* Footer actions */}
-        <View style={styles.footer}>
-          {isAuthenticated ? (
-            Platform.OS === 'android' ? (
-              <View style={[styles.logoutBtn, { overflow: 'hidden', paddingVertical: 0 }]}>
-                <TouchableNativeFeedback
-                  onPress={handleLogout}
-                  background={TouchableNativeFeedback.Ripple('rgba(255,255,255,0.2)', false)}
-                >
-                  <View style={{ paddingVertical: 13, alignItems: 'center' }}>
-                    <Text style={styles.logoutText}>Se déconnecter</Text>
-                  </View>
-                </TouchableNativeFeedback>
+        {/* ── Bottom badge ── */}
+        {isAuthenticated ? (
+          <TouchableOpacity
+            style={styles.accountBadge}
+            onPress={() => navigate('/(tabs)/profile')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.accountLeft}>
+              <Text style={styles.accountKicker}>MON COMPTE</Text>
+              <View style={styles.accountRow}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarInitial}>{initial}</Text>
+                </View>
+                <Text style={styles.accountName} numberOfLines={1}>{displayName}</Text>
               </View>
-            ) : (
-              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.75}>
-                <Text style={styles.logoutText}>Se déconnecter</Text>
-              </TouchableOpacity>
-            )
-          ) : (
-            Platform.OS === 'android' ? (
-              <View style={[styles.loginBtn, { overflow: 'hidden', paddingVertical: 0 }]}>
-                <TouchableNativeFeedback
-                  onPress={() => navigate('/(auth)/login')}
-                  background={TouchableNativeFeedback.Ripple('rgba(201,168,76,0.25)', false)}
-                >
-                  <View style={{ paddingVertical: 13, alignItems: 'center' }}>
-                    <Text style={styles.loginText}>Se connecter</Text>
-                  </View>
-                </TouchableNativeFeedback>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.loginBtn} onPress={() => navigate('/(auth)/login')} activeOpacity={0.75}>
-                <Text style={styles.loginText}>Se connecter</Text>
-              </TouchableOpacity>
-            )
-          )}
-          <Text style={styles.footerAddress}>Rue Auguste Van Zande 78 · Bruxelles</Text>
-        </View>
+            </View>
+            <Text style={styles.accountArrow}>→</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.loginBadge}
+            onPress={() => navigate('/(auth)/login')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.loginBadgeText}>Se connecter  →</Text>
+          </TouchableOpacity>
+        )}
+
       </Animated.View>
     </Modal>
   );
@@ -221,97 +167,159 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
   },
+
   panel: {
     position: 'absolute',
     top: 0,
     right: 0,
     width: MENU_W,
     height: SCREEN_H,
-    backgroundColor: '#111009',
+    backgroundColor: '#0D0C0A',
     borderLeftWidth: 1,
-    borderLeftColor: 'rgba(201,168,76,0.14)',
-    paddingTop: Platform.OS === 'ios' ? 56 : (StatusBar.currentHeight ?? 0) + 8,
-    paddingBottom: 40,
+    borderLeftColor: 'rgba(200,169,126,0.12)',
+    paddingTop: Platform.OS === 'ios' ? 58 : (StatusBar.currentHeight ?? 0) + 12,
+    paddingBottom: Platform.OS === 'ios' ? 44 : 28,
     paddingHorizontal: 28,
   },
-  panelHeader: {
+
+  // Header
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 18,
+    marginBottom: 30,
   },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoMark: { fontFamily: Fonts.bold, fontSize: 20, color: '#C9A84C', letterSpacing: 1 },
-  logoBrand: { fontFamily: Fonts.semiBold, fontSize: 18, color: '#fff' },
+  logoMark: { fontFamily: Fonts.bold, fontSize: 20, color: GOLD, letterSpacing: 1 },
+  logoText: { fontFamily: Fonts.semiBold, fontSize: 18, color: '#fff' },
   closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeBtnText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 16 },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    marginVertical: 18,
+  closeBtnText: { color: 'rgba(255,255,255,0.65)', fontSize: 14, lineHeight: 16 },
+
+  // MENU label
+  menuLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 4.5,
+    color: GOLD,
+    marginBottom: 24,
   },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginBottom: 4,
-  },
-  userInfo: { flex: 1 },
-  userName: { fontFamily: Fonts.semiBold, fontSize: 20, color: '#fff' },
-  userEmail: { fontSize: 12.5, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
-  avatarBase: { alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
-  avatarInitial: { fontFamily: Fonts.semiBold, fontWeight: '600' },
-  navList: { gap: 4 },
+
+  // Nav list
+  navList: {},
   navItem: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    gap: 12,
+    alignItems: 'flex-start',
+    paddingVertical: 17,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+    gap: 14,
   },
-  navKicker: {
-    fontSize: 10,
-    color: '#C9A84C',
+
+  // Number column: dot stacked above number
+  numCol: {
+    width: 26,
+    alignItems: 'center',
+    paddingTop: 4,
+    gap: 5,
+  },
+  activeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: GOLD,
+  },
+  navNum: {
+    fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 1,
-    width: 22,
+    letterSpacing: 0.5,
+    color: 'rgba(255,255,255,0.28)',
   },
+  navNumActive: { color: GOLD },
+
+  // Label + sub
+  navTexts: { flex: 1 },
   navLabel: {
-    flex: 1,
     fontFamily: Fonts.semiBold,
-    fontSize: 22,
+    fontSize: 23,
     color: '#fff',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
+    lineHeight: 27,
   },
-  navArrow: { fontSize: 16, color: 'rgba(201,168,76,0.5)' },
-  footer: { flex: 1, justifyContent: 'flex-end', gap: 16 },
-  logoutBtn: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 100,
-    paddingVertical: 13,
+  navLabelActive: { color: GOLD },
+  navSub: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.32)',
+    marginTop: 3,
+  },
+
+  // Account badge
+  accountBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  logoutText: { fontFamily: Fonts.semiBold, fontSize: 15, color: 'rgba(255,255,255,0.6)' },
-  loginBtn: {
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(200,169,126,0.07)',
     borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.5)',
-    borderRadius: 100,
-    paddingVertical: 13,
-    alignItems: 'center',
-    backgroundColor: 'rgba(201,168,76,0.08)',
+    borderColor: 'rgba(200,169,126,0.22)',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
-  loginText: { fontFamily: Fonts.semiBold, fontSize: 15, color: '#C9A84C' },
-  footerAddress: { fontSize: 11, color: 'rgba(255,255,255,0.25)', textAlign: 'center', letterSpacing: 0.5 },
+  accountLeft: { gap: 9, flex: 1 },
+  accountKicker: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 2.5,
+    color: GOLD,
+  },
+  accountRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(200,169,126,0.14)',
+    borderWidth: 1.5,
+    borderColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 14,
+    fontWeight: '600',
+    color: GOLD,
+  },
+  accountName: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 15,
+    color: '#fff',
+    flex: 1,
+  },
+  accountArrow: { fontSize: 18, color: GOLD, marginLeft: 8 },
+
+  // Login badge
+  loginBadge: {
+    borderWidth: 1,
+    borderColor: 'rgba(200,169,126,0.35)',
+    borderRadius: 100,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    backgroundColor: 'rgba(200,169,126,0.06)',
+  },
+  loginBadgeText: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 15,
+    color: GOLD,
+    letterSpacing: 0.3,
+  },
 });

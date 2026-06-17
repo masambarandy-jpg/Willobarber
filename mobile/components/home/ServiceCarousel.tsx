@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
+  Image,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -26,26 +27,47 @@ const PADDING_H = 22;
 const PEEK = 20;
 const GAP = 12;
 const SLIDE_W = SCREEN_W - PADDING_H * 2 - PEEK;
-const IMAGE_H = 205;
+const PHOTO_H = 200;
 const SLIDE_DURATION = 10000;
 const SWIPE_THRESHOLD = SLIDE_W * 0.25;
 
-const GRADIENTS: readonly [string, string][] = [
-  ['#2A1A08', '#1A1008'],
-  ['#10080E', '#1A1028'],
-  ['#221808', '#1A1208'],
-  ['#0E0E0E', '#181818'],
-  ['#061410', '#0D2018'],
-  ['#080C16', '#101422'],
-];
-
 export const SERVICES = [
-  { id: 'signature', apiId: 1, cat: 'COUPE HOMME', name: 'Signature WilloBarber',         short: 'Diagnostic, shampooing, coupe ciseaux & finition rasoir.',        dur: '45 min', price: 45, popular: true  },
-  { id: 'barbe',     apiId: 2, cat: 'BARBE',       name: "Taille & rasage à l'ancienne",  short: 'Serviette chaude, huile pré-rasage, rasoir droit.',              dur: '30 min', price: 28, popular: false },
-  { id: 'rituel',    apiId: 3, cat: 'PACKAGE',     name: 'Le Rituel',                     short: 'Coupe signature + barbe + soin du visage.',                     dur: '1h15',   price: 75, popular: true  },
-  { id: 'express',   apiId: 4, cat: 'COUPE HOMME', name: 'Coupe express',                 short: 'Pour les habitués pressés. Le savoir-faire, version concentrée.', dur: '25 min', price: 28, popular: false },
-  { id: 'camouflage',apiId: 5, cat: 'COLORATION',  name: 'Camouflage gris',               short: 'Pigmentation sur-mesure, sans ammoniaque.',                     dur: '40 min', price: 35, popular: false },
-  { id: 'soin',      apiId: 6, cat: 'SOIN',        name: 'Soin du visage',                short: "Gommage, masque à l'argile, modelage.",                         dur: '30 min', price: 32, popular: false },
+  {
+    id: 'signature', apiId: 1, cat: 'COUPE HOMME', name: 'Signature WilloBarber',
+    short: 'Diagnostic, shampooing, coupe ciseaux & finition rasoir.',
+    dur: '45 min', price: 45, popular: true,
+    photo: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800&q=80',
+  },
+  {
+    id: 'barbe', apiId: 2, cat: 'BARBE', name: "Taille & rasage à l'ancienne",
+    short: 'Serviette chaude, huile pré-rasage, rasoir droit.',
+    dur: '30 min', price: 28, popular: false,
+    photo: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800&q=80',
+  },
+  {
+    id: 'rituel', apiId: 3, cat: 'PACKAGE', name: 'Le Rituel',
+    short: 'Coupe signature + barbe + soin du visage.',
+    dur: '1h15', price: 75, popular: true,
+    photo: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80',
+  },
+  {
+    id: 'express', apiId: 4, cat: 'COUPE HOMME', name: 'Coupe express',
+    short: 'Pour les habitués pressés. Le savoir-faire, version concentrée.',
+    dur: '25 min', price: 28, popular: false,
+    photo: 'https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=800&q=80',
+  },
+  {
+    id: 'camouflage', apiId: 5, cat: 'COLORATION', name: 'Camouflage gris',
+    short: 'Pigmentation sur-mesure, sans ammoniaque.',
+    dur: '40 min', price: 35, popular: false,
+    photo: 'https://images.unsplash.com/photo-1518710843675-2540dd79065c?w=800&q=80',
+  },
+  {
+    id: 'soin', apiId: 6, cat: 'SOIN', name: 'Soin du visage',
+    short: "Gommage, masque à l'argile, modelage.",
+    dur: '30 min', price: 32, popular: false,
+    photo: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=800&q=80',
+  },
 ] as const;
 
 export type ServiceId = (typeof SERVICES)[number]['id'];
@@ -179,43 +201,42 @@ export function ServiceCarousel() {
     <View style={styles.wrapper}>
       <View style={styles.viewport} {...panResponder.panHandlers}>
         <Animated.View style={[styles.slidesRow, slidesStyle]}>
-          {SERVICES.map((svc, idx) => (
+          {SERVICES.map((svc) => (
             <View key={svc.id} style={styles.slide}>
 
-              {/* ── Gradient image area — sombre en haut → crème en bas ── */}
-              <View style={styles.imagePlaceholder}>
+              {/* ── Photo zone ── */}
+              <View style={styles.photoZone}>
+                <Image
+                  source={{ uri: svc.photo }}
+                  style={styles.photo}
+                  resizeMode="cover"
+                />
                 <LinearGradient
-                  colors={[GRADIENTS[idx][0], GRADIENTS[idx][1], '#F5F0E8']}
-                  locations={[0, 0.42, 1]}
+                  colors={['transparent', 'rgba(26,20,8,0.85)']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 0, y: 1 }}
-                  style={StyleSheet.absoluteFill}
+                  style={styles.photoGradient}
                 />
-                <View style={styles.imageBottom}>
-                  <View style={styles.badgesRow}>
-                    <View style={styles.badgeCat}>
-                      <Text style={styles.badgeCatText}>{svc.cat}</Text>
+                <View style={styles.badgesRow}>
+                  <View style={styles.badgeCat}>
+                    <Text style={styles.badgeCatText}>{svc.cat}</Text>
+                  </View>
+                  {svc.popular && (
+                    <View style={styles.badgePopular}>
+                      <Text style={styles.badgePopularText}>POPULAIRE</Text>
                     </View>
-                    {svc.popular && (
-                      <View style={styles.badgePopular}>
-                        <Text style={styles.badgePopularText}>POPULAIRE</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.imageNameWrap}>
-                    <View style={styles.imageGoldLine} />
-                    <Text style={styles.imageName} numberOfLines={2}>{svc.name}</Text>
-                  </View>
+                  )}
                 </View>
               </View>
 
-              {/* ── Cream content area ── */}
+              {/* ── Text zone ── */}
               <View style={styles.cardContent}>
-                <Text style={styles.serviceDesc}>{svc.short}</Text>
-                <View style={styles.goldSep} />
+                <Text style={styles.serviceName} numberOfLines={2}>{svc.name}</Text>
+                <Text style={styles.serviceDesc} numberOfLines={2}>{svc.short}</Text>
+                <View style={styles.sep} />
                 <View style={styles.metaRow}>
                   <View style={styles.durationRow}>
-                    <Feather name="clock" size={14} color="#6B6560" />
+                    <Feather name="clock" size={13} color="#6B6560" />
                     <Text style={styles.duration}>{svc.dur}</Text>
                   </View>
                   <Text style={styles.price}>{svc.price} €</Text>
@@ -246,7 +267,7 @@ export function ServiceCarousel() {
                     )
                   )}
                   <TouchableOpacity onPress={handlePausePlay} hitSlop={12} style={styles.pauseBtn}>
-                    <Text style={{ fontSize: 12, color: '#9B9490', fontWeight: '600', letterSpacing: 3, lineHeight: 16 }}>
+                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '600', letterSpacing: 3, lineHeight: 16 }}>
                       {isPaused ? '▶' : '‖'}
                     </Text>
                   </TouchableOpacity>
@@ -273,96 +294,96 @@ const styles = StyleSheet.create({
   },
   slide: {
     width: SLIDE_W,
-    backgroundColor: '#F5F0E8',
-    borderRadius: 20,
+    backgroundColor: '#1A1814',
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 5,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
 
-  // Image area
-  imagePlaceholder: {
-    height: IMAGE_H,
-    justifyContent: 'flex-end',
+  // Photo zone
+  photoZone: {
+    height: PHOTO_H,
+    position: 'relative',
   },
-  imageBottom: {
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+  photo: {
+    width: '100%',
+    height: PHOTO_H,
+  },
+  photoGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
   },
   badgesRow: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 9,
+    gap: 6,
   },
   badgeCat: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   badgeCatText: {
     fontFamily: Fonts.semiBold,
     color: '#fff',
     fontSize: 10,
-    letterSpacing: 1.5,
+    fontWeight: '600',
+    letterSpacing: 1.2,
   },
   badgePopular: {
-    backgroundColor: '#0D0A04',
-    borderWidth: 1,
-    borderColor: '#C9A84C',
+    backgroundColor: '#1A1A1A',
     borderRadius: 100,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
   },
   badgePopularText: {
     fontFamily: Fonts.semiBold,
-    color: '#C9A84C',
-    fontSize: 9.5,
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
     letterSpacing: 1.2,
   },
-  imageNameWrap: {},
-  imageGoldLine: {
-    width: 32,
-    height: 1.5,
-    backgroundColor: '#C9A84C',
-    marginBottom: 8,
-  },
-  imageName: {
-    fontFamily: Fonts.bold,
-    fontSize: 28,
-    color: '#1A1208',
-    lineHeight: 32,
-    letterSpacing: 0.2,
-  },
 
-  // Content area
+  // Text zone
   cardContent: {
-    backgroundColor: '#F5F0E8',
-    paddingHorizontal: 18,
+    backgroundColor: '#1A1814',
+    paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: 18,
+    paddingBottom: 16,
+  },
+  serviceName: {
+    fontFamily: Fonts.bold,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
   serviceDesc: {
-    fontFamily: Fonts.regular,
-    fontSize: 15,
+    fontSize: 13,
     color: '#6B6560',
-    lineHeight: 21,
-    marginBottom: 13,
+    lineHeight: 18,
+    marginBottom: 12,
   },
-  goldSep: {
+  sep: {
     height: 1,
-    backgroundColor: '#C9A84C',
-    opacity: 0.4,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     marginBottom: 11,
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 13,
+    marginBottom: 12,
   },
   durationRow: {
     flexDirection: 'row',
@@ -370,14 +391,14 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   duration: {
-    fontFamily: Fonts.semiBold,
     fontSize: 13,
-    color: '#8B6914',
+    color: '#6B6560',
   },
   price: {
-    fontFamily: Fonts.semiBold,
-    fontSize: 23,
-    color: '#8B6914',
+    fontFamily: Fonts.bold,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#C9A84C',
   },
   selectBtn: {
     backgroundColor: '#C9A84C',
@@ -385,17 +406,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     marginBottom: 14,
-    shadowColor: '#C9A84C',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 4,
   },
   selectBtnText: {
-    fontFamily: Fonts.bold,
-    color: '#1A1208',
-    fontSize: 14.5,
-    letterSpacing: 0.3,
+    fontFamily: Fonts.semiBold,
+    color: '#1a1208',
+    fontSize: 15,
+    fontWeight: '600',
   },
 
   // Player row
@@ -409,13 +425,13 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#D4CFC9',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   progressPill: {
     width: 54,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#D4CFC9',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     overflow: 'hidden',
   },
   progressFill: {
