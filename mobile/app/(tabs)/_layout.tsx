@@ -1,112 +1,101 @@
 import { Tabs } from 'expo-router';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// Icon paths for each tab — using SVG path strings rendered as Text approximations
-// since no vector-icons package is installed
-const TAB_ICONS: Record<string, { active: string; inactive: string }> = {
-  home:         { active: '⌂', inactive: '⌂' },
-  book:         { active: '✂', inactive: '✂' },
-  reservations: { active: '☰', inactive: '☰' },
-  profile:      { active: '◯', inactive: '◯' },
-};
-
-// Emoji alternatives that look better in practice
-const TAB_EMOJI: Record<string, string> = {
-  home: '🏠',
-  book: '✂️',
-  reservations: '📋',
-  profile: '👤',
-};
-
-const GOLD = '#C9A84C';
-const INACTIVE = 'rgba(255,255,255,0.38)';
-
-function TabIcon({ id, label, focused }: { id: string; label: string; focused: boolean }) {
-  return (
-    <View style={tabStyles.item}>
-      <Text style={[tabStyles.emoji, { opacity: focused ? 1 : 0.45 }]}>{TAB_EMOJI[id]}</Text>
-      <Text style={[tabStyles.label, focused ? tabStyles.labelActive : tabStyles.labelInactive]}>
-        {label}
-      </Text>
-      {focused && <View style={tabStyles.activeDot} />}
-    </View>
-  );
-}
+const GOLD     = '#C9A84C';
+const INACTIVE = '#9A9490';
+const ICON_SIZE = 24;
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: tabStyles.bar,
-        tabBarShowLabel: false,
+        tabBarStyle: styles.bar,
+        tabBarShowLabel: true,
         tabBarActiveTintColor: GOLD,
         tabBarInactiveTintColor: INACTIVE,
+        tabBarLabelStyle: styles.label,
+        tabBarIconStyle: styles.icon,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon id="home" label="Accueil" focused={focused} />,
+          title: 'Accueil',
+          tabBarIcon: ({ color }) => (
+            <Feather name="home" size={ICON_SIZE} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="catalogue"
+        options={{
+          title: 'Services',
+          tabBarIcon: ({ color }) => (
+            <Feather name="scissors" size={ICON_SIZE} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="book"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon id="book" label="Réserver" focused={focused} />,
+          title: 'Réserver',
+          tabBarIcon: ({ color }) => (
+            <MaterialCommunityIcons
+              name="calendar-plus-outline"
+              size={ICON_SIZE}
+              color={color}
+            />
+          ),
         }}
       />
       <Tabs.Screen
         name="reservations"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon id="reservations" label="Mon espace" focused={focused} />,
+          title: 'Mon espace',
+          tabBarIcon: ({ color }) => (
+            <MaterialCommunityIcons
+              name="view-grid-outline"
+              size={ICON_SIZE}
+              color={color}
+            />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon id="profile" label="Profil" focused={focused} />,
+          title: 'Profil',
+          tabBarIcon: ({ color }) => (
+            <Feather name="user" size={ICON_SIZE} color={color} />
+          ),
         }}
       />
     </Tabs>
   );
 }
 
-const tabStyles = StyleSheet.create({
+const styles = StyleSheet.create({
   bar: {
-    backgroundColor: '#0a0907',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.07)',
-    height: Platform.OS === 'ios' ? 82 : 70,
-    paddingBottom: Platform.OS === 'ios' ? 16 : 6,
-    paddingTop: 6,
+    backgroundColor: '#0D0C0A',
+    borderTopWidth: 0,
+    height: 90,
+    paddingBottom: 16,
+    paddingTop: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
   },
-  item: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    paddingTop: 2,
-  },
-  emoji: {
-    fontSize: 21,
+  icon: {
+    marginBottom: 4,
   },
   label: {
-    fontSize: 9.5,
-    letterSpacing: 0.2,
+    fontSize: 12,
     fontWeight: '500',
-  },
-  labelActive: {
-    color: GOLD,
-    fontWeight: '600',
-  },
-  labelInactive: {
-    color: INACTIVE,
-  },
-  activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: GOLD,
-    marginTop: 1,
+    marginTop: 2,
   },
 });
