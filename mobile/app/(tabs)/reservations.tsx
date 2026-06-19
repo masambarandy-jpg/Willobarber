@@ -17,7 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Redirect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useReservations } from '@/hooks/useReservations';
 import type { Reservation } from '@/types';
@@ -37,9 +37,21 @@ const TRANSACTIONS = [
 ];
 
 const TIERS = [
-  { label: 'BRONZE', min: 0,   threshold: '0 pts',   color: '#8B6914' },
-  { label: 'ARGENT', min: 200, threshold: '200 pts',  color: '#6B6560' },
-  { label: 'OR',     min: 500, threshold: '500 pts',  color: '#C9A84C' },
+  { label: 'BRONZE', min: 0,   threshold: '0 pts',  color: '#8B6914' },
+  { label: 'ARGENT', min: 200, threshold: '200 pts', color: '#6B6560' },
+  { label: 'OR',     min: 500, threshold: '500 pts', color: '#C9A84C' },
+];
+
+const HISTORIQUE = [
+  { jour: '12', mois: 'AVR',  service: 'Signature WilloBarber', barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '45€', annee: '2026' },
+  { jour: '02', mois: 'MARS', service: 'Taille & rasage',        barbier: 'M', barbierNom: 'Malik', couleur: '#7A3B1E', prix: '28€', annee: '2026' },
+  { jour: '18', mois: 'JANV', service: 'Le Rituel',              barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '75€', annee: '2026' },
+  { jour: '05', mois: 'DÉC',  service: 'Coupe express',          barbier: 'I', barbierNom: 'Idris', couleur: '#1A6B4A', prix: '28€', annee: '2025' },
+];
+
+const FAVORIS = [
+  { nom: 'Signature WilloBarber', dur: '45 min', prix: '45€', count: '8×', date: '12 avr.' },
+  { nom: 'Taille & rasage',        dur: '30 min', prix: '28€', count: '5×', date: '2 mars'  },
 ];
 
 function getNextTarget(pts: number): number {
@@ -55,46 +67,11 @@ function getBarProgress(pts: number): number {
   return (pts - prev) / 500;
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  pending:          'En attente',
-  confirmed:        'Confirmé',
-  completed:        'Terminé',
-  cancelled_client: 'Annulé',
-  cancelled_barber: 'Annulé',
-  no_show:          'Absent',
-};
-
-const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
-  pending:          { bg: '#f6ecd0', text: '#8B6914' },
-  confirmed:        { bg: '#D4EDDA', text: '#2D6A4F' },
-  completed:        { bg: '#D4EDDA', text: '#2D6A4F' },
-  cancelled_client: { bg: '#FDECEA', text: '#C0392B' },
-  cancelled_barber: { bg: '#FDECEA', text: '#C0392B' },
-  no_show:          { bg: '#FDECEA', text: '#C0392B' },
-};
-
 function GoldItalic({ children }: { children: React.ReactNode }) {
   return (
     <Text style={{ color: '#C9A84C', fontStyle: 'italic', fontFamily: Fonts.italic, fontWeight: '500' }}>
       {children}
     </Text>
-  );
-}
-
-function Avatar({ initial, size = 44 }: { initial: string; size?: number }) {
-  return (
-    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Text style={[styles.avatarText, { fontSize: size * 0.38 }]}>{initial}</Text>
-    </View>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const c = STATUS_COLOR[status] ?? { bg: '#f0f0f0', text: '#666' };
-  return (
-    <View style={[styles.badge, { backgroundColor: c.bg }]}>
-      <Text style={[styles.badgeText, { color: c.text }]}>{STATUS_LABEL[status] ?? status}</Text>
-    </View>
   );
 }
 
@@ -141,11 +118,23 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
 export default function ReservationsScreen() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
-  const { upcoming, past, isLoading, refetch, cancel } = useReservations();
+  const { isLoading, refetch, cancel } = useReservations();
   const [histFilter, setHistFilter] = useState('Tous');
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [ready, setReady] = useState(false);
   const barAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setReady(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (ready && !isAuthenticated) {
+      router.replace('/(auth)/login');
+    }
+  }, [ready, isAuthenticated]);
 
   useEffect(() => {
     Animated.timing(barAnim, {
@@ -155,13 +144,16 @@ export default function ReservationsScreen() {
     }).start();
   }, []);
 
-  if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
+  if (!ready) return null;
+  if (!isAuthenticated) return null;
 
-  const firstName = user?.first_name || user?.username || '';
+  const username = user?.username || user?.first_name || 'Client';
+  const nextTarget  = getNextTarget(MOCK_LOYALTY.points);
+  const ptsRestants = nextTarget - MOCK_LOYALTY.points;
 
-  const filteredPast = histFilter === 'Tous'
-    ? past
-    : past.filter(r => r.date?.startsWith(histFilter));
+  const filteredHist = histFilter === 'Tous'
+    ? HISTORIQUE
+    : HISTORIQUE.filter(h => h.annee === histFilter);
 
   const handleCancel = async (reason: string) => {
     if (!cancelTarget) return;
@@ -176,19 +168,18 @@ export default function ReservationsScreen() {
     }
   };
 
-  const nextTarget  = getNextTarget(MOCK_LOYALTY.points);
-  const ptsRestants = nextTarget - MOCK_LOYALTY.points;
-
   return (
     <View style={styles.root}>
-      {/* ── Header ──────────────────────────────────────────────────── */}
+      {/* Sticky top bar */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.headerLogo}>{'{w}'}</Text>
           <Text style={styles.headerBrand}>willobarber</Text>
         </View>
-        <View style={styles.headerRight}>
-          <Avatar initial={(firstName[0] ?? 'U').toUpperCase()} size={32} />
+        <View style={[styles.avatar, { width: 32, height: 32, borderRadius: 16 }]}>
+          <Text style={[styles.avatarText, { fontSize: 12 }]}>
+            {(username[0] ?? 'U').toUpperCase()}
+          </Text>
         </View>
       </View>
 
@@ -198,119 +189,190 @@ export default function ReservationsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#C9A84C" />}
       >
-        {/* Greeting */}
-        <Text style={styles.kicker}>— BONJOUR {firstName.toUpperCase()}</Text>
+
+        {/* ── 1. HEADER ─────────────────────────────────────────────── */}
+        <Text style={styles.kicker}>— BONJOUR {username.toUpperCase()}</Text>
         <Text style={styles.pageTitle}>
           Votre espace, <GoldItalic>au poil.</GoldItalic>
         </Text>
+        <TouchableOpacity style={styles.newRdvBtn} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
+          <Text style={styles.newRdvBtnText}>📅  Nouveau rendez-vous →</Text>
+        </TouchableOpacity>
 
-        {/* Bouton nouveau RDV */}
-        {Platform.OS === 'android' ? (
-          <View style={[styles.newRdvBtn, { overflow: 'hidden', paddingVertical: 0 }]}>
-            <TouchableNativeFeedback
-              onPress={() => router.push('/(tabs)/book')}
-              background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}
-            >
-              <View style={{ paddingVertical: 15, alignItems: 'center' }}>
-                <Text style={styles.newRdvBtnText}>Nouveau rendez-vous →</Text>
-              </View>
-            </TouchableNativeFeedback>
+        {/* ── 2. GRILLE STATS ───────────────────────────────────────── */}
+        <View style={styles.statsGrid}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNum}>12</Text>
+            <Text style={styles.statLabel}>VISITES</Text>
           </View>
-        ) : (
-          <TouchableOpacity style={styles.newRdvBtn} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-            <Text style={styles.newRdvBtnText}>Nouveau rendez-vous →</Text>
-          </TouchableOpacity>
-        )}
+          <View style={styles.statCard}>
+            <Text style={styles.statNum}>28</Text>
+            <Text style={styles.statNumSub}>jours</Text>
+            <Text style={styles.statLabel}>DERNIÈRE VISITE</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={[styles.statNum, { color: '#C9A84C' }]}>{MOCK_LOYALTY.points}</Text>
+            <Text style={styles.statNumSub}>/ 1000</Text>
+            <Text style={styles.statLabel}>POINTS FIDÉLITÉ</Text>
+          </View>
+        </View>
 
-        {/* ── 1. PROCHAINS RENDEZ-VOUS ────────────────────────────── */}
-        <Text style={styles.sectionKicker}>PROCHAINS RENDEZ-VOUS</Text>
+        {/* ── 3. PROCHAIN RENDEZ-VOUS ───────────────────────────────── */}
+        <View style={styles.nextRdvBadgeWrap}>
+          <View style={styles.nextRdvBadge}>
+            <Text style={styles.nextRdvBadgeText}>PROCHAIN RENDEZ-VOUS · DANS 4 JOURS</Text>
+          </View>
+        </View>
 
-        {upcoming.length > 0 && (() => {
-          const next = upcoming[0];
-          const daysUntil = next.date ? Math.ceil((new Date(next.date).getTime() - Date.now()) / 86400000) : 0;
-          const d = next.date ? new Date(next.date) : null;
-          const dayNum     = d?.getDate() ?? '—';
-          const monthStr   = d?.toLocaleDateString('fr-BE', { month: 'short' }).toUpperCase() ?? '';
-          const weekdayStr = d?.toLocaleDateString('fr-BE', { weekday: 'short' }).toUpperCase() ?? '';
-          return (
-            <View style={styles.nextRdvCard}>
-              <View style={styles.nextRdvAccent} />
-              <View style={styles.nextRdvContent}>
-                <View style={styles.badgeRow}>
-                  <View style={[styles.badge, { backgroundColor: '#D4EDDA' }]}>
-                    <Text style={[styles.badgeText, { color: '#2D6A4F' }]}>PROCHAIN RDV · DANS {daysUntil} JOURS</Text>
-                  </View>
-                </View>
-                <View style={styles.nextRdvMain}>
-                  <View style={styles.dateBox}>
-                    <Text style={styles.dateNum}>{dayNum}</Text>
-                    <Text style={styles.dateMon}>{monthStr}</Text>
-                    <Text style={styles.dateWeekday}>{weekdayStr}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.nextRdvService}>{next.service_name ?? 'Prestation'}</Text>
-                    <View style={styles.nextRdvInfo}>
-                      <Text style={styles.nextRdvInfoKey}>Heure</Text>
-                      <Text style={styles.nextRdvInfoVal}>{next.start_time ?? '—'}</Text>
-                    </View>
-                    <View style={styles.nextRdvInfo}>
-                      <Text style={styles.nextRdvInfoKey}>Barbier</Text>
-                      <Text style={styles.nextRdvInfoVal}>{next.barber_name ?? '—'}</Text>
-                    </View>
-                    <View style={styles.nextRdvInfo}>
-                      <Text style={styles.nextRdvInfoKey}>Adresse</Text>
-                      <Text style={styles.nextRdvInfoVal}>Rue Auguste Van Zande 78</Text>
-                    </View>
-                  </View>
-                </View>
-                {!!next.deposit_amount && (
-                  <View style={styles.soldeRow}>
-                    <Text style={styles.soldeText}>
-                      Solde {(parseFloat(next.total_amount || '0') - parseFloat(next.deposit_amount || '0')).toFixed(2)}€ au salon
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.nextRdvBtns}>
-                  <TouchableOpacity style={styles.btnDangerSm} onPress={() => setCancelTarget(next)}>
-                    <Text style={styles.btnDangerSmText}>Annuler</Text>
-                  </TouchableOpacity>
-                </View>
+        <View style={styles.mockRdvCard}>
+          <View style={styles.mockRdvInner}>
+            <View style={styles.mockDateBox}>
+              <Text style={styles.mockDateNum}>23</Text>
+              <Text style={styles.mockDateMon}>MAI</Text>
+              <Text style={styles.mockDateDay}>SAM.</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.mockRdvService}>
+                Coupe + <GoldItalic>Barbe</GoldItalic>
+              </Text>
+              <View style={styles.mockRdvInfoRow}>
+                <Text style={styles.mockRdvKey}>Heure</Text>
+                <Text style={styles.mockRdvVal}>10:30</Text>
+              </View>
+              <View style={styles.mockRdvInfoRow}>
+                <Text style={styles.mockRdvKey}>Barbier</Text>
+                <Text style={styles.mockRdvVal}>Willo</Text>
+              </View>
+              <View style={styles.mockRdvInfoRow}>
+                <Text style={styles.mockRdvKey}>Adresse</Text>
+                <Text style={styles.mockRdvVal}>Rue Auguste Van Zande 78</Text>
               </View>
             </View>
-          );
-        })()}
-
-        {upcoming.length === 0 && !isLoading && (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Aucun rendez-vous à venir</Text>
-            <Text style={styles.emptySub}>Prenez rendez-vous en quelques clics.</Text>
-            {Platform.OS === 'android' ? (
-              <View style={[styles.btnPrimary, { marginTop: 16, alignSelf: 'stretch', overflow: 'hidden', paddingVertical: 0 }]}>
-                <TouchableNativeFeedback
-                  onPress={() => router.push('/(tabs)/book')}
-                  background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}
-                >
-                  <View style={{ paddingVertical: 15, alignItems: 'center' }}>
-                    <Text style={styles.btnPrimaryText}>Réserver maintenant →</Text>
-                  </View>
-                </TouchableNativeFeedback>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={[styles.btnPrimary, { marginTop: 16, alignSelf: 'stretch' }]}
-                onPress={() => router.push('/(tabs)/book')}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.btnPrimaryText}>Réserver maintenant →</Text>
-              </TouchableOpacity>
-            )}
           </View>
-        )}
 
-        {/* ── 2. PROGRAMME FIDÉLITÉ ───────────────────────────────── */}
-        <Text style={[styles.sectionKicker, { marginTop: 24 }]}>PROGRAMME FIDÉLITÉ</Text>
+          <View style={styles.soldePill}>
+            <Text style={styles.soldeText}>Solde 42,70€ au salon</Text>
+          </View>
+
+          <TouchableOpacity style={styles.btnPrimary} activeOpacity={0.85}>
+            <Text style={styles.btnPrimaryText}>📅  Ajouter au calendrier</Text>
+          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+            <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]} activeOpacity={0.85}>
+              <Text style={styles.btnOutlineText}>↺ Reprogrammer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnDangerSm} activeOpacity={0.85}>
+              <Text style={styles.btnDangerSmText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── 4. REPRENEZ LÀ OÙ VOUS EN ÉTIEZ ────────────────────── */}
+        <Text style={styles.sectionTitle}>Reprenez là où vous en étiez</Text>
+
+        <View style={styles.resumeCard}>
+          <View style={styles.resumeBadge}>
+            <Text style={styles.resumeBadgeText}>VOTRE COUPE HABITUELLE · 8 FOIS</Text>
+          </View>
+          <View style={styles.resumeRow}>
+            <View style={styles.scissorsBox}>
+              <Text style={{ fontSize: 22 }}>✂️</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.resumeServiceName}>Signature WilloBarber</Text>
+              <Text style={styles.resumeServiceMeta}>45 min · avec Willo · 45€</Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity
+              style={[styles.btnPrimary, { flex: 1 }]}
+              onPress={() => router.push('/(tabs)/book')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.btnPrimaryText}>Reprendre la même coupe</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.btnOutline, { paddingHorizontal: 18 }]} activeOpacity={0.85}>
+              <Text style={styles.btnOutlineText}>✏️ Adapter</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── 5. VOS FAVORIS ────────────────────────────────────────── */}
+        <Text style={styles.sectionTitle}>Vos favoris</Text>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 12, paddingRight: 4, marginBottom: 24 }}
+        >
+          {FAVORIS.map((fav, i) => (
+            <View key={i} style={styles.favCard}>
+              <Text style={styles.favStar}>★</Text>
+              <Text style={styles.favName}>{fav.nom}</Text>
+              <Text style={styles.favMeta}>
+                {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
+              </Text>
+              <View style={styles.favDivider} />
+              <Text style={styles.favCount}>{fav.count} · dernière {fav.date}</Text>
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* ── 6. HISTORIQUE DES RÉSERVATIONS ────────────────────────── */}
+        <Text style={styles.sectionTitle}>Historique</Text>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, marginBottom: 14 }}
+        >
+          {['Tous', '2026', '2025'].map(t => (
+            <Pressable
+              key={t}
+              onPress={() => setHistFilter(t)}
+              style={[styles.filterChip, histFilter === t && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, histFilter === t && styles.filterChipTextActive]}>{t}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        {filteredHist.length === 0
+          ? <Text style={styles.emptyHist}>Aucun historique à afficher.</Text>
+          : filteredHist.map((h, i) => (
+            <View key={i} style={styles.histCard}>
+              <View style={styles.histDateBox}>
+                <Text style={styles.histDateNum}>{h.jour}</Text>
+                <Text style={styles.histDateMon}>{h.mois}</Text>
+              </View>
+              <View style={{ flex: 1, gap: 5 }}>
+                <Text style={styles.histService}>{h.service}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                  <View style={[
+                    styles.avatar,
+                    { width: 28, height: 28, borderRadius: 14, backgroundColor: h.couleur + '33', borderColor: h.couleur },
+                  ]}>
+                    <Text style={[styles.avatarText, { fontSize: 11, color: h.couleur }]}>{h.barbier}</Text>
+                  </View>
+                  <Text style={styles.histMeta}>{h.barbierNom}</Text>
+                  <Text style={{ color: '#C9A84C', fontSize: 13, fontWeight: '600' }}>{h.prix}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(tabs)/book')}>
+                  <Text style={{ color: '#C9A84C', fontSize: 15 }}>↺</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconBtn}>
+                  <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15 }}>↓</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        }
+
+        {/* ── 7. PROGRAMME FIDÉLITÉ ─────────────────────────────────── */}
+        <Text style={[styles.sectionKicker, { marginTop: 28 }]}>PROGRAMME FIDÉLITÉ</Text>
         <View style={styles.loyaltyCard}>
-          {/* Header carte */}
           <View style={styles.loyaltyHeader}>
             <View>
               <Text style={styles.loyaltyBrandLogo}>{'{w}'} willobarber</Text>
@@ -322,7 +384,6 @@ export default function ReservationsScreen() {
             </View>
           </View>
 
-          {/* Barre de progression */}
           <Text style={styles.loyaltyProgressLabel}>Progression vers la coupe gratuite</Text>
           <View style={styles.loyaltyBarBg}>
             <Animated.View
@@ -341,7 +402,6 @@ export default function ReservationsScreen() {
             {ptsRestants} pts avant votre prochaine coupe offerte
           </Text>
 
-          {/* Paliers */}
           <View style={styles.loyaltyTiersRow}>
             {TIERS.map((tier, i) => {
               const reached  = MOCK_LOYALTY.points >= tier.min;
@@ -375,7 +435,6 @@ export default function ReservationsScreen() {
             })}
           </View>
 
-          {/* CTA */}
           {MOCK_LOYALTY.points >= 500 ? (
             <>
               <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85}>
@@ -390,54 +449,7 @@ export default function ReservationsScreen() {
           )}
         </View>
 
-        {/* ── 3. MES RÉSERVATIONS ─────────────────────────────────── */}
-        <Text style={[styles.sectionKicker, { marginTop: 24 }]}>MES RÉSERVATIONS</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, marginBottom: 14 }}
-        >
-          {['Tous', '2026', '2025'].map(t => (
-            <Pressable
-              key={t}
-              onPress={() => setHistFilter(t)}
-              style={[styles.filterChip, histFilter === t && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterChipText, histFilter === t && styles.filterChipTextActive]}>{t}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        {filteredPast.length === 0 && !isLoading
-          ? <Text style={styles.emptyHist}>Aucun historique à afficher.</Text>
-          : filteredPast.map(r => (
-            <View key={r.id} style={styles.histCard}>
-              <View style={styles.histDateBox}>
-                <Text style={styles.histDateNum}>{r.date ? new Date(r.date).getDate() : '—'}</Text>
-                <Text style={styles.histDateMon}>
-                  {r.date ? new Date(r.date).toLocaleDateString('fr-BE', { month: 'short' }).toUpperCase() : ''}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.histService}>{r.service_name ?? 'Prestation'}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 4 }}>
-                  <Avatar initial={r.barber_name?.[0] ?? '?'} size={20} />
-                  <Text style={styles.histMeta}>{r.barber_name ?? '—'} · {r.total_amount ?? '—'}€</Text>
-                </View>
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                <StatusBadge status={r.status} />
-                <TouchableOpacity onPress={() => router.push('/(tabs)/book')} style={styles.repeatBtn}>
-                  <Text style={styles.repeatBtnText}>↻</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
-        }
-
-        {isLoading && <ActivityIndicator color="#C9A84C" style={{ marginTop: 30 }} />}
-
-        {/* ── 4. HISTORIQUE DES POINTS ────────────────────────────── */}
+        {/* ── 8. HISTORIQUE DES POINTS ──────────────────────────────── */}
         <Text style={[styles.sectionKicker, { marginTop: 24 }]}>HISTORIQUE DES POINTS</Text>
         {TRANSACTIONS.map(tx => {
           const isSpend = tx.type === 'spend';
@@ -489,15 +501,13 @@ const styles = StyleSheet.create({
   headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: 9 },
   headerLogo:  { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
   headerBrand: { fontFamily: Fonts.semiBold, fontSize: 19, fontWeight: '600', color: '#fff' },
-  headerRight: {},
 
   scroll:        { flex: 1 },
-  scrollContent: { padding: 22, paddingBottom: 48 },
+  scrollContent: { padding: 22, paddingBottom: 56 },
 
   kicker:    { fontSize: 11, fontWeight: '600', letterSpacing: 2, color: '#C9A84C', textTransform: 'uppercase', marginBottom: 6 },
-  pageTitle: { fontFamily: Fonts.semiBold, fontSize: 32, fontWeight: '600', color: '#fff', lineHeight: 38, marginBottom: 18 },
+  pageTitle: { fontFamily: Fonts.bold, fontSize: 34, fontWeight: '700', color: '#fff', lineHeight: 40, marginBottom: 18 },
 
-  // Section kicker (titres de sections)
   sectionKicker: {
     fontSize: 11,
     fontWeight: '700',
@@ -506,14 +516,22 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 12,
   },
+  sectionTitle: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 14,
+    marginTop: 24,
+  },
 
-  // Bouton nouveau RDV
+  // Bouton principal
   newRdvBtn: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
     paddingVertical: 15,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 28,
     shadowColor: '#C9A84C',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.35,
@@ -522,85 +540,171 @@ const styles = StyleSheet.create({
   },
   newRdvBtnText: { color: '#1A1208', fontWeight: '700', fontSize: 15 },
 
-  // Prochain RDV card
-  nextRdvCard: {
-    backgroundColor: '#1a160e',
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.18)',
-    borderRadius: 18,
+  // ── Stats grid ──────────────────────────────────────────────────────────────
+  statsGrid: {
     flexDirection: 'row',
-    marginBottom: 14,
-    overflow: 'hidden',
+    gap: 10,
+    marginBottom: 24,
   },
-  nextRdvAccent:  { width: 4, backgroundColor: '#C9A84C', flexShrink: 0 },
-  nextRdvContent: { flex: 1, padding: 18 },
-  badgeRow:       { marginBottom: 12 },
-  badge:          { alignSelf: 'flex-start', borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeText:      { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3 },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#1A1814',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  statNum: {
+    fontFamily: Fonts.bold,
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#fff',
+    lineHeight: 40,
+  },
+  statNumSub: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    fontStyle: 'italic',
+    marginTop: 1,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.45)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 5,
+    textAlign: 'center',
+  },
 
-  nextRdvMain:    { flexDirection: 'row', gap: 16, marginBottom: 12, alignItems: 'flex-start' },
-  dateBox:        { borderWidth: 1, borderColor: 'rgba(201,168,76,0.3)', borderRadius: 12, padding: 12, alignItems: 'center', flexShrink: 0 },
-  dateNum:        { fontFamily: Fonts.bold, fontSize: 26, fontWeight: '700', color: '#C9A84C', lineHeight: 30 },
-  dateMon:        { fontSize: 10, letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
-  dateWeekday:    { fontSize: 9, color: 'rgba(255,255,255,0.45)', marginTop: 1 },
+  // ── Prochain RDV badge ──────────────────────────────────────────────────────
+  nextRdvBadgeWrap: { marginBottom: 10 },
+  nextRdvBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#2D6A4F',
+    borderRadius: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  nextRdvBadgeText: { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3, color: '#fff' },
 
-  nextRdvService: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 6, lineHeight: 26 },
-  nextRdvInfo:    { flexDirection: 'row', gap: 8, marginTop: 2 },
-  nextRdvInfoKey: { fontSize: 12, color: 'rgba(255,255,255,0.5)', width: 50 },
-  nextRdvInfoVal: { fontSize: 12, color: 'rgba(255,255,255,0.85)', flex: 1 },
+  // ── Mock RDV card ──────────────────────────────────────────────────────────
+  mockRdvCard: {
+    backgroundColor: '#1A1814',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 8,
+  },
+  mockRdvInner: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 14,
+    alignItems: 'flex-start',
+  },
+  mockDateBox: {
+    backgroundColor: '#2A2520',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  mockDateNum: { fontFamily: Fonts.bold, fontSize: 32, fontWeight: '700', color: '#C9A84C', lineHeight: 34 },
+  mockDateMon: { fontSize: 11, letterSpacing: 1, color: 'rgba(255,255,255,0.55)', marginTop: 3, textTransform: 'uppercase' },
+  mockDateDay: { fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 1 },
 
-  soldeRow: {
+  mockRdvService: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 8, lineHeight: 26 },
+  mockRdvInfoRow: { flexDirection: 'row', gap: 8, marginTop: 3 },
+  mockRdvKey:     { fontSize: 12, color: 'rgba(255,255,255,0.5)', width: 52 },
+  mockRdvVal:     { fontSize: 12, color: 'rgba(255,255,255,0.85)', flex: 1 },
+
+  soldePill: {
+    alignSelf: 'flex-start',
     backgroundColor: 'rgba(201,168,76,0.12)',
     borderWidth: 1,
     borderColor: 'rgba(201,168,76,0.25)',
     borderRadius: 100,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    alignSelf: 'flex-start',
     marginBottom: 14,
   },
   soldeText: { fontSize: 12, color: '#C9A84C', fontWeight: '500' },
 
-  nextRdvBtns:    { flexDirection: 'row', gap: 10 },
-  btnDangerSm:    { backgroundColor: '#FDECEA', borderRadius: 100, paddingHorizontal: 16, paddingVertical: 9 },
-  btnDangerSmText:{ color: '#C0392B', fontWeight: '600', fontSize: 13 },
-
-  // Empty state
-  emptyCard: {
+  // ── Resume card ──────────────────────────────────────────────────────────────
+  resumeCard: {
     backgroundColor: '#1A1814',
     borderRadius: 16,
-    padding: 22,
-    alignItems: 'center',
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    padding: 18,
+    marginBottom: 8,
   },
-  emptyTitle: { fontFamily: Fonts.semiBold, fontSize: 20, fontWeight: '600', color: '#fff', textAlign: 'center' },
-  emptySub:   { fontSize: 13.5, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 6, lineHeight: 19 },
+  resumeBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(201,168,76,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.3)',
+    borderRadius: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 14,
+  },
+  resumeBadgeText: { fontSize: 10.5, fontWeight: '700', color: '#C9A84C', letterSpacing: 0.5 },
+  resumeRow:       { flexDirection: 'row', gap: 14, alignItems: 'center', marginBottom: 16 },
+  scissorsBox: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#2A2520',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  resumeServiceName: { fontFamily: Fonts.bold, fontSize: 20, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  resumeServiceMeta: { fontSize: 13, color: 'rgba(255,255,255,0.5)' },
 
-  // History list
-  filterChip:         { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.05)' },
-  filterChipActive:   { backgroundColor: '#C9A84C' },
-  filterChipText:     { fontSize: 12.5, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
+  // ── Favoris ──────────────────────────────────────────────────────────────────
+  favCard: {
+    backgroundColor: '#1A1814',
+    borderRadius: 14,
+    padding: 16,
+    width: 200,
+  },
+  favStar:    { fontSize: 18, color: '#C9A84C', marginBottom: 8 },
+  favName:    { fontFamily: Fonts.bold, fontSize: 18, fontWeight: '700', color: '#fff', marginBottom: 6 },
+  favMeta:    { fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 10 },
+  favDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: 8 },
+  favCount:   { fontSize: 12, color: 'rgba(255,255,255,0.45)' },
+
+  // ── Historique réservations ───────────────────────────────────────────────────
+  filterChip:           { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 100, backgroundColor: '#1A1814', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  filterChipActive:     { backgroundColor: '#C9A84C', borderColor: '#C9A84C' },
+  filterChipText:       { fontSize: 12.5, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
   filterChipTextActive: { color: '#1A1208' },
-  emptyHist:          { fontSize: 13.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 10 },
+  emptyHist:            { fontSize: 13.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 10, marginBottom: 20 },
 
   histCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     backgroundColor: '#1A1814',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     marginBottom: 10,
   },
-  histDateBox:  { width: 42, alignItems: 'center', flexShrink: 0 },
-  histDateNum:  { fontFamily: Fonts.bold, fontSize: 21, fontWeight: '700', color: '#fff', lineHeight: 24 },
-  histDateMon:  { fontSize: 9, letterSpacing: 0.5, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
-  histService:  { fontSize: 14, fontWeight: '500', color: '#fff' },
-  histMeta:     { fontSize: 11.5, color: 'rgba(255,255,255,0.5)' },
-  repeatBtn:    { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  repeatBtnText:{ color: '#C9A84C', fontSize: 16 },
+  histDateBox: { width: 42, alignItems: 'center', flexShrink: 0 },
+  histDateNum: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#fff', lineHeight: 25 },
+  histDateMon: { fontSize: 11, letterSpacing: 0.5, color: 'rgba(255,255,255,0.5)', marginTop: 1, textTransform: 'uppercase' },
+  histService: { fontSize: 15, fontWeight: '500', color: '#fff' },
+  histMeta:    { fontSize: 11.5, color: 'rgba(255,255,255,0.5)' },
+
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Avatar
   avatar:     { backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 1.5, borderColor: '#C9A84C', alignItems: 'center', justifyContent: 'center' },
@@ -610,24 +714,24 @@ const styles = StyleSheet.create({
   btnPrimary: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
-    paddingVertical: 15,
+    paddingVertical: 14,
     alignItems: 'center',
     shadowColor: '#C9A84C',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 4,
   },
-  btnPrimaryText: { color: '#1A1208', fontWeight: '700', fontSize: 15 },
+  btnPrimaryText: { color: '#1A1208', fontWeight: '700', fontSize: 14.5 },
   btnOutline: {
-    flex: 1,
     borderRadius: 100,
     paddingVertical: 13,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.28)',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  btnOutlineText: { color: 'rgba(255,255,255,0.8)', fontWeight: '500', fontSize: 14.5 },
+  btnOutlineText: { color: 'rgba(255,255,255,0.8)', fontWeight: '500', fontSize: 13.5 },
   btnDanger: {
     flex: 1,
     backgroundColor: '#FDECEA',
@@ -635,9 +739,11 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     alignItems: 'center',
   },
-  btnDangerText: { color: '#C0392B', fontWeight: '600', fontSize: 14.5 },
+  btnDangerText:   { color: '#C0392B', fontWeight: '600', fontSize: 14.5 },
+  btnDangerSm:     { backgroundColor: '#FDECEA', borderRadius: 100, paddingHorizontal: 18, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
+  btnDangerSmText: { color: '#C0392B', fontWeight: '600', fontSize: 13.5 },
 
-  // ── Loyalty card ──────────────────────────────────────────────────────────
+  // ── Loyalty card ──────────────────────────────────────────────────────────────
   loyaltyCard: {
     backgroundColor: '#1A1814',
     borderRadius: 20,
@@ -687,7 +793,7 @@ const styles = StyleSheet.create({
   loyaltyCtaNote:     { fontSize: 12, color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
   loyaltyCtaDisabled: { fontSize: 12.5, color: 'rgba(255,255,255,0.35)', textAlign: 'center' },
 
-  // ── Transaction history ────────────────────────────────────────────────────
+  // ── Transaction history ────────────────────────────────────────────────────────
   txRow: {
     flexDirection: 'row',
     alignItems: 'center',
