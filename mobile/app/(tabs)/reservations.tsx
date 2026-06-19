@@ -122,19 +122,7 @@ export default function ReservationsScreen() {
   const [histFilter, setHistFilter] = useState('Tous');
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const [ready, setReady] = useState(false);
   const barAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const timer = setTimeout(() => setReady(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (ready && !isAuthenticated) {
-      router.replace('/(auth)/login');
-    }
-  }, [ready, isAuthenticated]);
 
   useEffect(() => {
     Animated.timing(barAnim, {
@@ -143,9 +131,6 @@ export default function ReservationsScreen() {
       useNativeDriver: false,
     }).start();
   }, []);
-
-  if (!ready) return null;
-  if (!isAuthenticated) return null;
 
   const username = user?.username || user?.first_name || 'Client';
   const nextTarget  = getNextTarget(MOCK_LOYALTY.points);
@@ -481,6 +466,7 @@ export default function ReservationsScreen() {
         onConfirm={handleCancel}
         loading={cancelling}
       />
+
     </View>
   );
 }

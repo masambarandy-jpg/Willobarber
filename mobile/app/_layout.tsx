@@ -13,7 +13,9 @@ import {
   CormorantGaramond_600SemiBold_Italic,
   CormorantGaramond_700Bold,
 } from '@expo-google-fonts/cormorant-garamond';
+import { Platform } from 'react-native';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { AuthModalProvider } from '@/contexts/AuthModalContext';
 import { Colors } from '@/constants';
 
 SplashScreen.preventAutoHideAsync();
@@ -33,6 +35,13 @@ function RootNavigation() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
+        <Stack.Screen
+          name="(auth)/login"
+          options={Platform.OS === 'web'
+            ? { headerShown: false }
+            : { presentation: 'transparentModal', animation: 'slide_from_bottom', headerShown: false }
+          }
+        />
         <Stack.Screen name="(tabs)" options={{ title: 'WilloBarber' }} />
         <Stack.Screen name="(booking)" />
       </Stack>
@@ -58,7 +67,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <RootNavigation />
+        <AuthModalProvider>
+          <RootNavigation />
+        </AuthModalProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

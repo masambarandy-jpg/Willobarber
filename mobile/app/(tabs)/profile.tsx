@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -14,8 +14,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Redirect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 import { authApi } from '@/services/api';
 import { Fonts } from '@/constants';
 
@@ -79,6 +79,7 @@ function ModalField({ label, value, onChangeText, placeholder, secureTextEntry, 
 
 export default function ProfileScreen() {
   const { user, isAuthenticated, logout, refreshUser } = useAuth();
+  const { showLoginModal } = useAuthModal();
   const [editModal, setEditModal] = useState(false);
   const [pwModal, setPwModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -93,7 +94,34 @@ export default function ProfileScreen() {
   const [newPw, setNewPw] = useState('');
   const [newPw2, setNewPw2] = useState('');
 
-  if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
+  useEffect(() => {
+    if (user) {
+      setFirstName(user.first_name ?? '');
+      setLastName(user.last_name ?? '');
+      setPhone(user.phone ?? '');
+      setAiRec(user.ai_recommendations ?? true);
+    }
+  }, [user]);
+
+  if (!isAuthenticated || !user) {
+    return (
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center', padding: 28 }]}>
+        <Text style={{ fontFamily: Fonts.bold, fontSize: 28, fontWeight: '700', color: '#fff', marginBottom: 10, textAlign: 'center' }}>
+          Mon Profil
+        </Text>
+        <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 32, lineHeight: 22 }}>
+          Connectez-vous pour accéder à votre profil et gérer votre compte.
+        </Text>
+        <TouchableOpacity
+          style={{ backgroundColor: '#C9A84C', borderRadius: 100, paddingVertical: 15, paddingHorizontal: 40 }}
+          onPress={() => showLoginModal(undefined, 'Connectez-vous pour accéder à votre profil.')}
+          activeOpacity={0.85}
+        >
+          <Text style={{ color: '#1A1208', fontWeight: '700', fontSize: 15 }}>Se connecter</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const fullName = `${user.first_name} ${user.last_name}`.trim() || user.username;
   const initial = (user.first_name?.[0] ?? user.username?.[0] ?? 'U').toUpperCase();

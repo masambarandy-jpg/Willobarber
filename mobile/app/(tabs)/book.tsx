@@ -9,6 +9,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 import { Fonts } from '@/constants';
 
 import { BookingHeader }      from '@/components/booking/BookingHeader';
@@ -64,21 +65,8 @@ export default function BookScreen() {
   const router  = useRouter();
   const insets  = useSafeAreaInsets();
   const { isAuthenticated, user } = useAuth();
+  const { showLoginModal } = useAuthModal();
   const prefilled = useRef(false);
-
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => setReady(true), 100);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
-    if (ready && !isAuthenticated) {
-      router.replace('/(auth)/login');
-    }
-  }, [ready, isAuthenticated]);
-
   const [step,          setStep]          = useState(1);
   const [confirmed,     setConfirmed]     = useState(false);
   const [booking,       setBooking]       = useState<BookingState>(INITIAL_BOOKING);
@@ -108,6 +96,10 @@ export default function BookScreen() {
   };
 
   const handleNext = () => {
+    if (step === 1 && !isAuthenticated) {
+      showLoginModal(() => setStep(2), 'Pour réserver, connectez-vous en 10 secondes.');
+      return;
+    }
     if (step < 4) setStep(s => s + 1);
     else setConfirmed(true);
   };
@@ -255,6 +247,7 @@ export default function BookScreen() {
           </View>
         </View>
       )}
+
     </View>
   );
 }
