@@ -23,47 +23,62 @@ import { useReservations } from '@/hooks/useReservations';
 import type { Reservation } from '@/types';
 import { Fonts } from '@/constants';
 
-
 const MOCK_LOYALTY = {
   points: 980,
   total_earned: 1480,
-  next_reward_at: 1000,
 };
 
 const TRANSACTIONS = [
-  { id: 1, date: '17 juin 2026', reason: 'Coupe Signature', points: 450, type: 'earn' },
-  { id: 2, date: '03 juin 2026', reason: 'Le Rituel', points: 750, type: 'earn' },
-  { id: 3, date: '20 mai 2026', reason: 'Coupe gratuite utilisée', points: -500, type: 'spend' },
-  { id: 4, date: '05 mai 2026', reason: 'Rasage Traditionnel', points: 280, type: 'earn' },
-  { id: 5, date: 'Bonus bienvenue', reason: 'Première réservation', points: 50, type: 'bonus' },
+  { id: 1, date: '17 juin 2026', reason: 'Coupe Signature',         points:  450, type: 'earn'  },
+  { id: 2, date: '03 juin 2026', reason: 'Le Rituel',               points:  750, type: 'earn'  },
+  { id: 3, date: '20 mai 2026',  reason: 'Coupe gratuite utilisée', points: -500, type: 'spend' },
+  { id: 4, date: '05 mai 2026',  reason: 'Rasage Traditionnel',     points:  280, type: 'earn'  },
+  { id: 5, date: 'Bonus',        reason: 'Première réservation',    points:   50, type: 'bonus' },
 ];
 
 const TIERS = [
-  { label: 'BRONZE', min: 0, color: '#8B6914' },
-  { label: 'ARGENT', min: 200, color: '#6B6560' },
-  { label: 'OR', min: 500, color: '#C9A84C' },
+  { label: 'BRONZE', min: 0,   threshold: '0 pts',   color: '#8B6914' },
+  { label: 'ARGENT', min: 200, threshold: '200 pts',  color: '#6B6560' },
+  { label: 'OR',     min: 500, threshold: '500 pts',  color: '#C9A84C' },
 ];
 
+function getNextTarget(pts: number): number {
+  if (pts < 200) return 200;
+  if (pts < 500) return 500;
+  return Math.ceil((pts + 1) / 500) * 500;
+}
+
+function getBarProgress(pts: number): number {
+  if (pts < 200) return pts / 200;
+  if (pts < 500) return (pts - 200) / 300;
+  const prev = Math.floor(pts / 500) * 500;
+  return (pts - prev) / 500;
+}
+
 const STATUS_LABEL: Record<string, string> = {
-  pending: 'En attente',
-  confirmed: 'Confirmé',
-  completed: 'Terminé',
+  pending:          'En attente',
+  confirmed:        'Confirmé',
+  completed:        'Terminé',
   cancelled_client: 'Annulé',
   cancelled_barber: 'Annulé',
-  no_show: 'Absent',
+  no_show:          'Absent',
 };
 
 const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
-  pending: { bg: '#f6ecd0', text: '#8B6914' },
-  confirmed: { bg: '#D4EDDA', text: '#2D6A4F' },
-  completed: { bg: '#D4EDDA', text: '#2D6A4F' },
+  pending:          { bg: '#f6ecd0', text: '#8B6914' },
+  confirmed:        { bg: '#D4EDDA', text: '#2D6A4F' },
+  completed:        { bg: '#D4EDDA', text: '#2D6A4F' },
   cancelled_client: { bg: '#FDECEA', text: '#C0392B' },
   cancelled_barber: { bg: '#FDECEA', text: '#C0392B' },
-  no_show: { bg: '#FDECEA', text: '#C0392B' },
+  no_show:          { bg: '#FDECEA', text: '#C0392B' },
 };
 
 function GoldItalic({ children }: { children: React.ReactNode }) {
-  return <Text style={{ color: '#C9A84C', fontStyle: 'italic', fontFamily: Fonts.italic, fontWeight: '500' }}>{children}</Text>;
+  return (
+    <Text style={{ color: '#C9A84C', fontStyle: 'italic', fontFamily: Fonts.italic, fontWeight: '500' }}>
+      {children}
+    </Text>
+  );
 }
 
 function Avatar({ initial, size = 44 }: { initial: string; size?: number }) {
@@ -111,7 +126,10 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
               <Text style={styles.btnOutlineText}>Garder</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
-              {loading ? <ActivityIndicator color="#C0392B" size="small" /> : <Text style={styles.btnDangerText}>Annuler le RDV</Text>}
+              {loading
+                ? <ActivityIndicator color="#C0392B" size="small" />
+                : <Text style={styles.btnDangerText}>Annuler le RDV</Text>
+              }
             </TouchableOpacity>
           </View>
         </View>
@@ -131,7 +149,7 @@ export default function ReservationsScreen() {
 
   useEffect(() => {
     Animated.timing(barAnim, {
-      toValue: Math.min(MOCK_LOYALTY.points / MOCK_LOYALTY.next_reward_at, 1),
+      toValue: getBarProgress(MOCK_LOYALTY.points),
       duration: 1000,
       useNativeDriver: false,
     }).start();
@@ -140,7 +158,6 @@ export default function ReservationsScreen() {
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
 
   const firstName = user?.first_name || user?.username || '';
-  const loyaltyPoints = user?.loyalty_points ?? 0;
 
   const filteredPast = histFilter === 'Tous'
     ? past
@@ -159,9 +176,12 @@ export default function ReservationsScreen() {
     }
   };
 
+  const nextTarget  = getNextTarget(MOCK_LOYALTY.points);
+  const ptsRestants = nextTarget - MOCK_LOYALTY.points;
+
   return (
     <View style={styles.root}>
-      {/* Header */}
+      {/* ── Header ──────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.headerLogo}>{'{w}'}</Text>
@@ -184,116 +204,33 @@ export default function ReservationsScreen() {
           Votre espace, <GoldItalic>au poil.</GoldItalic>
         </Text>
 
-        {/* New RDV button */}
+        {/* Bouton nouveau RDV */}
         {Platform.OS === 'android' ? (
           <View style={[styles.newRdvBtn, { overflow: 'hidden', paddingVertical: 0 }]}>
-            <TouchableNativeFeedback onPress={() => router.push('/(tabs)/book')} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}>
+            <TouchableNativeFeedback
+              onPress={() => router.push('/(tabs)/book')}
+              background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}
+            >
               <View style={{ paddingVertical: 15, alignItems: 'center' }}>
-                <Text style={styles.newRdvBtnText}>📅  Nouveau rendez-vous</Text>
+                <Text style={styles.newRdvBtnText}>Nouveau rendez-vous →</Text>
               </View>
             </TouchableNativeFeedback>
           </View>
         ) : (
           <TouchableOpacity style={styles.newRdvBtn} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-            <Text style={styles.newRdvBtnText}>📅  Nouveau rendez-vous</Text>
+            <Text style={styles.newRdvBtnText}>Nouveau rendez-vous →</Text>
           </TouchableOpacity>
         )}
 
-        {/* ── Section A : Carte Fidélité ───────────────────────────────── */}
-        <View style={styles.loyaltyCard}>
-          {/* Header */}
-          <View style={styles.loyaltyHeader}>
-            <View>
-              <Text style={styles.loyaltyBrandLogo}>{'{w}'} willobarber</Text>
-              <Text style={styles.loyaltyBrandSub}>Programme Fidélité</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.loyaltyPoints}>{MOCK_LOYALTY.points}</Text>
-              <Text style={styles.loyaltyPtsSuffix}>pts</Text>
-            </View>
-          </View>
+        {/* ── 1. PROCHAINS RENDEZ-VOUS ────────────────────────────── */}
+        <Text style={styles.sectionKicker}>PROCHAINS RENDEZ-VOUS</Text>
 
-          {/* Progress bar */}
-          <Text style={styles.loyaltyProgressLabel}>Progression vers la coupe gratuite</Text>
-          <View style={styles.loyaltyBarBg}>
-            <Animated.View
-              style={[
-                styles.loyaltyBarFill,
-                {
-                  width: barAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['0%', '100%'],
-                  }),
-                },
-              ]}
-            />
-          </View>
-          {MOCK_LOYALTY.points >= 500 ? (
-            <Text style={styles.loyaltyBarCaption}>🎉 Coupe gratuite disponible !</Text>
-          ) : (
-            <Text style={styles.loyaltyBarCaption}>
-              {MOCK_LOYALTY.next_reward_at - MOCK_LOYALTY.points} points avant votre coupe offerte
-            </Text>
-          )}
-
-          {/* Tier badges */}
-          <View style={styles.loyaltyTiersRow}>
-            {TIERS.map(tier => {
-              const active = MOCK_LOYALTY.points >= tier.min;
-              return (
-                <View
-                  key={tier.label}
-                  style={[
-                    styles.tierBadge,
-                    active
-                      ? { backgroundColor: tier.color }
-                      : { backgroundColor: 'transparent', borderWidth: 1, borderColor: tier.color + '55' },
-                  ]}
-                >
-                  <Text style={[styles.tierBadgeText, !active && { color: tier.color + '88' }]}>
-                    {tier.label}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* CTA */}
-          {MOCK_LOYALTY.points >= 500 ? (
-            <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85}>
-              <Text style={styles.loyaltyCtaText}>Utiliser 500 pts — Coupe offerte →</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.loyaltyCtaDisabled}>
-              500 points requis ({500 - MOCK_LOYALTY.points} restants)
-            </Text>
-          )}
-        </View>
-
-        {/* Stats grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNum}>{(upcoming.length + past.length)}</Text>
-            <Text style={styles.statLabel}>VISITES</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNum}>{past[0]?.date ? Math.round((Date.now() - new Date(past[0].date).getTime()) / 86400000) : '—'}</Text>
-            <Text style={styles.statLabel}>DERNIÈRE VISITE</Text>
-            {past[0]?.date && <Text style={styles.statUnit}>jours</Text>}
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNum}>{loyaltyPoints}</Text>
-            <Text style={styles.statLabel}>POINTS FIDÉLITÉ</Text>
-          </View>
-        </View>
-
-        {/* Next appointment */}
         {upcoming.length > 0 && (() => {
           const next = upcoming[0];
           const daysUntil = next.date ? Math.ceil((new Date(next.date).getTime() - Date.now()) / 86400000) : 0;
           const d = next.date ? new Date(next.date) : null;
-          const dayNum = d?.getDate() ?? '—';
-          const monthStr = d?.toLocaleDateString('fr-BE', { month: 'short' }).toUpperCase() ?? '';
+          const dayNum     = d?.getDate() ?? '—';
+          const monthStr   = d?.toLocaleDateString('fr-BE', { month: 'short' }).toUpperCase() ?? '';
           const weekdayStr = d?.toLocaleDateString('fr-BE', { weekday: 'short' }).toUpperCase() ?? '';
           return (
             <View style={styles.nextRdvCard}>
@@ -312,14 +249,25 @@ export default function ReservationsScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.nextRdvService}>{next.service_name ?? 'Prestation'}</Text>
-                    <View style={styles.nextRdvInfo}><Text style={styles.nextRdvInfoKey}>Heure</Text><Text style={styles.nextRdvInfoVal}>{next.start_time ?? '—'}</Text></View>
-                    <View style={styles.nextRdvInfo}><Text style={styles.nextRdvInfoKey}>Barbier</Text><Text style={styles.nextRdvInfoVal}>{next.barber_name ?? '—'}</Text></View>
-                    <View style={styles.nextRdvInfo}><Text style={styles.nextRdvInfoKey}>Adresse</Text><Text style={styles.nextRdvInfoVal}>Rue Auguste Van Zande 78</Text></View>
+                    <View style={styles.nextRdvInfo}>
+                      <Text style={styles.nextRdvInfoKey}>Heure</Text>
+                      <Text style={styles.nextRdvInfoVal}>{next.start_time ?? '—'}</Text>
+                    </View>
+                    <View style={styles.nextRdvInfo}>
+                      <Text style={styles.nextRdvInfoKey}>Barbier</Text>
+                      <Text style={styles.nextRdvInfoVal}>{next.barber_name ?? '—'}</Text>
+                    </View>
+                    <View style={styles.nextRdvInfo}>
+                      <Text style={styles.nextRdvInfoKey}>Adresse</Text>
+                      <Text style={styles.nextRdvInfoVal}>Rue Auguste Van Zande 78</Text>
+                    </View>
                   </View>
                 </View>
                 {!!next.deposit_amount && (
                   <View style={styles.soldeRow}>
-                    <Text style={styles.soldeText}>Solde {(parseFloat(next.total_amount || '0') - parseFloat(next.deposit_amount || '0')).toFixed(2)}€ au salon</Text>
+                    <Text style={styles.soldeText}>
+                      Solde {(parseFloat(next.total_amount || '0') - parseFloat(next.deposit_amount || '0')).toFixed(2)}€ au salon
+                    </Text>
                   </View>
                 )}
                 <View style={styles.nextRdvBtns}>
@@ -332,32 +280,129 @@ export default function ReservationsScreen() {
           );
         })()}
 
-        {/* Empty upcoming */}
         {upcoming.length === 0 && !isLoading && (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Aucun rendez-vous à venir</Text>
             <Text style={styles.emptySub}>Prenez rendez-vous en quelques clics.</Text>
             {Platform.OS === 'android' ? (
               <View style={[styles.btnPrimary, { marginTop: 16, alignSelf: 'stretch', overflow: 'hidden', paddingVertical: 0 }]}>
-                <TouchableNativeFeedback onPress={() => router.push('/(tabs)/book')} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}>
+                <TouchableNativeFeedback
+                  onPress={() => router.push('/(tabs)/book')}
+                  background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}
+                >
                   <View style={{ paddingVertical: 15, alignItems: 'center' }}>
-                    <Text style={styles.btnPrimaryText}>Réserver maintenant  →</Text>
+                    <Text style={styles.btnPrimaryText}>Réserver maintenant →</Text>
                   </View>
                 </TouchableNativeFeedback>
               </View>
             ) : (
-              <TouchableOpacity style={[styles.btnPrimary, { marginTop: 16, alignSelf: 'stretch' }]} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-                <Text style={styles.btnPrimaryText}>Réserver maintenant  →</Text>
+              <TouchableOpacity
+                style={[styles.btnPrimary, { marginTop: 16, alignSelf: 'stretch' }]}
+                onPress={() => router.push('/(tabs)/book')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.btnPrimaryText}>Réserver maintenant →</Text>
               </TouchableOpacity>
             )}
           </View>
         )}
 
-        {/* History */}
-        <Text style={styles.sectionTitle}>Historique</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 14 }}>
+        {/* ── 2. PROGRAMME FIDÉLITÉ ───────────────────────────────── */}
+        <Text style={[styles.sectionKicker, { marginTop: 24 }]}>PROGRAMME FIDÉLITÉ</Text>
+        <View style={styles.loyaltyCard}>
+          {/* Header carte */}
+          <View style={styles.loyaltyHeader}>
+            <View>
+              <Text style={styles.loyaltyBrandLogo}>{'{w}'} willobarber</Text>
+              <Text style={styles.loyaltyBrandSub}>Programme Fidélité</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.loyaltyPoints}>{MOCK_LOYALTY.points}</Text>
+              <Text style={styles.loyaltyPtsSuffix}>pts</Text>
+            </View>
+          </View>
+
+          {/* Barre de progression */}
+          <Text style={styles.loyaltyProgressLabel}>Progression vers la coupe gratuite</Text>
+          <View style={styles.loyaltyBarBg}>
+            <Animated.View
+              style={[
+                styles.loyaltyBarFill,
+                {
+                  width: barAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                },
+              ]}
+            />
+          </View>
+          <Text style={styles.loyaltyBarCaption}>
+            {ptsRestants} pts avant votre prochaine coupe offerte
+          </Text>
+
+          {/* Paliers */}
+          <View style={styles.loyaltyTiersRow}>
+            {TIERS.map((tier, i) => {
+              const reached  = MOCK_LOYALTY.points >= tier.min;
+              const nextTier = TIERS[i + 1];
+              const isActive  = reached && (!nextTier || MOCK_LOYALTY.points < nextTier.min);
+              const isDepasse = reached && !isActive;
+              return (
+                <View key={tier.label} style={styles.tierBadgeWrap}>
+                  <View
+                    style={[
+                      styles.tierBadge,
+                      isActive  && { backgroundColor: tier.color },
+                      isDepasse && { backgroundColor: '#2A2520', borderWidth: 1, borderColor: tier.color },
+                      !reached  && { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.tierBadgeText,
+                        isActive  && { color: '#1A1208' },
+                        isDepasse && { color: tier.color },
+                        !reached  && { color: 'rgba(255,255,255,0.35)' },
+                      ]}
+                    >
+                      {tier.label}
+                    </Text>
+                  </View>
+                  <Text style={styles.tierThreshold}>{tier.threshold}</Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* CTA */}
+          {MOCK_LOYALTY.points >= 500 ? (
+            <>
+              <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85}>
+                <Text style={styles.loyaltyCtaText}>Utiliser 500 pts — Coupe offerte →</Text>
+              </TouchableOpacity>
+              <Text style={styles.loyaltyCtaNote}>Valable sur toute coupe · Sans date d'expiration</Text>
+            </>
+          ) : (
+            <Text style={styles.loyaltyCtaDisabled}>
+              500 points requis ({500 - MOCK_LOYALTY.points} restants)
+            </Text>
+          )}
+        </View>
+
+        {/* ── 3. MES RÉSERVATIONS ─────────────────────────────────── */}
+        <Text style={[styles.sectionKicker, { marginTop: 24 }]}>MES RÉSERVATIONS</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, marginBottom: 14 }}
+        >
           {['Tous', '2026', '2025'].map(t => (
-            <Pressable key={t} onPress={() => setHistFilter(t)} style={[styles.filterChip, histFilter === t && styles.filterChipActive]}>
+            <Pressable
+              key={t}
+              onPress={() => setHistFilter(t)}
+              style={[styles.filterChip, histFilter === t && styles.filterChipActive]}
+            >
               <Text style={[styles.filterChipText, histFilter === t && styles.filterChipTextActive]}>{t}</Text>
             </Pressable>
           ))}
@@ -369,7 +414,9 @@ export default function ReservationsScreen() {
             <View key={r.id} style={styles.histCard}>
               <View style={styles.histDateBox}>
                 <Text style={styles.histDateNum}>{r.date ? new Date(r.date).getDate() : '—'}</Text>
-                <Text style={styles.histDateMon}>{r.date ? new Date(r.date).toLocaleDateString('fr-BE', { month: 'short' }).toUpperCase() : ''}</Text>
+                <Text style={styles.histDateMon}>
+                  {r.date ? new Date(r.date).toLocaleDateString('fr-BE', { month: 'short' }).toUpperCase() : ''}
+                </Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.histService}>{r.service_name ?? 'Prestation'}</Text>
@@ -385,22 +432,24 @@ export default function ReservationsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          ))}
+          ))
+        }
 
         {isLoading && <ActivityIndicator color="#C9A84C" style={{ marginTop: 30 }} />}
 
-        {/* ── Section B : Historique des points ───────────────────────── */}
-        <Text style={styles.txSectionTitle}>HISTORIQUE DES POINTS</Text>
+        {/* ── 4. HISTORIQUE DES POINTS ────────────────────────────── */}
+        <Text style={[styles.sectionKicker, { marginTop: 24 }]}>HISTORIQUE DES POINTS</Text>
         {TRANSACTIONS.map(tx => {
           const isSpend = tx.type === 'spend';
-          const isEarn  = tx.type === 'earn' || tx.type === 'bonus';
-          const iconColor = isSpend ? '#E53935' : '#C9A84C';
-          const ptColor   = isSpend ? '#E53935' : '#4CAF50';
+          const isBonus = tx.type === 'bonus';
+          const iconColor = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#C9A84C';
+          const ptColor   = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#4CAF50';
           const ptPrefix  = isSpend ? '' : '+';
+          const iconChar  = isSpend ? '−' : isBonus ? '+' : '★';
           return (
             <View key={tx.id} style={styles.txRow}>
               <View style={[styles.txIconCircle, { backgroundColor: iconColor + '22', borderColor: iconColor + '55' }]}>
-                <Text style={{ color: iconColor, fontSize: 14 }}>{isSpend ? '−' : '★'}</Text>
+                <Text style={{ color: iconColor, fontSize: 14 }}>{iconChar}</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.txReason}>{tx.reason}</Text>
@@ -437,23 +486,34 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.07)',
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  headerLogo: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
+  headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  headerLogo:  { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
   headerBrand: { fontFamily: Fonts.semiBold, fontSize: 19, fontWeight: '600', color: '#fff' },
   headerRight: {},
 
-  scroll: { flex: 1 },
-  scrollContent: { padding: 22, paddingBottom: 40 },
+  scroll:        { flex: 1 },
+  scrollContent: { padding: 22, paddingBottom: 48 },
 
-  kicker: { fontSize: 11, fontWeight: '600', letterSpacing: 2, color: '#C9A84C', textTransform: 'uppercase', marginBottom: 6 },
+  kicker:    { fontSize: 11, fontWeight: '600', letterSpacing: 2, color: '#C9A84C', textTransform: 'uppercase', marginBottom: 6 },
   pageTitle: { fontFamily: Fonts.semiBold, fontSize: 32, fontWeight: '600', color: '#fff', lineHeight: 38, marginBottom: 18 },
 
+  // Section kicker (titres de sections)
+  sectionKicker: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: '#C9A84C',
+    textTransform: 'uppercase',
+    marginBottom: 12,
+  },
+
+  // Bouton nouveau RDV
   newRdvBtn: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
     paddingVertical: 15,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
     shadowColor: '#C9A84C',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.35,
@@ -462,37 +522,30 @@ const styles = StyleSheet.create({
   },
   newRdvBtnText: { color: '#1A1208', fontWeight: '700', fontSize: 15 },
 
-  // Stats
-  statsGrid: { flexDirection: 'row', gap: 10, marginBottom: 22 },
-  statCard: { flex: 1, backgroundColor: '#1A1814', borderRadius: 14, padding: 14, alignItems: 'center' },
-  statNum: { fontFamily: Fonts.bold, fontSize: 28, fontWeight: '700', color: '#fff', lineHeight: 32 },
-  statUnit: { fontSize: 10.5, color: '#C9A84C', marginTop: 1 },
-  statLabel: { fontSize: 8, fontWeight: '600', letterSpacing: 0.8, color: 'rgba(255,255,255,0.45)', marginTop: 6, textAlign: 'center', textTransform: 'uppercase' },
-
-  // Next RDV card
+  // Prochain RDV card
   nextRdvCard: {
     backgroundColor: '#1a160e',
     borderWidth: 1,
     borderColor: 'rgba(201,168,76,0.18)',
     borderRadius: 18,
     flexDirection: 'row',
-    marginBottom: 24,
+    marginBottom: 14,
     overflow: 'hidden',
   },
-  nextRdvAccent: { width: 4, backgroundColor: '#C9A84C', flexShrink: 0 },
+  nextRdvAccent:  { width: 4, backgroundColor: '#C9A84C', flexShrink: 0 },
   nextRdvContent: { flex: 1, padding: 18 },
-  badgeRow: { marginBottom: 12 },
-  badge: { alignSelf: 'flex-start', borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeText: { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3 },
+  badgeRow:       { marginBottom: 12 },
+  badge:          { alignSelf: 'flex-start', borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeText:      { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3 },
 
-  nextRdvMain: { flexDirection: 'row', gap: 16, marginBottom: 12, alignItems: 'flex-start' },
-  dateBox: { borderWidth: 1, borderColor: 'rgba(201,168,76,0.3)', borderRadius: 12, padding: 12, alignItems: 'center', flexShrink: 0 },
-  dateNum: { fontFamily: Fonts.bold, fontSize: 26, fontWeight: '700', color: '#C9A84C', lineHeight: 30 },
-  dateMon: { fontSize: 10, letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
-  dateWeekday: { fontSize: 9, color: 'rgba(255,255,255,0.45)', marginTop: 1 },
+  nextRdvMain:    { flexDirection: 'row', gap: 16, marginBottom: 12, alignItems: 'flex-start' },
+  dateBox:        { borderWidth: 1, borderColor: 'rgba(201,168,76,0.3)', borderRadius: 12, padding: 12, alignItems: 'center', flexShrink: 0 },
+  dateNum:        { fontFamily: Fonts.bold, fontSize: 26, fontWeight: '700', color: '#C9A84C', lineHeight: 30 },
+  dateMon:        { fontSize: 10, letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  dateWeekday:    { fontSize: 9, color: 'rgba(255,255,255,0.45)', marginTop: 1 },
 
   nextRdvService: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 6, lineHeight: 26 },
-  nextRdvInfo: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  nextRdvInfo:    { flexDirection: 'row', gap: 8, marginTop: 2 },
   nextRdvInfoKey: { fontSize: 12, color: 'rgba(255,255,255,0.5)', width: 50 },
   nextRdvInfoVal: { fontSize: 12, color: 'rgba(255,255,255,0.85)', flex: 1 },
 
@@ -508,9 +561,9 @@ const styles = StyleSheet.create({
   },
   soldeText: { fontSize: 12, color: '#C9A84C', fontWeight: '500' },
 
-  nextRdvBtns: { flexDirection: 'row', gap: 10 },
-  btnDangerSm: { backgroundColor: '#FDECEA', borderRadius: 100, paddingHorizontal: 16, paddingVertical: 9 },
-  btnDangerSmText: { color: '#C0392B', fontWeight: '600', fontSize: 13 },
+  nextRdvBtns:    { flexDirection: 'row', gap: 10 },
+  btnDangerSm:    { backgroundColor: '#FDECEA', borderRadius: 100, paddingHorizontal: 16, paddingVertical: 9 },
+  btnDangerSmText:{ color: '#C0392B', fontWeight: '600', fontSize: 13 },
 
   // Empty state
   emptyCard: {
@@ -518,27 +571,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 22,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
   emptyTitle: { fontFamily: Fonts.semiBold, fontSize: 20, fontWeight: '600', color: '#fff', textAlign: 'center' },
-  emptySub: { fontSize: 13.5, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 6, lineHeight: 19 },
+  emptySub:   { fontSize: 13.5, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 6, lineHeight: 19 },
 
-  // Section title
-  sectionTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 12 },
-
-  // History
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  filterChipActive: { backgroundColor: '#C9A84C' },
-  filterChipText: { fontSize: 12.5, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
+  // History list
+  filterChip:         { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.05)' },
+  filterChipActive:   { backgroundColor: '#C9A84C' },
+  filterChipText:     { fontSize: 12.5, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
   filterChipTextActive: { color: '#1A1208' },
-  emptyHist: { fontSize: 13.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 10 },
+  emptyHist:          { fontSize: 13.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 10 },
 
   histCard: {
     flexDirection: 'row',
@@ -549,16 +594,16 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
   },
-  histDateBox: { width: 42, alignItems: 'center', flexShrink: 0 },
-  histDateNum: { fontFamily: Fonts.bold, fontSize: 21, fontWeight: '700', color: '#fff', lineHeight: 24 },
-  histDateMon: { fontSize: 9, letterSpacing: 0.5, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
-  histService: { fontSize: 14, fontWeight: '500', color: '#fff' },
-  histMeta: { fontSize: 11.5, color: 'rgba(255,255,255,0.5)' },
-  repeatBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  repeatBtnText: { color: '#C9A84C', fontSize: 16 },
+  histDateBox:  { width: 42, alignItems: 'center', flexShrink: 0 },
+  histDateNum:  { fontFamily: Fonts.bold, fontSize: 21, fontWeight: '700', color: '#fff', lineHeight: 24 },
+  histDateMon:  { fontSize: 9, letterSpacing: 0.5, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+  histService:  { fontSize: 14, fontWeight: '500', color: '#fff' },
+  histMeta:     { fontSize: 11.5, color: 'rgba(255,255,255,0.5)' },
+  repeatBtn:    { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  repeatBtnText:{ color: '#C9A84C', fontSize: 16 },
 
   // Avatar
-  avatar: { backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 1.5, borderColor: '#C9A84C', alignItems: 'center', justifyContent: 'center' },
+  avatar:     { backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 1.5, borderColor: '#C9A84C', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#C9A84C', fontFamily: Fonts.semiBold, fontWeight: '600' },
 
   // Buttons
@@ -597,52 +642,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1814',
     borderRadius: 20,
     padding: 20,
-    marginBottom: 20,
+    marginBottom: 14,
     shadowColor: '#C9A84C',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18,
     shadowRadius: 16,
     elevation: 4,
   },
-  loyaltyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
+  loyaltyHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
   loyaltyBrandLogo: { fontFamily: Fonts.bold, fontSize: 16, fontWeight: '700', color: '#C9A84C' },
-  loyaltyBrandSub: { fontSize: 12, color: '#fff', marginTop: 2 },
-  loyaltyPoints: { fontFamily: Fonts.bold, fontSize: 32, fontWeight: '700', color: '#C9A84C', lineHeight: 34 },
+  loyaltyBrandSub:  { fontSize: 12, color: '#fff', marginTop: 2 },
+  loyaltyPoints:    { fontFamily: Fonts.bold, fontSize: 32, fontWeight: '700', color: '#C9A84C', lineHeight: 34 },
   loyaltyPtsSuffix: { fontSize: 13, color: '#fff', textAlign: 'right', marginTop: 2 },
 
   loyaltyProgressLabel: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 8 },
-  loyaltyBarBg: { height: 8, borderRadius: 4, backgroundColor: '#2A2520', marginBottom: 8 },
-  loyaltyBarFill: { height: 8, borderRadius: 4, backgroundColor: '#C9A84C' },
-  loyaltyBarCaption: { fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 16 },
+  loyaltyBarBg:         { height: 8, borderRadius: 4, backgroundColor: '#2A2520', marginBottom: 8 },
+  loyaltyBarFill:       { height: 8, borderRadius: 4, backgroundColor: '#C9A84C' },
+  loyaltyBarCaption:    { fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 16 },
 
   loyaltyTiersRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  tierBadge: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 100 },
-  tierBadgeText: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+  tierBadgeWrap:   { flex: 1, alignItems: 'center', gap: 6 },
+  tierBadge: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 100,
+  },
+  tierBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  tierThreshold: { fontSize: 10, color: 'rgba(255,255,255,0.4)' },
 
   loyaltyCta: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
-    paddingVertical: 13,
+    paddingVertical: 14,
     alignItems: 'center',
     shadowColor: '#C9A84C',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 3,
+    marginBottom: 8,
   },
-  loyaltyCtaText: { fontFamily: Fonts.semiBold, color: '#1A1208', fontWeight: '700', fontSize: 14 },
+  loyaltyCtaText:     { fontFamily: Fonts.semiBold, color: '#1A1208', fontWeight: '600', fontSize: 14 },
+  loyaltyCtaNote:     { fontSize: 12, color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
   loyaltyCtaDisabled: { fontSize: 12.5, color: 'rgba(255,255,255,0.35)', textAlign: 'center' },
 
   // ── Transaction history ────────────────────────────────────────────────────
-  txSectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-    color: '#C9A84C',
-    textTransform: 'uppercase',
-    marginBottom: 12,
-    marginTop: 28,
-  },
   txRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -663,7 +708,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   txReason: { fontSize: 15, color: '#fff', marginBottom: 2 },
-  txDate: { fontSize: 12, color: 'rgba(255,255,255,0.45)' },
+  txDate:   { fontSize: 12, color: 'rgba(255,255,255,0.45)' },
   txPoints: { fontFamily: Fonts.bold, fontSize: 18, fontWeight: '700' },
 
   // Cancel modal
@@ -678,7 +723,7 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
   modalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 8 },
-  modalSub: { fontSize: 13.5, color: 'rgba(255,255,255,0.5)', marginBottom: 18, lineHeight: 19 },
+  modalSub:   { fontSize: 13.5, color: 'rgba(255,255,255,0.5)', marginBottom: 18, lineHeight: 19 },
   fieldLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1.5, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: 8 },
   modalInput: {
     backgroundColor: '#252018',
