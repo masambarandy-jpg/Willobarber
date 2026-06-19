@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
   Image,
   Platform,
@@ -19,6 +20,8 @@ import { HamburgerMenu } from '@/components/HamburgerMenu';
 import { Fonts } from '@/constants';
 
 const { width: SCREEN_W } = Dimensions.get('window');
+
+const MOCK_LOYALTY = { points: 980, next_reward_at: 1000 };
 
 // Static team data matching design
 const BARBERS = [
@@ -104,11 +107,22 @@ function Avatar({ initial, color, ring, size = 44 }: { initial: string; color: s
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const firstName = user?.first_name || user?.username || 'vous';
   const scrollRef = useRef<ScrollView>(null);
   const [servicesY, setServicesY] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const loyaltyBarAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      Animated.timing(loyaltyBarAnim, {
+        toValue: Math.min(MOCK_LOYALTY.points / MOCK_LOYALTY.next_reward_at, 1),
+        duration: 900,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [isAuthenticated]);
 
   return (
     <View style={styles.root}>
@@ -170,6 +184,39 @@ export default function HomeScreen() {
             </Text>
           </View>
         </LinearGradient>
+
+        {/* ── Loyalty widget (connecté seulement) ── */}
+        {isAuthenticated && (
+          <View style={styles.loyaltyWidget}>
+            <View style={styles.loyaltyWidgetLeft}>
+              <Text style={styles.loyaltyWidgetPts}>★ {MOCK_LOYALTY.points} pts</Text>
+            </View>
+            <View style={styles.loyaltyWidgetMid}>
+              <View style={styles.loyaltyWidgetBarBg}>
+                <Animated.View
+                  style={[
+                    styles.loyaltyWidgetBarFill,
+                    {
+                      width: loyaltyBarAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '100%'],
+                      }),
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+            <View style={styles.loyaltyWidgetRight}>
+              {MOCK_LOYALTY.points >= 500 ? (
+                <Text style={styles.loyaltyWidgetReward}>COUPE OFFERTE 🎉</Text>
+              ) : (
+                <Text style={styles.loyaltyWidgetRemaining}>
+                  {MOCK_LOYALTY.next_reward_at - MOCK_LOYALTY.points} pts avant coupe offerte
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* ── Services section (cream) ── */}
         <View style={styles.creamSection} onLayout={e => setServicesY(e.nativeEvent.layout.y)}>
@@ -399,6 +446,28 @@ const styles = StyleSheet.create({
   proofAvatar: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
   proofCount: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
   proofText: { fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 19 },
+
+  // Loyalty widget
+  loyaltyWidget: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#1A1814',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginHorizontal: 22,
+    marginTop: -4,
+    marginBottom: 4,
+  },
+  loyaltyWidgetLeft: { flexShrink: 0 },
+  loyaltyWidgetPts: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#C9A84C' },
+  loyaltyWidgetMid: { flex: 1 },
+  loyaltyWidgetBarBg: { height: 6, borderRadius: 3, backgroundColor: '#2A2520' },
+  loyaltyWidgetBarFill: { height: 6, borderRadius: 3, backgroundColor: '#C9A84C' },
+  loyaltyWidgetRight: { flexShrink: 0, maxWidth: 110 },
+  loyaltyWidgetRemaining: { fontSize: 12, color: 'rgba(255,255,255,0.45)', textAlign: 'right', lineHeight: 16 },
+  loyaltyWidgetReward: { fontSize: 11, fontWeight: '700', color: '#C9A84C', textAlign: 'right' },
 
   // Sections
   creamSection: { backgroundColor: '#F5F0E8', paddingHorizontal: 22, paddingTop: 34, paddingBottom: 30 },

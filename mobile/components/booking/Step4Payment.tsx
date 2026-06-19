@@ -12,7 +12,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fonts } from '@/constants';
 import {
-  LOYALTY_DISCOUNT,
   calcDeposit,
   fmtPrice,
   type AmountChoice,
@@ -229,7 +228,7 @@ export function Step4Payment({
   const deposit = calcDeposit(price);
   const isFull  = amountChoice === 'full';
   const payNow  = isFull ? price : deposit;
-  const solde   = isFull ? 0 : price - deposit - LOYALTY_DISCOUNT;
+  const solde   = isFull ? 0 : price - deposit;
 
   const set = (key: keyof CardForm) => (v: string) =>
     onCardFormChange({ ...cardForm, [key]: v });
@@ -412,14 +411,6 @@ export function Step4Payment({
             <Text style={styles.amountLabel}>{service?.name ?? '—'}</Text>
             <Text style={styles.amountValue}>{fmtPrice(price)}</Text>
           </View>
-          {!isFull && (
-            <View style={styles.amountRow}>
-              <Text style={styles.amountLabel}>Réduction fidélité</Text>
-              <Text style={[styles.amountValue, { color: GREEN_TEXT }]}>
-                -{fmtPrice(LOYALTY_DISCOUNT)}
-              </Text>
-            </View>
-          )}
           <View style={styles.amountRow}>
             <Text style={styles.amountLabel}>
               {isFull ? 'Paiement total' : 'Acompte (10%)'}

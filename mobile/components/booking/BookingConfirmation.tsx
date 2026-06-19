@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { Fonts } from '@/constants';
 import {
-  LOYALTY_DISCOUNT,
   calcDeposit,
   dayBeforeLabel,
   fmtPrice,
@@ -67,7 +66,7 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
 
   const price   = service ? service.price : 0;
   const deposit = calcDeposit(price);
-  const solde   = price - deposit - LOYALTY_DISCOUNT;
+  const solde   = price - deposit;
 
   const smsDate    = date ? dayBeforeLabel(date) : '';
   const dateStr    = date ? formatDateShortFr(date) : '—';
@@ -135,7 +134,6 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
           <Text style={styles.cardTitle}>Récapitulatif de paiement</Text>
 
           <RecapLine label={service?.name ?? '—'} value={fmtPrice(price)} />
-          <RecapLine label="Réduction fidélité" value={`-${fmtPrice(LOYALTY_DISCOUNT)}`} green />
           <RecapLine label="Acompte réglé"      value={`-${fmtPrice(deposit)}`}          green noBorder />
 
           <View style={styles.recapSep} />
@@ -174,6 +172,32 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
             </View>
           </View>
         </View>
+
+        {/* ── Points gagnés ─────────────────────────────────────────────── */}
+        {service && (() => {
+          const earned      = service.price * 10;
+          const mockCurrent = 980;
+          const newTotal    = mockCurrent + earned;
+          const nextReward  = 1000;
+          const remaining   = Math.max(nextReward - newTotal, 0);
+          return (
+            <View style={styles.pointsCard}>
+              <View style={styles.pointsCardHeader}>
+                <Text style={styles.pointsStarIcon}>★</Text>
+                <Text style={styles.pointsCardTitle}>Vous avez gagné</Text>
+              </View>
+              <Text style={styles.pointsEarned}>+{earned} pts</Text>
+              <Text style={styles.pointsSubtext}>Crédités sur votre compte fidélité</Text>
+              <View style={styles.pointsSep} />
+              <Text style={styles.pointsFooter}>
+                Total : {newTotal} pts
+                {remaining > 0
+                  ? ` · ${remaining} avant coupe offerte`
+                  : ' · Coupe offerte disponible 🎉'}
+              </Text>
+            </View>
+          );
+        })()}
 
         {/* ── Boutons ───────────────────────────────────────────────────── */}
         <View style={styles.btns}>
@@ -454,6 +478,24 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: GREEN_TEXT,
   },
+
+  // Points earned card
+  pointsCard: {
+    backgroundColor: CARD,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.35)',
+    alignItems: 'center',
+  },
+  pointsCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  pointsStarIcon: { fontSize: 20, color: GOLD },
+  pointsCardTitle: { fontFamily: Fonts.semiBold, fontSize: 17, color: '#FFFFFF' },
+  pointsEarned: { fontFamily: Fonts.bold, fontSize: 36, color: GOLD, fontWeight: '700', lineHeight: 40 },
+  pointsSubtext: { fontSize: 13, color: GREY, marginTop: 4 },
+  pointsSep: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', width: '100%', marginVertical: 12 },
+  pointsFooter: { fontSize: 13, color: 'rgba(255,255,255,0.55)', textAlign: 'center' },
 
   // Buttons
   btns: {
