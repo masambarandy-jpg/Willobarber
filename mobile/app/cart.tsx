@@ -117,13 +117,16 @@ export default function CartScreen() {
           <View style={styles.retraitCard}>
             <View style={styles.retraitIconCircle}>
               <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <Path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <Rect x="9" y="12" width="6" height="10" stroke="#C9A84C" strokeWidth="1.5"/>
+                <Path d="M3 21h18"/>
+                <Path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/>
+                <Path d="M10 21v-6h4v6"/>
+                <Path d="M9 9h1M14 9h1"/>
               </Svg>
             </View>
             <View>
               <Text style={styles.retraitTitle}>Retrait en salon</Text>
               <Text style={styles.retraitAddr}>Rue Auguste Van Zande 78 · Bruxelles</Text>
+              <Text style={styles.retraitAddr}>Disponible sous 24h</Text>
             </View>
           </View>
 
