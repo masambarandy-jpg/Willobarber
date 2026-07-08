@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   Platform,
@@ -13,10 +14,13 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path, Circle, Line } from 'react-native-svg';
 import { useAuth } from '@/hooks/useAuth';
+import { useCart } from '@/contexts/CartContext';
 import { ServiceCarousel } from '@/components/home/ServiceCarousel';
 import { HamburgerMenu } from '@/components/HamburgerMenu';
-import { Fonts } from '@/constants';
+import { Fonts, API_BASE_URL } from '@/constants';
+import axios from 'axios';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -34,35 +38,23 @@ const REVIEWS = [
   { name: 'Antoine R.', color: '#C9A84C', ring: '#8B6914', stars: 5, quote: 'Réservation en deux clics, accueil parfait, résultat au-dessus de mes attentes.', service: 'Le Rituel' },
 ];
 
-const NOS_PRODUITS = [
-  {
-    cat: 'COIFFANT', popular: true,
-    photo: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=600&q=80',
-    nom: 'Cire Mate Signature',
-    desc: 'Tenue forte, fini mat naturel. La cire des habitués de WilloBarber.',
-    prix: 18,
-  },
-  {
-    cat: 'SOIN', popular: false,
-    photo: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=600&q=80',
-    nom: 'Huile Barbe Cèdre',
-    desc: 'Huile nourrissante au cèdre et à la jojoba. Barbe douce, peau apaisée.',
-    prix: 24,
-  },
-  {
-    cat: 'SOIN', popular: true,
-    photo: 'https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=600&q=80',
-    nom: 'Sérum Visage',
-    desc: 'Hydratation profonde, anti-fatigue. Geste quotidien, résultat visible.',
-    prix: 32,
-  },
-  {
-    cat: 'STYLING', popular: false,
-    photo: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=600&q=80',
-    nom: 'Pomade Brillante',
-    desc: 'Look rétro, tenue souple et brillance contrôlée. Effet coiffeur à la maison.',
-    prix: 20,
-  },
+type ApiProduct = {
+  id: number;
+  nom: string;
+  categorie: string;
+  description: string;
+  prix: string;
+  contenance: string;
+  photo_url: string;
+  stock: number;
+  actif: boolean;
+};
+
+const PRODUITS_FALLBACK: ApiProduct[] = [
+  { id: 1, nom: 'Cire Mate Signature', categorie: 'COIFFANT', description: 'Tenue forte, fini mat naturel. La cire des habitués de WilloBarber.', prix: '18.00', contenance: '75 ml', photo_url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=600&q=80', stock: 50, actif: true },
+  { id: 2, nom: 'Huile Barbe Cèdre', categorie: 'SOIN BARBE', description: 'Huile nourrissante au cèdre et à la jojoba. Barbe douce, peau apaisée.', prix: '24.00', contenance: '30 ml', photo_url: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=600&q=80', stock: 30, actif: true },
+  { id: 3, nom: 'Sérum Visage', categorie: 'SOIN VISAGE', description: 'Hydratation profonde, anti-fatigue. Geste quotidien, résultat visible.', prix: '32.00', contenance: '30 ml', photo_url: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=600&q=80', stock: 25, actif: true },
+  { id: 4, nom: 'Pomade Brillante', categorie: 'STYLING', description: 'Look rétro, tenue souple et brillance contrôlée. Effet coiffeur à la maison.', prix: '20.00', contenance: '100 ml', photo_url: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=600&q=80', stock: 40, actif: true },
 ];
 
 function PrimaryBookButton({ label, onPress }: { label: string; onPress: () => void }) {
@@ -105,10 +97,38 @@ function Avatar({ initial, color, ring, size = 44 }: { initial: string; color: s
 export default function HomeScreen() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
+  const { addItem, nbArticles } = useCart();
   const firstName = user?.first_name || user?.username || 'vous';
   const scrollRef = useRef<ScrollView>(null);
   const [servicesY, setServicesY] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [produits, setProduits] = useState<ApiProduct[]>(PRODUITS_FALLBACK);
+  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    axios.get<ApiProduct[]>(`${API_BASE_URL}/boutique/produits/`)
+      .then(res => setProduits(res.data))
+      .catch(() => setProduits(PRODUITS_FALLBACK));
+  }, []);
+
+  const handleAddToCart = (prod: ApiProduct) => {
+    addItem({
+      product_id: prod.id,
+      cat: prod.categorie,
+      nom: prod.nom,
+      prix: parseFloat(prod.prix),
+      contenance: prod.contenance,
+      photo: prod.photo_url,
+    });
+    setAddedIds(prev => new Set(prev).add(prod.id));
+    setTimeout(() => {
+      setAddedIds(prev => {
+        const next = new Set(prev);
+        next.delete(prod.id);
+        return next;
+      });
+    }, 1500);
+  };
 
   return (
     <View style={styles.root}>
@@ -121,11 +141,20 @@ export default function HomeScreen() {
           <Text style={styles.headerBrand}>willobarber</Text>
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.cartIconBtn} onPress={() => router.push('/cart' as any)}>
+            <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+              <Line x1="3" y1="6" x2="21" y2="6" stroke="#fff" strokeWidth="1"/>
+              <Path d="M16 10a4 4 0 0 1-8 0"/>
+            </Svg>
+            {nbArticles > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{nbArticles > 9 ? '9+' : nbArticles}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
           <TouchableOpacity style={styles.headerIcon} onPress={() => setMenuOpen(true)}>
             <Text style={styles.headerIconText}>☰</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
-            <Avatar initial={(firstName[0] ?? 'U').toUpperCase()} color="#C9A84C" ring="#8B6914" size={32} />
           </TouchableOpacity>
         </View>
       </View>
@@ -241,32 +270,36 @@ export default function HomeScreen() {
             Des soins et produits sélectionnés par nos barbiers.
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
-            {NOS_PRODUITS.map((prod, i) => (
-              <View key={i} style={styles.prodCard}>
-                <View style={styles.prodPhotoZone}>
-                  <Image source={{ uri: prod.photo }} style={styles.prodPhoto} resizeMode="cover" />
-                  <View style={styles.prodBadgesRow}>
-                    <View style={styles.prodBadgeCat}>
-                      <Text style={styles.prodBadgeCatText}>{prod.cat}</Text>
-                    </View>
-                    {prod.popular && (
-                      <View style={styles.prodBadgePopular}>
-                        <Text style={styles.prodBadgePopularText}>POPULAIRE</Text>
+            {produits.map((prod) => {
+              const added = addedIds.has(prod.id);
+              return (
+                <View key={prod.id} style={styles.prodCard}>
+                  <View style={styles.prodPhotoZone}>
+                    <Image source={{ uri: prod.photo_url }} style={styles.prodPhoto} resizeMode="cover" />
+                    <View style={styles.prodBadgesRow}>
+                      <View style={styles.prodBadgeCat}>
+                        <Text style={styles.prodBadgeCatText}>{prod.categorie}</Text>
                       </View>
-                    )}
+                    </View>
+                  </View>
+                  <View style={styles.prodContent}>
+                    <Text style={styles.prodName}>{prod.nom}</Text>
+                    <Text style={styles.prodDesc}>{prod.description}</Text>
+                    <View style={styles.prodSep} />
+                    <Text style={styles.prodPrice}>{parseFloat(prod.prix).toFixed(0)} €</Text>
+                    <TouchableOpacity
+                      style={[styles.cartBtn, added && styles.cartBtnAdded]}
+                      activeOpacity={0.85}
+                      onPress={() => handleAddToCart(prod)}
+                    >
+                      <Text style={styles.cartBtnText}>
+                        {added ? '✓ Ajouté' : 'Ajouter au panier →'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-                <View style={styles.prodContent}>
-                  <Text style={styles.prodName}>{prod.nom}</Text>
-                  <Text style={styles.prodDesc}>{prod.desc}</Text>
-                  <View style={styles.prodSep} />
-                  <Text style={styles.prodPrice}>{prod.prix} €</Text>
-                  <TouchableOpacity style={styles.cartBtn} activeOpacity={0.85}>
-                    <Text style={styles.cartBtnText}>Ajouter au panier →</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -306,6 +339,9 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   headerIcon: {},
   headerIconText: { fontSize: 20, color: '#fff' },
+  cartIconBtn: { position: 'relative', width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  cartBadge: { position: 'absolute', top: -4, right: -6, backgroundColor: '#C9A84C', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  cartBadgeText: { fontSize: 9, fontWeight: '700', color: '#1A1208' },
 
   scroll: { flex: 1 },
 
@@ -518,6 +554,9 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     paddingVertical: 11,
     alignItems: 'center',
+  },
+  cartBtnAdded: {
+    backgroundColor: '#4CAF50',
   },
   cartBtnText: {
     fontFamily: Fonts.semiBold,

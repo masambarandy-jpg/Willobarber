@@ -16,6 +16,7 @@ import {
 import { Platform } from 'react-native';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { AuthModalProvider } from '@/contexts/AuthModalContext';
+import { CartProvider } from '@/contexts/CartContext';
 import { Colors } from '@/constants';
 
 SplashScreen.preventAutoHideAsync();
@@ -44,6 +45,7 @@ function RootNavigation() {
         />
         <Stack.Screen name="(tabs)" options={{ title: 'WilloBarber' }} />
         <Stack.Screen name="(booking)" />
+        <Stack.Screen name="cart" options={{ headerShown: false }} />
       </Stack>
     </>
   );
@@ -67,9 +69,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <AuthModalProvider>
-          <RootNavigation />
-        </AuthModalProvider>
+        <CartProvider>
+          <AuthModalProvider>
+            <RootNavigation />
+          </AuthModalProvider>
+        </CartProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );
