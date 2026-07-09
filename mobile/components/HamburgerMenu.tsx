@@ -28,8 +28,8 @@ interface HamburgerMenuProps {
 
 const NAV_ITEMS = [
   { num: '01', label: 'Accueil',         sub: 'Votre espace client',  route: '/(tabs)/index'    },
-  { num: '02', label: 'Nos Prestations', sub: 'Coupes, soins & plus', route: '/(tabs)/services' },
-  { num: '03', label: "L'Équipe",        sub: 'Nos barbiers',          route: '/(tabs)/team'     },
+  { num: '02', label: 'Nos Prestations', sub: 'Coupes, soins & plus', route: '/(tabs)/catalogue' },
+  { num: '03', label: "L'Équipe",        sub: 'Nos barbiers',          route: '/(tabs)/equipe'    },
   { num: '04', label: 'Réserver',        sub: 'Prendre rendez-vous',  route: '/(tabs)/book'     },
 ] as const;
 
