@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
@@ -27,6 +27,7 @@ import {
   type BookingState,
   type CardForm,
   type PaymentMethod,
+  SERVICES,
   type StaticBarber,
   type StaticService,
 } from '@/components/booking/data';
@@ -64,12 +65,16 @@ const EMPTY_CARD: CardForm = {
 export default function BookScreen() {
   const router  = useRouter();
   const insets  = useSafeAreaInsets();
+  const { serviceId } = useLocalSearchParams<{ serviceId?: string }>();
   const { isAuthenticated, user } = useAuth();
   const { showLoginModal } = useAuthModal();
   const prefilled = useRef(false);
   const [step,          setStep]          = useState(1);
   const [confirmed,     setConfirmed]     = useState(false);
-  const [booking,       setBooking]       = useState<BookingState>(INITIAL_BOOKING);
+  const [booking,       setBooking]       = useState<BookingState>(() => {
+    const preselected = SERVICES.find(s => s.id === serviceId);
+    return preselected ? { ...INITIAL_BOOKING, service: preselected } : INITIAL_BOOKING;
+  });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
   const [cardForm,      setCardForm]      = useState<CardForm>(EMPTY_CARD);
   const [amountChoice,  setAmountChoice]  = useState<AmountChoice>('deposit');
