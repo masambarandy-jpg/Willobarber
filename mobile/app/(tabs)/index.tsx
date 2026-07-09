@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -19,8 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCart } from '@/contexts/CartContext';
 import { ServiceCarousel } from '@/components/home/ServiceCarousel';
 import { HamburgerMenu } from '@/components/HamburgerMenu';
-import { Fonts, API_BASE_URL } from '@/constants';
-import axios from 'axios';
+import { Fonts } from '@/constants';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -38,24 +37,62 @@ const REVIEWS = [
   { name: 'Antoine R.', color: '#C9A84C', ring: '#8B6914', stars: 5, quote: 'Réservation en deux clics, accueil parfait, résultat au-dessus de mes attentes.', service: 'Le Rituel' },
 ];
 
-type ApiProduct = {
-  id: number;
+type Produit = {
+  id: string;
+  cat: string;
+  popular: boolean;
+  photo: string;
   nom: string;
-  categorie: string;
-  description: string;
-  prix: string;
+  desc: string;
   contenance: string;
-  photo_url: string;
-  stock: number;
-  actif: boolean;
+  prix: number;
 };
 
-const PRODUITS_FALLBACK: ApiProduct[] = [
-  { id: 1, nom: 'Cire Mate Signature', categorie: 'COIFFANT', description: 'Tenue forte, fini mat naturel. La cire des habitués de WilloBarber.', prix: '18.00', contenance: '75 ml', photo_url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=600&q=80', stock: 50, actif: true },
-  { id: 2, nom: 'Huile Barbe Cèdre', categorie: 'SOIN BARBE', description: 'Huile nourrissante au cèdre et à la jojoba. Barbe douce, peau apaisée.', prix: '24.00', contenance: '30 ml', photo_url: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=600&q=80', stock: 30, actif: true },
-  { id: 3, nom: 'Sérum Visage', categorie: 'SOIN VISAGE', description: 'Hydratation profonde, anti-fatigue. Geste quotidien, résultat visible.', prix: '32.00', contenance: '30 ml', photo_url: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=600&q=80', stock: 25, actif: true },
-  { id: 4, nom: 'Pomade Brillante', categorie: 'STYLING', description: 'Look rétro, tenue souple et brillance contrôlée. Effet coiffeur à la maison.', prix: '20.00', contenance: '100 ml', photo_url: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=600&q=80', stock: 40, actif: true },
+const NOS_PRODUITS: Produit[] = [
+  {
+    id: 'cire',
+    cat: 'COIFFANT',
+    popular: true,
+    photo: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80',
+    nom: 'Cire Mate Signature',
+    desc: 'Fixation forte, fini mat. Tient la journée sans effet carton.',
+    contenance: '75 ml',
+    prix: 18,
+  },
+  {
+    id: 'huile',
+    cat: 'SOIN BARBE',
+    popular: false,
+    photo: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80',
+    nom: 'Huile Barbe Cèdre',
+    desc: 'Nourrit, assouplit, parfume. Cèdre & bois de santal.',
+    contenance: '30 ml',
+    prix: 24,
+  },
+  {
+    id: 'serum',
+    cat: 'SOIN VISAGE',
+    popular: true,
+    photo: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80',
+    nom: 'Sérum Visage',
+    desc: 'Hydratation profonde, teint réveillé. Matin et soir.',
+    contenance: '30 ml',
+    prix: 32,
+  },
+  {
+    id: 'pommade',
+    cat: 'STYLING',
+    popular: false,
+    photo: 'https://images.unsplash.com/photo-1594035910387-fea081e66b5d?w=600&q=80',
+    nom: 'Pommade Brillance',
+    desc: "Brillance soignée, coiffage souple, rework facile à l'eau.",
+    contenance: '100 ml',
+    prix: 22,
+  },
 ];
+
+const PRODUITS_CARD_W = 300;
+const PRODUITS_CARD_GAP = 16;
 
 function PrimaryBookButton({ label, onPress }: { label: string; onPress: () => void }) {
   const inner = (
@@ -102,23 +139,17 @@ export default function HomeScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [servicesY, setServicesY] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [produits, setProduits] = useState<ApiProduct[]>(PRODUITS_FALLBACK);
-  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [produitsIndex, setProduitsIndex] = useState(0);
 
-  useEffect(() => {
-    axios.get<ApiProduct[]>(`${API_BASE_URL}/boutique/produits/`)
-      .then(res => setProduits(res.data))
-      .catch(() => setProduits(PRODUITS_FALLBACK));
-  }, []);
-
-  const handleAddToCart = (prod: ApiProduct) => {
+  const handleAddToCart = (prod: Produit) => {
     addItem({
-      product_id: prod.id,
-      cat: prod.categorie,
+      product_id: NOS_PRODUITS.findIndex(p => p.id === prod.id) + 1,
+      cat: prod.cat,
       nom: prod.nom,
-      prix: parseFloat(prod.prix),
+      prix: prod.prix,
       contenance: prod.contenance,
-      photo: prod.photo_url,
+      photo: prod.photo,
     });
     setAddedIds(prev => new Set(prev).add(prod.id));
     setTimeout(() => {
@@ -128,6 +159,12 @@ export default function HomeScreen() {
         return next;
       });
     }, 1500);
+  };
+
+  const handleProduitsScroll = (e: any) => {
+    const x = e.nativeEvent.contentOffset.x;
+    const idx = Math.round(x / (PRODUITS_CARD_W + PRODUITS_CARD_GAP));
+    setProduitsIndex(Math.max(0, Math.min(NOS_PRODUITS.length - 1, idx)));
   };
 
   return (
@@ -212,6 +249,81 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* ── Nos Produits section (cream) ── */}
+        <View style={styles.produitsSection}>
+          <Text style={styles.produitsKicker}>NOS PRODUITS</Text>
+          <Text style={styles.produitsTitle}>
+            L'entretien, <Text style={styles.produitsTitleGold}>prolongé chez vous.</Text>
+          </Text>
+          <Text style={styles.produitsSub}>
+            Les soins que nous utilisons au salon, sélectionnés pour durer.
+          </Text>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.produitsScrollContent}
+            snapToInterval={PRODUITS_CARD_W + PRODUITS_CARD_GAP}
+            decelerationRate="fast"
+            scrollEventThrottle={16}
+            onScroll={handleProduitsScroll}
+          >
+            {NOS_PRODUITS.map((prod) => {
+              const added = addedIds.has(prod.id);
+              return (
+                <View key={prod.id} style={styles.prodCard2}>
+                  <View style={styles.prodPhotoZone2}>
+                    <Image source={{ uri: prod.photo }} style={styles.prodPhoto2} resizeMode="cover" />
+                    <View style={styles.prodBadgesRow2}>
+                      <View style={styles.prodBadgeCat2}>
+                        <Text style={styles.prodBadgeText2}>{prod.cat}</Text>
+                      </View>
+                      {prod.popular && (
+                        <View style={[styles.prodBadgeCat2, styles.prodBadgePopular2]}>
+                          <Text style={styles.prodBadgeText2}>POPULAIRE</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.prodContent2}>
+                    <Text style={styles.prodName2}>{prod.nom}</Text>
+                    <Text style={styles.prodDesc2}>{prod.desc}</Text>
+                    <View style={styles.prodSep2} />
+                    <View style={styles.prodMetaRow2}>
+                      <View style={styles.prodMetaLeft2}>
+                        <Svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <Circle cx="12" cy="12" r="9" />
+                          <Path d="M12 7v5l3 3" />
+                        </Svg>
+                        <Text style={styles.prodContenance2}>{prod.contenance}</Text>
+                      </View>
+                      <Text style={styles.prodPrice2}>
+                        {prod.prix}
+                        <Text style={styles.prodPriceUnit2}> €</Text>
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.cartBtn2, added && styles.cartBtnAdded]}
+                      activeOpacity={0.85}
+                      onPress={() => handleAddToCart(prod)}
+                    >
+                      <Text style={styles.cartBtnText2}>
+                        {added ? '✓ Ajouté' : 'Ajouter au panier →'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.produitsDots}>
+            {NOS_PRODUITS.map((_, i) => (
+              <View key={i} style={[styles.dot, i === produitsIndex && styles.dotActive]} />
+            ))}
+          </View>
+        </View>
+
         {/* ── Team section (dark) ── */}
         <View style={styles.darkSection}>
           <Text style={styles.sectionKicker}>L'ÉQUIPE</Text>
@@ -257,49 +369,6 @@ export default function HomeScreen() {
                 </View>
               </View>
             ))}
-          </ScrollView>
-        </View>
-
-        {/* ── Nos Produits section (dark) ── */}
-        <View style={styles.darkSection}>
-          <Text style={styles.sectionKicker}>WilloBarber · Bruxelles</Text>
-          <Text style={styles.sectionTitleLight}>
-            Nos <Text style={styles.sectionTitleGold}>Produits</Text>
-          </Text>
-          <Text style={[styles.sectionSub, { color: 'rgba(255,255,255,0.45)' }]}>
-            Des soins et produits sélectionnés par nos barbiers.
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
-            {produits.map((prod) => {
-              const added = addedIds.has(prod.id);
-              return (
-                <View key={prod.id} style={styles.prodCard}>
-                  <View style={styles.prodPhotoZone}>
-                    <Image source={{ uri: prod.photo_url }} style={styles.prodPhoto} resizeMode="cover" />
-                    <View style={styles.prodBadgesRow}>
-                      <View style={styles.prodBadgeCat}>
-                        <Text style={styles.prodBadgeCatText}>{prod.categorie}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={styles.prodContent}>
-                    <Text style={styles.prodName}>{prod.nom}</Text>
-                    <Text style={styles.prodDesc}>{prod.description}</Text>
-                    <View style={styles.prodSep} />
-                    <Text style={styles.prodPrice}>{parseFloat(prod.prix).toFixed(0)} €</Text>
-                    <TouchableOpacity
-                      style={[styles.cartBtn, added && styles.cartBtnAdded]}
-                      activeOpacity={0.85}
-                      onPress={() => handleAddToCart(prod)}
-                    >
-                      <Text style={styles.cartBtnText}>
-                        {added ? '✓ Ajouté' : 'Ajouter au panier →'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
           </ScrollView>
         </View>
 
@@ -465,103 +534,171 @@ const styles = StyleSheet.create({
   tag: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', borderRadius: 100, paddingHorizontal: 12, paddingVertical: 5 },
   tagText: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
 
-  // Product cards
-  prodCard: {
-    width: 230,
-    backgroundColor: '#1A1814',
+  // Nos Produits section (cream)
+  produitsSection: {
+    backgroundColor: '#F5EFE7',
+    paddingVertical: 40,
+    paddingHorizontal: 0,
+  },
+  produitsKicker: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 4,
+    color: '#C9A84C',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    paddingHorizontal: 22,
+  },
+  produitsTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#1A1614',
+    textAlign: 'center',
+    lineHeight: 40,
+    marginTop: 10,
+    paddingHorizontal: 22,
+  },
+  produitsTitleGold: {
+    fontFamily: Fonts.semiBoldItalic,
+    color: '#C9A84C',
+    fontStyle: 'italic',
+  },
+  produitsSub: {
+    fontSize: 14,
+    color: '#6B6560',
+    textAlign: 'center',
+    maxWidth: 320,
+    marginTop: 8,
+    alignSelf: 'center',
+    paddingHorizontal: 22,
+  },
+  produitsScrollContent: {
+    paddingHorizontal: 20,
+    gap: PRODUITS_CARD_GAP,
+    marginTop: 24,
+  },
+  produitsDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 20,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#D4CFC6',
+  },
+  dotActive: {
+    width: 20,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#C9A84C',
+  },
+
+  // Product cards (v2)
+  prodCard2: {
+    width: PRODUITS_CARD_W,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
     elevation: 4,
   },
-  prodPhotoZone: {
-    height: 150,
+  prodPhotoZone2: {
+    height: 240,
     position: 'relative',
   },
-  prodPhoto: {
+  prodPhoto2: {
     width: '100%',
-    height: 150,
+    height: 240,
   },
-  prodBadgesRow: {
+  prodBadgesRow2: {
     position: 'absolute',
-    bottom: 10,
-    left: 10,
+    bottom: 14,
+    left: 14,
     flexDirection: 'row',
-    gap: 6,
   },
-  prodBadgeCat: {
+  prodBadgeCat2: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  prodBadgeCatText: {
-    fontFamily: Fonts.semiBold,
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-  },
-  prodBadgePopular: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 100,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  prodBadgePopularText: {
-    fontFamily: Fonts.semiBold,
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-  },
-  prodContent: {
     paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 14,
+    paddingVertical: 5,
   },
-  prodName: {
+  prodBadgePopular2: {
+    backgroundColor: '#1A1614',
+    marginLeft: 8,
+  },
+  prodBadgeText2: {
     fontFamily: Fonts.bold,
-    fontSize: 18,
+    color: '#fff',
+    fontSize: 10,
     fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
   },
-  prodDesc: {
-    fontSize: 12.5,
-    color: '#6B6560',
-    lineHeight: 18,
-    marginBottom: 10,
+  prodContent2: {
+    padding: 18,
   },
-  prodSep: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    marginBottom: 10,
-  },
-  prodPrice: {
+  prodName2: {
     fontFamily: Fonts.bold,
     fontSize: 24,
     fontWeight: '700',
-    color: '#C9A84C',
-    textAlign: 'center',
-    marginBottom: 10,
+    color: '#1A1614',
   },
-  cartBtn: {
+  prodDesc2: {
+    fontSize: 13,
+    color: '#6B6560',
+    lineHeight: 20,
+    marginTop: 6,
+    marginBottom: 14,
+  },
+  prodSep2: {
+    height: 1,
+    backgroundColor: '#E8E2D8',
+  },
+  prodMetaRow2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  prodMetaLeft2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  prodContenance2: {
+    fontSize: 13,
+    color: '#6B6560',
+  },
+  prodPrice2: {
+    fontFamily: Fonts.bold,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1A1614',
+  },
+  prodPriceUnit2: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  cartBtn2: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
-    paddingVertical: 11,
+    paddingVertical: 12,
     alignItems: 'center',
+    marginTop: 14,
   },
   cartBtnAdded: {
     backgroundColor: '#4CAF50',
   },
-  cartBtnText: {
+  cartBtnText2: {
     fontFamily: Fonts.semiBold,
-    color: '#1a1208',
-    fontSize: 13,
+    color: '#1A1208',
+    fontSize: 14,
     fontWeight: '600',
   },
 
