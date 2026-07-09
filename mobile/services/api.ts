@@ -1,7 +1,6 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { router } from 'expo-router';
 import { API_BASE_URL } from '@/constants';
 import type {
   AuthResponse,
@@ -114,7 +113,6 @@ http.interceptors.response.use(
       } catch (err) {
         processQueue(err, null);
         await TokenStorage.clear();
-        router.replace('/(auth)/login');
         return Promise.reject(err);
       } finally {
         isRefreshing = false;
@@ -137,8 +135,8 @@ export const authApi = {
   register: (payload: RegisterPayload) =>
     http.post<AuthResponse>('/auth/register/', payload).then((r) => r.data),
 
-  passwordlessLogin: (email: string) =>
-    http.post<AuthResponse>('/auth/passwordless-login/', { email }).then((r) => r.data),
+  passwordlessLogin: (identifier: string) =>
+    http.post<AuthResponse>('/auth/passwordless-login/', { email: identifier }).then((r) => r.data),
 
   logout: (refresh: string) =>
     http.post('/auth/logout/', { refresh }),

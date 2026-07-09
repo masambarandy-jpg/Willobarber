@@ -8,30 +8,27 @@ import React, {
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
   Easing,
   Platform,
-  ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  StyleSheet,
 } from 'react-native';
-import { router } from 'expo-router';
+import { BlurView } from 'expo-blur';
+import { Feather } from '@expo/vector-icons';
 import { appointmentsApi, authApi, TokenStorage } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { Fonts } from '@/constants';
-
-const { height: SCREEN_H } = Dimensions.get('window');
-const PANEL_MAX_HEIGHT = SCREEN_H * 0.75;
-
-type Step = 'idle' | 'exists' | 'new';
 
 type AuthModalContextType = {
   showLoginModal: (onSuccess?: () => void, message?: string) => void;
   hideLoginModal: () => void;
 };
+
+const isPhone = (value: string) => /^[+]?[0-9\s\-]{8,}$/.test(value.trim());
+const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
 const AuthModalContext = createContext<AuthModalContextType>({
   showLoginModal: () => {},
@@ -45,35 +42,24 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [onSuccessCallback, setOnSuccessCallback] = useState<(() => void) | null>(null);
 
-  const [identifier, setIdentifierState] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [step, setStep] = useState<Step>('idle');
-  const [existingFirstName, setExistingFirstName] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
 
-  const panelAnim = useRef(new Animated.Value(SCREEN_H)).current;
+  const identifierInputRef = useRef<TextInput>(null);
+
   const overlayAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(-20)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const cardAnim = useRef(new Animated.Value(0.92)).current;
 
   const showLoginModal = (onSuccess?: () => void, msg?: string) => {
-    if (Platform.OS === 'web') {
-      router.push('/(auth)/login');
-      return;
-    }
     setOnSuccessCallback(() => onSuccess ?? null);
     setMessage(msg);
-    setIdentifierState('');
-    setError('');
-    setStep('idle');
     setFirstName('');
-    setLastName('');
-    slideAnim.setValue(-20);
-    opacityAnim.setValue(0);
-    panelAnim.setValue(SCREEN_H);
+    setIdentifier('');
+    setError('');
     overlayAnim.setValue(0);
+    cardAnim.setValue(0.92);
     setVisible(true);
   };
 
@@ -86,15 +72,15 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(panelAnim, {
-          toValue: 0,
-          duration: 350,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
         Animated.timing(overlayAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(cardAnim, {
+          toValue: 1,
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
       ]).start();
@@ -104,15 +90,14 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const dismiss = (callback?: () => void) => {
     if (loading) return;
     Animated.parallel([
-      Animated.timing(panelAnim, {
-        toValue: SCREEN_H,
-        duration: 300,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }),
       Animated.timing(overlayAnim, {
         toValue: 0,
-        duration: 250,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardAnim, {
+        toValue: 0.92,
+        duration: 200,
         useNativeDriver: true,
       }),
     ]).start(() => {
@@ -132,66 +117,37 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const animateNewStep = () => {
-    Animated.parallel([
-      Animated.timing(slideAnim, { toValue: 0, duration: 320, useNativeDriver: true }),
-      Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const resetToIdle = (text: string) => {
-    setIdentifierState(text);
-    setStep('idle');
-    setError('');
-    slideAnim.setValue(-20);
-    opacityAnim.setValue(0);
-  };
-
-  const handleContinue = async () => {
-    if (!identifier.trim()) {
-      setError('Veuillez saisir un e-mail ou numéro de téléphone.');
+  const handleAccess = async () => {
+    const value = identifier.trim();
+    if (!value) {
+      setError('Veuillez saisir votre email ou numéro de téléphone.');
+      return;
+    }
+    if (!isEmail(value) && !isPhone(value)) {
+      setError('Veuillez saisir un email ou un numéro de téléphone valide.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const res = await appointmentsApi.checkClient(identifier.trim());
-      if (res.status === 'exists') {
-        setExistingFirstName(res.first_name ?? '');
-        setStep('exists');
-      } else {
-        setStep('new');
-        animateNewStep();
+      const res = await appointmentsApi.checkClient(value);
+      if (res.status !== 'exists') {
+        setError('Aucun compte trouvé pour cet email ou ce numéro.');
+        return;
       }
-    } catch {
-      setError('Vérification impossible. Vérifiez votre connexion et réessayez.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfirm = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const { access, refresh } = await authApi.passwordlessLogin(identifier.trim());
+      const { access, refresh } = await authApi.passwordlessLogin(value);
       await TokenStorage.save(access, refresh);
       await refreshUser();
       handleSuccess();
-    } catch {
-      setError('Connexion impossible. Veuillez réessayer.');
+    } catch (error: any) {
+      console.log('Login error:', error?.response?.data || error?.message);
+      setError('Connexion impossible. Vérifiez votre connexion et réessayez.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateAccount = () => {
-    if (!firstName.trim() || !lastName.trim()) {
-      setError('Prénom et nom requis.');
-      return;
-    }
-    handleSuccess();
-  };
+  const focusIdentifier = () => identifierInputRef.current?.focus();
 
   return (
     <AuthModalContext.Provider value={{ showLoginModal, hideLoginModal }}>
@@ -200,11 +156,15 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
 
         {visible && (
           <View style={styles.container} pointerEvents="box-none">
-            {/* Dark overlay */}
+            {/* Fond flou */}
             <Animated.View
-              style={[StyleSheet.absoluteFillObject, styles.overlay, { opacity: overlayAnim }]}
+              style={[StyleSheet.absoluteFillObject, { opacity: overlayAnim }]}
               pointerEvents="auto"
             >
+              <View style={[StyleSheet.absoluteFillObject, styles.overlayTint]} />
+              {Platform.OS !== 'web' && (
+                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} />
+              )}
               <TouchableOpacity
                 style={StyleSheet.absoluteFill}
                 onPress={handleClose}
@@ -212,122 +172,102 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
               />
             </Animated.View>
 
-            {/* Bottom sheet panel */}
-            <Animated.View style={[styles.panel, { transform: [{ translateY: panelAnim }] }]}>
-              <View style={styles.dragHandle} />
+            {/* Carte modale centrée */}
+            <Animated.View
+              style={[
+                styles.card,
+                {
+                  opacity: overlayAnim,
+                  transform: [{ scale: cardAnim }],
+                },
+              ]}
+            >
+              <TouchableOpacity style={styles.closeBtn} onPress={handleClose} activeOpacity={0.7}>
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
 
-              {!!message && <Text style={styles.contextMessage}>{message}</Text>}
+              <Text style={styles.kicker}>— ESPACE CLIENT</Text>
+              <Text style={styles.title}>Connexion</Text>
+              <Text style={styles.subtitle}>
+                {message || 'Accédez à vos rendez-vous, votre historique et vos points fidélité.'}
+              </Text>
 
-              <View style={styles.headerRow}>
-                <View style={styles.logoRow}>
-                  <Text style={styles.logoMark}>{'{w}'}</Text>
-                  <Text style={styles.logoText}>willobarber</Text>
-                </View>
-                <TouchableOpacity style={styles.closeBtn} onPress={handleClose} activeOpacity={0.7}>
-                  <Text style={styles.closeBtnText}>✕</Text>
+              <View style={styles.quickRow}>
+                <TouchableOpacity style={styles.quickPill} onPress={focusIdentifier} activeOpacity={0.75}>
+                  <Text style={styles.quickPillGmailIcon}>G</Text>
+                  <Text style={styles.quickPillText}>Gmail</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickPill} onPress={focusIdentifier} activeOpacity={0.75}>
+                  <Feather name="mail" size={14} color="#4A9EFF" />
+                  <Text style={styles.quickPillText}>Outlook</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickPill} onPress={focusIdentifier} activeOpacity={0.75}>
+                  <Feather name="user" size={14} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.quickPillText}>Autre</Text>
                 </TouchableOpacity>
               </View>
 
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.formContent}
-              >
-                <Text style={styles.formTitle}>
-                  {step === 'exists' ? `Ravi de vous revoir,\n${existingFirstName} !` : 'Bon retour.'}
-                </Text>
-                <Text style={styles.formSubtitle}>
-                  {step === 'exists'
-                    ? 'Votre profil a été retrouvé. Confirmez pour continuer.'
-                    : 'Entrez votre e-mail ou téléphone pour accéder à votre espace.'}
-                </Text>
+              <View style={styles.separatorRow}>
+                <View style={styles.separatorLine} />
+                <Text style={styles.separatorText}>ou entrez votre email ou téléphone</Text>
+                <View style={styles.separatorLine} />
+              </View>
 
-                {!!error && (
-                  <View style={styles.errorBox}>
-                    <Text style={styles.errorText}>{error}</Text>
-                  </View>
-                )}
+              {!!error && (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
 
+              <Text style={styles.label}>PRÉNOM</Text>
+              <View style={styles.inputWrap}>
+                <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
                 <TextInput
-                  style={[styles.input, step !== 'idle' && styles.inputLocked]}
-                  value={identifier}
-                  onChangeText={resetToIdle}
-                  placeholder="E-mail ou numéro de téléphone"
+                  style={styles.input}
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  placeholder="Antoine"
                   placeholderTextColor="rgba(255,255,255,0.35)"
-                  keyboardType="email-address"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                  onSubmitEditing={focusIdentifier}
+                />
+                <Feather name="chevron-down" size={16} color="rgba(255,255,255,0.4)" />
+              </View>
+
+              <Text style={styles.label}>E-MAIL OU TÉLÉPHONE</Text>
+              <View style={styles.inputWrap}>
+                <Feather name={isPhone(identifier) ? 'phone' : 'mail'} size={16} color="rgba(255,255,255,0.4)" />
+                <TextInput
+                  ref={identifierInputRef}
+                  style={styles.input}
+                  value={identifier}
+                  onChangeText={(t) => {
+                    setIdentifier(t);
+                    if (error) setError('');
+                  }}
+                  placeholder="exemple@email.com ou +32 470 ..."
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  keyboardType="default"
                   autoCapitalize="none"
                   autoCorrect={false}
                   autoComplete="off"
-                  editable={step === 'idle'}
                   returnKeyType="done"
-                  onSubmitEditing={step === 'idle' ? handleContinue : undefined}
+                  onSubmitEditing={handleAccess}
                 />
+              </View>
 
-                {step === 'new' && (
-                  <Animated.View style={{ opacity: opacityAnim, transform: [{ translateY: slideAnim }] }}>
-                    <View style={styles.newBadge}>
-                      <Text style={styles.newBadgeText}>PREMIÈRE VISITE</Text>
-                    </View>
-                    <Text style={styles.newTitle}>
-                      Bienvenue !{' '}
-                      <Text style={styles.newTitleGold}>Créons votre profil.</Text>
-                    </Text>
-                    <TextInput
-                      style={styles.input}
-                      value={firstName}
-                      onChangeText={setFirstName}
-                      placeholder="Prénom"
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                      autoCorrect={false}
-                      returnKeyType="next"
-                    />
-                    <TextInput
-                      style={styles.input}
-                      value={lastName}
-                      onChangeText={setLastName}
-                      placeholder="Nom"
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                      autoCorrect={false}
-                      returnKeyType="done"
-                      onSubmitEditing={handleCreateAccount}
-                    />
-                  </Animated.View>
-                )}
-
-                {step === 'idle' && (
-                  <TouchableOpacity
-                    style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
-                    onPress={handleContinue}
-                    disabled={loading}
-                    activeOpacity={0.85}
-                  >
-                    {loading
-                      ? <ActivityIndicator color="#1A1208" size="small" />
-                      : <Text style={styles.btnPrimaryText}>Continuer  →</Text>
-                    }
-                  </TouchableOpacity>
-                )}
-
-                {step === 'exists' && (
-                  <TouchableOpacity
-                    style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
-                    onPress={handleConfirm}
-                    disabled={loading}
-                    activeOpacity={0.85}
-                  >
-                    {loading
-                      ? <ActivityIndicator color="#1A1208" size="small" />
-                      : <Text style={styles.btnPrimaryText}>Confirmer  →</Text>
-                    }
-                  </TouchableOpacity>
-                )}
-
-                {step === 'new' && (
-                  <TouchableOpacity style={styles.btnPrimary} onPress={handleCreateAccount} activeOpacity={0.85}>
-                    <Text style={styles.btnPrimaryText}>Créer mon compte & continuer  →</Text>
-                  </TouchableOpacity>
-                )}
-              </ScrollView>
+              <TouchableOpacity
+                style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
+                onPress={handleAccess}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                {loading
+                  ? <ActivityIndicator color="#1A1208" size="small" />
+                  : <Text style={styles.btnPrimaryText}>Accéder à mon espace  →</Text>
+                }
+              </TouchableOpacity>
             </Animated.View>
           </View>
         )}
@@ -342,84 +282,107 @@ const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
-  },
-  overlay: {
-    backgroundColor: Platform.OS === 'web' ? '#0D0C0A' : 'rgba(0,0,0,0.7)',
-  },
-  panel: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#1A1814',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
-    maxHeight: PANEL_MAX_HEIGHT,
-    zIndex: 10000,
-  },
-  dragHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  contextMessage: {
-    fontFamily: Fonts.italic,
-    fontStyle: 'italic',
-    fontSize: 18,
-    color: '#C9A84C',
-    textAlign: 'center',
-    marginBottom: 14,
-    lineHeight: 24,
-  },
-  headerRow: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
   },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoMark: {
-    fontFamily: Fonts.bold,
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#C9A84C',
-    letterSpacing: 1,
+  overlayTint: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    ...(Platform.OS === 'web'
+      ? ({
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        } as any)
+      : {}),
   },
-  logoText: {
-    fontFamily: Fonts.semiBold,
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
+  card: {
+    backgroundColor: '#1A1814',
+    borderRadius: 24,
+    padding: 28,
+    width: '90%',
+    maxWidth: 420,
+    zIndex: 10000,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 20,
   },
   closeBtn: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 1,
   },
   closeBtnText: { color: '#fff', fontSize: 14 },
-  formContent: { paddingBottom: 8 },
-  formTitle: {
+  kicker: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 3,
+    color: '#C9A84C',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  title: {
     fontFamily: Fonts.bold,
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 7,
-    letterSpacing: 0.2,
+    marginBottom: 8,
   },
-  formSubtitle: {
+  subtitle: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.55)',
-    marginBottom: 22,
     lineHeight: 20,
+    marginBottom: 22,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  quickPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 100,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  quickPillGmailIcon: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#EA4335',
+  },
+  quickPillText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
+  },
+  separatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  separatorLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  separatorText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
   },
   errorBox: {
     backgroundColor: 'rgba(192,57,43,0.15)',
@@ -430,48 +393,49 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   errorText: { fontSize: 13, color: '#FF6B6B', lineHeight: 18 },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
+  label: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: '#C9A84C',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.12)',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 14.5,
-    color: '#fff',
     marginBottom: 16,
   },
-  inputLocked: { opacity: 0.55, borderColor: 'rgba(200,169,126,0.3)' },
-  newBadge: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.4)',
-    borderRadius: 100,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    marginBottom: 12,
-  },
-  newBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: '#C9A84C' },
-  newTitle: {
-    fontFamily: Fonts.semiBold,
-    fontSize: 18,
-    fontWeight: '600',
+  input: {
+    flex: 1,
+    fontSize: 14.5,
     color: '#fff',
-    marginBottom: 18,
-    lineHeight: 24,
+    padding: 0,
   },
-  newTitleGold: { color: '#C9A84C', fontStyle: 'italic' },
   btnPrimary: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
     paddingVertical: 16,
     alignItems: 'center',
+    marginTop: 16,
     shadowColor: '#C9A84C',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 6,
-    marginBottom: 20,
   },
-  btnPrimaryText: { color: '#1A1208', fontWeight: '700', fontSize: 15.5, letterSpacing: 0.2 },
+  btnPrimaryText: {
+    fontFamily: Fonts.semiBold,
+    color: '#1A1208',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.2,
+  },
 });

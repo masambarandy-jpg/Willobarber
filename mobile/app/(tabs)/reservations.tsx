@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useReservations } from '@/hooks/useReservations';
 import type { Reservation } from '@/types';
 import { Fonts } from '@/constants';
@@ -118,6 +119,7 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
 export default function ReservationsScreen() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
+  const { showLoginModal } = useAuthModal();
   const { isLoading, refetch, cancel } = useReservations();
   const [histFilter, setHistFilter] = useState('Tous');
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
@@ -131,6 +133,26 @@ export default function ReservationsScreen() {
       useNativeDriver: false,
     }).start();
   }, []);
+
+  if (!isAuthenticated || !user) {
+    return (
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center', padding: 28 }]}>
+        <Text style={{ fontFamily: Fonts.bold, fontSize: 28, fontWeight: '700', color: '#fff', marginBottom: 10, textAlign: 'center' }}>
+          Mon Espace
+        </Text>
+        <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 32, lineHeight: 22 }}>
+          Connectez-vous pour accéder à vos rendez-vous, votre historique et vos points fidélité.
+        </Text>
+        <TouchableOpacity
+          style={{ backgroundColor: '#C9A84C', borderRadius: 100, paddingVertical: 15, paddingHorizontal: 40 }}
+          onPress={() => showLoginModal(undefined, 'Connectez-vous pour accéder à votre espace.')}
+          activeOpacity={0.85}
+        >
+          <Text style={{ color: '#1A1208', fontWeight: '700', fontSize: 15 }}>Se connecter</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const username = user?.username || user?.first_name || 'Client';
   const nextTarget  = getNextTarget(MOCK_LOYALTY.points);

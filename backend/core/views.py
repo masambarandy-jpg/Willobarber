@@ -97,10 +97,16 @@ class PasswordlessLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email', '').strip()
-        if not email:
-            return Response({'error': 'email requis'}, status=400)
-        user = User.objects.filter(email__iexact=email).first()
+        identifier = (request.data.get('identifier') or request.data.get('email') or '').strip()
+        if not identifier:
+            return Response({'error': 'identifier requis'}, status=400)
+
+        if '@' in identifier:
+            user = User.objects.filter(email__iexact=identifier).first()
+        else:
+            digits = ''.join(filter(str.isdigit, identifier))
+            user = User.objects.filter(phone=digits).first() if digits else None
+
         if not user:
             return Response({'error': 'Utilisateur non trouvé'}, status=404)
         refresh = RefreshToken.for_user(user)

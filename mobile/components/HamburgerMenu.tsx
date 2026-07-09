@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 import { Fonts } from '@/constants';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -36,6 +37,7 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
   const router   = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated } = useAuth();
+  const { showLoginModal } = useAuthModal();
 
   const displayName = user?.first_name || user?.username || '';
   const initial     = (displayName[0] ?? 'U').toUpperCase();
@@ -69,6 +71,11 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
   const navigate = (route: string) => {
     onClose();
     setTimeout(() => router.push(route as any), 180);
+  };
+
+  const openLogin = () => {
+    onClose();
+    setTimeout(() => showLoginModal(), 180);
   };
 
   return (
@@ -152,7 +159,7 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
         ) : (
           <TouchableOpacity
             style={styles.loginBadge}
-            onPress={() => navigate('/(auth)/login')}
+            onPress={openLogin}
             activeOpacity={0.8}
           >
             <Text style={styles.loginBadgeText}>Se connecter  →</Text>
