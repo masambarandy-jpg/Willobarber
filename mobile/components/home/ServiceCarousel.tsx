@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
   Image,
-  PanResponder,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -29,7 +30,7 @@ const GAP = 12;
 const SLIDE_W = SCREEN_W - PADDING_H * 2 - PEEK;
 const PHOTO_H = 200;
 const SLIDE_DURATION = 10000;
-const SWIPE_THRESHOLD = SLIDE_W * 0.25;
+const SNAP_INTERVAL = SLIDE_W + GAP;
 
 export const SERVICES = [
   {
@@ -77,23 +78,19 @@ export function ServiceCarousel() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
+  const scrollRef = useRef<ScrollView>(null);
   const currentSlideRef = useRef(0);
   const isPausedRef = useRef(false);
-  const swipeStartProgress = useRef(0);
 
   const progress = useSharedValue(0);
-  const slideX = useSharedValue(0);
   const trackWidth = useSharedValue(SLIDE_W);
 
   const handleAutoAdvance = useCallback(() => {
     const next = (currentSlideRef.current + 1) % SERVICES.length;
     currentSlideRef.current = next;
     setCurrentSlide(next);
-    slideX.value = withTiming(-next * (SLIDE_W + GAP), {
-      duration: 400,
-      easing: Easing.inOut(Easing.ease),
-    });
-  }, [slideX]);
+    scrollRef.current?.scrollTo({ x: next * SNAP_INTERVAL, animated: true });
+  }, []);
 
   const goToSlide = useCallback((index: number) => {
     const i = Math.max(0, Math.min(index, SERVICES.length - 1));
@@ -101,11 +98,8 @@ export function ServiceCarousel() {
     isPausedRef.current = false;
     setCurrentSlide(i);
     setIsPaused(false);
-    slideX.value = withTiming(-i * (SLIDE_W + GAP), {
-      duration: 400,
-      easing: Easing.inOut(Easing.ease),
-    });
-  }, [slideX]);
+    scrollRef.current?.scrollTo({ x: i * SNAP_INTERVAL, animated: true });
+  }, []);
 
   useEffect(() => {
     if (isPaused) {
@@ -125,172 +119,132 @@ export function ServiceCarousel() {
     setIsPaused(next);
   }, []);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
-        Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2,
+  const handleScrollBeginDrag = useCallback(() => {
+    cancelAnimation(progress);
+  }, [progress]);
 
-      onPanResponderGrant: () => {
-        swipeStartProgress.current = progress.value;
-        cancelAnimation(progress);
-        cancelAnimation(slideX);
-      },
+  const handleMomentumScrollEnd = useCallback((e: any) => {
+    const x = e.nativeEvent.contentOffset.x;
+    const idx = Math.round(x / SNAP_INTERVAL);
+    const clamped = Math.max(0, Math.min(idx, SERVICES.length - 1));
 
-      onPanResponderMove: (_, { dx }) => {
-        const base = -currentSlideRef.current * (SLIDE_W + GAP);
-        slideX.value = base + dx;
-      },
-
-      onPanResponderRelease: (_, { dx, vx }) => {
-        const curr = currentSlideRef.current;
-        let next = curr;
-
-        if ((dx < -SWIPE_THRESHOLD || vx < -0.5) && curr < SERVICES.length - 1) {
-          next = curr + 1;
-        } else if ((dx > SWIPE_THRESHOLD || vx > 0.5) && curr > 0) {
-          next = curr - 1;
-        }
-
-        slideX.value = withTiming(-next * (SLIDE_W + GAP), {
-          duration: 400,
-          easing: Easing.inOut(Easing.ease),
-        });
-
-        if (next !== curr) {
-          currentSlideRef.current = next;
-          setCurrentSlide(next);
-        } else if (!isPausedRef.current) {
-          const remaining = (1 - swipeStartProgress.current) * SLIDE_DURATION;
-          if (remaining > 200) {
-            progress.value = withTiming(1, { duration: remaining, easing: Easing.linear }, finished => {
-              if (finished) runOnJS(handleAutoAdvance)();
-            });
-          } else {
-            runOnJS(handleAutoAdvance)();
-          }
-        }
-      },
-
-      onPanResponderTerminate: () => {
-        slideX.value = withTiming(-currentSlideRef.current * (SLIDE_W + GAP), {
-          duration: 300,
-          easing: Easing.inOut(Easing.ease),
-        });
-        if (!isPausedRef.current) {
-          const remaining = (1 - swipeStartProgress.current) * SLIDE_DURATION;
-          if (remaining > 200) {
-            progress.value = withTiming(1, { duration: remaining, easing: Easing.linear }, finished => {
-              if (finished) runOnJS(handleAutoAdvance)();
-            });
-          }
-        }
-      },
-    })
-  ).current;
+    if (clamped !== currentSlideRef.current) {
+      currentSlideRef.current = clamped;
+      setCurrentSlide(clamped);
+    } else if (!isPausedRef.current) {
+      // Same slide after the drag — the currentSlide effect won't re-fire, so restart the timer manually.
+      progress.value = 0;
+      progress.value = withTiming(1, { duration: SLIDE_DURATION, easing: Easing.linear }, finished => {
+        if (finished) runOnJS(handleAutoAdvance)();
+      });
+    }
+  }, [progress, handleAutoAdvance]);
 
   const progressFillStyle = useAnimatedStyle(() => ({
     width: progress.value * trackWidth.value,
   }));
 
-  const slidesStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: slideX.value }],
-  }));
-
   return (
     <View style={styles.wrapper}>
-      <View style={styles.viewport} {...panResponder.panHandlers}>
-        <Animated.View style={[styles.slidesRow, slidesStyle]}>
-          {SERVICES.map((svc) => (
-            <View key={svc.id} style={styles.slide}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        snapToInterval={SNAP_INTERVAL}
+        snapToAlignment="start"
+        scrollEventThrottle={16}
+        onScrollBeginDrag={handleScrollBeginDrag}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
+        contentContainerStyle={styles.slidesRow}
+        style={Platform.OS === 'web' ? ({ cursor: 'grab' } as any) : undefined}
+      >
+        {SERVICES.map((svc) => (
+          <View key={svc.id} style={styles.slide}>
 
-              {/* ── Photo zone ── */}
-              <View style={styles.photoZone}>
-                <Image
-                  source={{ uri: svc.photo }}
-                  style={styles.photo}
-                  resizeMode="cover"
-                />
-                <LinearGradient
-                  colors={['transparent', 'rgba(26,20,8,0.85)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.photoGradient}
-                />
-                <View style={styles.badgesRow}>
-                  <View style={styles.badgeCat}>
-                    <Text style={styles.badgeCatText}>{svc.cat}</Text>
+            {/* ── Photo zone ── */}
+            <View style={styles.photoZone}>
+              <Image
+                source={{ uri: svc.photo }}
+                style={styles.photo}
+                resizeMode="cover"
+              />
+              <LinearGradient
+                colors={['transparent', 'rgba(26,20,8,0.85)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.photoGradient}
+              />
+              <View style={styles.badgesRow}>
+                <View style={styles.badgeCat}>
+                  <Text style={styles.badgeCatText}>{svc.cat}</Text>
+                </View>
+                {svc.popular && (
+                  <View style={styles.badgePopular}>
+                    <Text style={styles.badgePopularText}>POPULAIRE</Text>
                   </View>
-                  {svc.popular && (
-                    <View style={styles.badgePopular}>
-                      <Text style={styles.badgePopularText}>POPULAIRE</Text>
-                    </View>
-                  )}
-                </View>
+                )}
               </View>
-
-              {/* ── Text zone ── */}
-              <View style={styles.cardContent}>
-                <Text style={styles.serviceName} numberOfLines={2}>{svc.name}</Text>
-                <Text style={styles.serviceDesc} numberOfLines={2}>{svc.short}</Text>
-                <View style={styles.sep} />
-                <View style={styles.metaRow}>
-                  <View style={styles.durationRow}>
-                    <Feather name="clock" size={13} color="#6B6560" />
-                    <Text style={styles.duration}>{svc.dur}</Text>
-                  </View>
-                  <Text style={styles.price}>{svc.price} €</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.selectBtn}
-                  activeOpacity={0.85}
-                  onPress={() => router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } })}
-                >
-                  <Text style={styles.selectBtnText}>Sélectionner  →</Text>
-                </TouchableOpacity>
-
-                {/* ── Dots + pause/play ── */}
-                <View style={styles.playerRow}>
-                  {SERVICES.map((_, i) =>
-                    i === currentSlide ? (
-                      <View
-                        key={i}
-                        style={styles.progressPill}
-                        onLayout={e => { trackWidth.value = e.nativeEvent.layout.width; }}
-                      >
-                        <Animated.View style={[styles.progressFill, progressFillStyle]} />
-                      </View>
-                    ) : (
-                      <Pressable key={i} onPress={() => goToSlide(i)} hitSlop={10}>
-                        <View style={styles.dot} />
-                      </Pressable>
-                    )
-                  )}
-                  <TouchableOpacity onPress={handlePausePlay} hitSlop={12} style={styles.pauseBtn}>
-                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '600', letterSpacing: 3, lineHeight: 16 }}>
-                      {isPaused ? '▶' : '‖'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
             </View>
-          ))}
-        </Animated.View>
-      </View>
+
+            {/* ── Text zone ── */}
+            <View style={styles.cardContent}>
+              <Text style={styles.serviceName} numberOfLines={2}>{svc.name}</Text>
+              <Text style={styles.serviceDesc} numberOfLines={2}>{svc.short}</Text>
+              <View style={styles.sep} />
+              <View style={styles.metaRow}>
+                <View style={styles.durationRow}>
+                  <Feather name="clock" size={13} color="#6B6560" />
+                  <Text style={styles.duration}>{svc.dur}</Text>
+                </View>
+                <Text style={styles.price}>{svc.price} €</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.selectBtn}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } })}
+              >
+                <Text style={styles.selectBtnText}>Sélectionner  →</Text>
+              </TouchableOpacity>
+
+              {/* ── Dots + pause/play ── */}
+              <View style={styles.playerRow}>
+                {SERVICES.map((_, i) =>
+                  i === currentSlide ? (
+                    <View
+                      key={i}
+                      style={styles.progressPill}
+                      onLayout={e => { trackWidth.value = e.nativeEvent.layout.width; }}
+                    >
+                      <Animated.View style={[styles.progressFill, progressFillStyle]} />
+                    </View>
+                  ) : (
+                    <Pressable key={i} onPress={() => goToSlide(i)} hitSlop={10}>
+                      <View style={styles.dot} />
+                    </Pressable>
+                  )
+                )}
+                <TouchableOpacity onPress={handlePausePlay} hitSlop={12} style={styles.pauseBtn}>
+                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '600', letterSpacing: 3, lineHeight: 16 }}>
+                    {isPaused ? '▶' : '‖'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+          </View>
+        ))}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: { paddingLeft: PADDING_H },
-  viewport: {
-    width: SCREEN_W - PADDING_H,
-    overflow: 'hidden',
-  },
   slidesRow: {
     flexDirection: 'row',
     gap: GAP,
+    paddingRight: PADDING_H,
   },
   slide: {
     width: SLIDE_W,
