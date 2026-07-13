@@ -7,6 +7,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -23,6 +24,11 @@ export default function CartScreen() {
   const { isAuthenticated } = useAuth();
   const { showLoginModal } = useAuthModal();
   const [checkoutError, setCheckoutError] = useState('');
+  const [deliveryMode, setDeliveryMode] = useState<'salon' | 'domicile'>('salon');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+
+  const deliveryFee = deliveryMode === 'domicile' ? 4.95 : 0;
+  const finalTotal  = total + deliveryFee;
 
   const handleCheckout = async () => {
     if (!isAuthenticated) {
@@ -113,22 +119,39 @@ export default function CartScreen() {
             </View>
           </View>
 
-          {/* Carte retrait */}
-          <View style={styles.retraitCard}>
-            <View style={styles.retraitIconCircle}>
-              <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <Path d="M3 21h18"/>
-                <Path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/>
-                <Path d="M10 21v-6h4v6"/>
-                <Path d="M9 9h1M14 9h1"/>
-              </Svg>
+          {/* Carte retrait / livraison */}
+          {deliveryMode === 'domicile' ? (
+            <View style={styles.retraitCard}>
+              <View style={styles.retraitIconCircle}>
+                <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <Rect x="1" y="9" width="14" height="9"/>
+                  <Path d="M15 12h4l3 3v3h-7z"/>
+                  <Circle cx="6" cy="20" r="2"/>
+                  <Circle cx="17" cy="20" r="2"/>
+                </Svg>
+              </View>
+              <View>
+                <Text style={styles.retraitTitle}>Livraison à domicile · 3-5 jours ouvrés</Text>
+                {!!deliveryAddress && <Text style={styles.retraitAddr}>{deliveryAddress}</Text>}
+              </View>
             </View>
-            <View>
-              <Text style={styles.retraitTitle}>Retrait en salon</Text>
-              <Text style={styles.retraitAddr}>Rue Auguste Van Zande 78 · Bruxelles</Text>
-              <Text style={styles.retraitAddr}>Disponible sous 24h</Text>
+          ) : (
+            <View style={styles.retraitCard}>
+              <View style={styles.retraitIconCircle}>
+                <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M3 21h18"/>
+                  <Path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/>
+                  <Path d="M10 21v-6h4v6"/>
+                  <Path d="M9 9h1M14 9h1"/>
+                </Svg>
+              </View>
+              <View>
+                <Text style={styles.retraitTitle}>Retrait en salon</Text>
+                <Text style={styles.retraitAddr}>Rue Auguste Van Zande 78 · Bruxelles</Text>
+                <Text style={styles.retraitAddr}>Disponible sous 24h</Text>
+              </View>
             </View>
-          </View>
+          )}
 
           <TouchableOpacity
             style={styles.continueBtn}
@@ -213,6 +236,66 @@ export default function CartScreen() {
               </View>
             ))}
 
+            {/* Livraison */}
+            <View style={styles.deliverySection}>
+              <Text style={styles.recapKicker}>LIVRAISON</Text>
+
+              <TouchableOpacity
+                style={[styles.deliveryOptionCard, deliveryMode === 'salon' && styles.deliveryOptionCardActive]}
+                activeOpacity={0.85}
+                onPress={() => setDeliveryMode('salon')}
+              >
+                <View style={styles.deliveryIconCircle}>
+                  <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M3 21h18"/>
+                    <Path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/>
+                    <Path d="M10 21v-6h4v6"/>
+                    <Path d="M9 9h1M14 9h1"/>
+                  </Svg>
+                </View>
+                <View style={styles.deliveryOptionBody}>
+                  <Text style={styles.deliveryOptionTitle}>Retrait en salon</Text>
+                  <Text style={styles.deliveryOptionSub}>Rue Auguste Van Zande 78 · Bruxelles</Text>
+                  <Text style={styles.deliveryOptionSub}>Disponible sous 24h</Text>
+                </View>
+                <Text style={styles.deliveryOptionPriceFree}>Gratuit</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.deliveryOptionCard, deliveryMode === 'domicile' && styles.deliveryOptionCardActive]}
+                activeOpacity={0.85}
+                onPress={() => setDeliveryMode('domicile')}
+              >
+                <View style={styles.deliveryIconCircle}>
+                  <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <Rect x="1" y="9" width="14" height="9"/>
+                    <Path d="M15 12h4l3 3v3h-7z"/>
+                    <Circle cx="6" cy="20" r="2"/>
+                    <Circle cx="17" cy="20" r="2"/>
+                  </Svg>
+                </View>
+                <View style={styles.deliveryOptionBody}>
+                  <Text style={styles.deliveryOptionTitle}>Livraison à domicile</Text>
+                  <Text style={styles.deliveryOptionSub}>Livré chez vous en 3-5 jours ouvrés</Text>
+                </View>
+                <Text style={styles.deliveryOptionPrice}>+4,95 €</Text>
+              </TouchableOpacity>
+
+              {deliveryMode === 'domicile' && (
+                <View style={styles.addressInputWrap}>
+                  <Text style={styles.addressLabel}>ADRESSE DE LIVRAISON</Text>
+                  <TextInput
+                    style={styles.addressInput}
+                    value={deliveryAddress}
+                    onChangeText={setDeliveryAddress}
+                    placeholder="Votre adresse complète"
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    multiline
+                  />
+                </View>
+              )}
+            </View>
+
             {/* Récapitulatif */}
             <View style={styles.recapCard}>
               <Text style={styles.recapKicker}>RÉCAPITULATIF</Text>
@@ -221,13 +304,17 @@ export default function CartScreen() {
                 <Text style={styles.recapValue}>{total.toFixed(2)} €</Text>
               </View>
               <View style={styles.recapRow}>
-                <Text style={styles.recapLabel}>Retrait en salon</Text>
-                <Text style={styles.recapFree}>Gratuit</Text>
+                <Text style={styles.recapLabel}>
+                  {deliveryMode === 'domicile' ? 'Livraison à domicile' : 'Retrait en salon'}
+                </Text>
+                {deliveryMode === 'domicile'
+                  ? <Text style={styles.recapValue}>+{deliveryFee.toFixed(2)} €</Text>
+                  : <Text style={styles.recapFree}>Gratuit</Text>}
               </View>
               <View style={styles.recapSep} />
               <View style={styles.recapRow}>
                 <Text style={styles.recapTotalLabel}>Total</Text>
-                <Text style={styles.recapTotalAmount}>{total.toFixed(2)} €</Text>
+                <Text style={styles.recapTotalAmount}>{finalTotal.toFixed(2)} €</Text>
               </View>
             </View>
 
@@ -248,7 +335,11 @@ export default function CartScreen() {
             >
               {isLoading
                 ? <ActivityIndicator color="#1A1208" size="small" />
-                : <Text style={styles.ctaBtnText}>Commander — {total.toFixed(0)} € →</Text>
+                : (
+                  <Text style={styles.ctaBtnText}>
+                    Commander — {deliveryFee > 0 ? finalTotal.toFixed(2) : total.toFixed(0)} € →
+                  </Text>
+                )
               }
             </TouchableOpacity>
           </View>
@@ -315,6 +406,41 @@ const styles = StyleSheet.create({
   qteBtnTextPlus: { color: '#1A1208', fontSize: 18, lineHeight: 22, fontWeight: '700' },
   qteVal: { fontSize: 16, fontWeight: '700', color: '#fff', minWidth: 20, textAlign: 'center' },
   deleteBtn: { padding: 6 },
+
+  // Livraison
+  deliverySection: { marginBottom: 16 },
+  deliveryOptionCard: {
+    backgroundColor: '#1A1814',
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  deliveryOptionCardActive: { borderColor: '#C9A84C' },
+  deliveryIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2A2520', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  deliveryOptionBody: { flex: 1 },
+  deliveryOptionTitle: { fontSize: 15, fontWeight: '600', color: '#fff', marginBottom: 2 },
+  deliveryOptionSub: { fontSize: 12.5, color: '#6B6560' },
+  deliveryOptionPrice: { fontSize: 13.5, fontWeight: '700', color: '#C9A84C' },
+  deliveryOptionPriceFree: { fontSize: 13.5, fontWeight: '700', color: '#4CAF50' },
+
+  addressInputWrap: { marginTop: 2, marginBottom: 4 },
+  addressLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1, color: '#6B6560', textTransform: 'uppercase', marginBottom: 8 },
+  addressInput: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontSize: 14,
+    color: '#FFFFFF',
+    minHeight: 48,
+  },
 
   // Récapitulatif
   recapCard: {
