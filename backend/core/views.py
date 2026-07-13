@@ -194,9 +194,10 @@ def _generate_ai_recommendation_text(history_text):
             thinking={'type': 'disabled'},
             messages=[{'role': 'user', 'content': prompt}],
         )
-    except anthropic.APIError:
-        logger.exception('Échec de l\'appel Anthropic pour la recommandation IA.')
-        return None
+    except Exception as e:
+        import traceback
+        print("ERREUR IA:", traceback.format_exc())
+        return f"ERREUR: {str(e)}"
 
     if response.stop_reason == 'refusal':
         logger.warning('Recommandation IA refusée par les classifieurs de sécurité.')
