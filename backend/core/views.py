@@ -165,7 +165,14 @@ class CheckClientView(APIView):
         return Response({'status': 'new'})
 
 
-def _generate_ai_recommendation_text(fav_service, fav_service_count, last_reservation, avg_interval):
+MOCK_RESERVATION_HISTORY = """- Signature WilloBarber (45€) — 8 fois
+- Taille & rasage (28€) — 2 fois
+- Dernière visite : 12 AVR 2026
+- Intervalle moyen : 28 jours
+- Points fidélité : 316 pts (niveau ARGENT)"""
+
+
+def _generate_ai_recommendation_text(history_text):
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
         logger.warning('ANTHROPIC_API_KEY manquant — recommandation IA non générée.')
@@ -174,11 +181,9 @@ def _generate_ai_recommendation_text(fav_service, fav_service_count, last_reserv
     prompt = (
         "Tu es l'assistant IA de WilloBarber, un salon de coiffure premium à Bruxelles.\n"
         "Basé sur cet historique client :\n"
-        f"- {fav_service.name} ({fav_service.price}€) — {fav_service_count} fois\n"
-        f"- Dernière visite : {last_reservation.date.strftime('%d %b').upper()}\n"
-        f"- Intervalle moyen : {round(avg_interval)} jours\n\n"
+        f"{history_text}\n\n"
         "Génère une recommandation courte et personnalisée (3-4 phrases max) pour ce client. "
-        "Suggère quand reprendre RDV et pourquoi. Ton chic et bienveillant."
+        "Suggère quand reprendre RDV, quelle prestation et pourquoi. Ton chic et bienveillant."
     )
 
     try:
@@ -208,31 +213,35 @@ def recommendations(request):
     if not user.ai_recommendations:
         return Response({'recommendations': [], 'ai_text': None, 'message': 'Recommandations IA désactivées.'})
 
-    history = Reservation.objects.filter(user=user).exclude(status='cancelled').order_by('date')
+    history = Reservation.objects.filter(user=user).exclude(status='cancelled').order_by('-date')
 
-    if history.count() < 2:
-        return Response({
-            'recommendations': [],
-            'ai_text': None,
-            'message': 'Pas assez d\'historique pour générer des recommandations.',
-        })
+    recommendations_data = None
 
-    dates = list(history.values_list('date', flat=True))
-    intervals = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
-    avg_interval = sum(intervals) / len(intervals) if intervals else 0
+    if history.count() >= 2:
+        dates = list(history.order_by('date').values_list('date', flat=True))
+        intervals = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+        avg_interval = sum(intervals) / len(intervals) if intervals else 0
 
-    counts_by_service = Counter(history.values_list('service_id', flat=True))
-    fav_service_id, fav_service_count = counts_by_service.most_common(1)[0]
-    fav_service = Service.objects.get(pk=fav_service_id)
-    last_reservation = history.last()
+        counts_by_service = Counter(history.values_list('service_id', flat=True))
+        fav_service_id, fav_service_count = counts_by_service.most_common(1)[0]
+        fav_service = Service.objects.get(pk=fav_service_id)
+        last_reservation = history.first()
 
-    ai_text = _generate_ai_recommendation_text(fav_service, fav_service_count, last_reservation, avg_interval)
-
-    return Response({
-        'recommendations': {
+        history_text = "\n".join(
+            f"- {r.service.name} ({r.service.price}€) — {r.date}"
+            for r in history[:5]
+        )
+        recommendations_data = {
             'avg_interval_days': round(avg_interval),
             'favorite_service': ServiceSerializer(fav_service).data,
             'last_reservation': ReservationSerializer(last_reservation).data,
-        },
+        }
+    else:
+        history_text = MOCK_RESERVATION_HISTORY
+
+    ai_text = _generate_ai_recommendation_text(history_text)
+
+    return Response({
+        'recommendations': recommendations_data or [],
         'ai_text': ai_text,
     })
