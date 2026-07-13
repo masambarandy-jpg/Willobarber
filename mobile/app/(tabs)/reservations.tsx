@@ -4,6 +4,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -54,6 +55,16 @@ const FAVORIS = [
   { nom: 'Signature WilloBarber', dur: '45 min', prix: '45€', count: '8×', date: '12 avr.' },
   { nom: 'Taille & rasage',        dur: '30 min', prix: '28€', count: '5×', date: '2 mars'  },
 ];
+
+const NEXT_RDV = {
+  service:   'Coupe + Barbe',
+  dateLabel: '23 mai 2026',
+  dateShort: '23 MAI',
+  time:      '10:30',
+  timeLabel: '10h30',
+  barbier:   'Willo',
+  adresse:   'Rue Auguste Van Zande 78',
+};
 
 function getNextTarget(pts: number): number {
   if (pts < 200) return 200;
@@ -169,10 +180,98 @@ export default function ReservationsScreen() {
       await cancel(cancelTarget.id, reason);
       setCancelTarget(null);
     } catch {
-      Alert.alert('Erreur', "Impossible d'annuler cette réservation.");
+      if (Platform.OS === 'web') {
+        window.alert("Erreur : impossible d'annuler cette réservation.");
+      } else {
+        Alert.alert('Erreur', "Impossible d'annuler cette réservation.");
+      }
     } finally {
       setCancelling(false);
     }
+  };
+
+  const handleAddToCalendar = async () => {
+    if (Platform.OS === 'web') {
+      const startDate = '20260523T103000';
+      const endDate = '20260523T110000';
+      const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Coupe+%2B+Barbe+%E2%80%94+WilloBarber&dates=${startDate}/${endDate}&details=Barbier+:+Willo%0AAdresse+:+Rue+Auguste+Van+Zande+78%0ASolde+%C3%A0+payer+au+salon+:+42.70%E2%82%AC&location=Rue+Auguste+Van+Zande+78`;
+      window.open(url, '_blank');
+      return;
+    }
+    try {
+      const calendarUrl = Platform.OS === 'ios' ? 'calshow://' : 'content://com.android.calendar/time/';
+      const canOpen = await Linking.canOpenURL(calendarUrl);
+      if (!canOpen) throw new Error('calendar-unavailable');
+      await Linking.openURL(calendarUrl);
+    } catch {
+      Alert.alert(
+        'Ajouter au calendrier',
+        `${NEXT_RDV.service}\n\n📅  ${NEXT_RDV.dateLabel} à ${NEXT_RDV.time}\n✂️  Avec ${NEXT_RDV.barbier}\n📍  ${NEXT_RDV.adresse}`,
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handleReprogrammer = () => {
+    // Le wizard (/(tabs)/book) ne lit pas encore de params de prestation/barbier : navigation simple.
+    router.push('/(tabs)/book');
+  };
+
+  const handleCancelNextRdv = () => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        `Annuler votre rendez-vous du ${NEXT_RDV.dateShort} à ${NEXT_RDV.timeLabel} avec ${NEXT_RDV.barbier} ?`
+      );
+      if (confirmed) {
+        window.alert('Rendez-vous annulé. Vous recevrez un email de confirmation.');
+      }
+      return;
+    }
+    Alert.alert(
+      'Annuler le rendez-vous ?',
+      `Votre rendez-vous du ${NEXT_RDV.dateShort} à ${NEXT_RDV.timeLabel} avec ${NEXT_RDV.barbier} sera annulé.`,
+      [
+        { text: 'Retour', style: 'cancel' },
+        {
+          text: "Confirmer l'annulation",
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert('Rendez-vous annulé', 'Vous recevrez un email de confirmation.');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAdapter = () => router.push('/(tabs)/book');
+
+  const handleRebook = (h: typeof HISTORIQUE[number]) => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(`Rebooker — ${h.service} avec ${h.barbierNom} ?`);
+      if (confirmed) {
+        router.push('/(tabs)/book');
+      }
+      return;
+    }
+    // Le wizard (/(tabs)/book) ne lit pas encore de params de prestation/barbier :
+    // on informe l'utilisateur avant de le rediriger vers la réservation.
+    Alert.alert(
+      `Rebooker — ${h.service} avec ${h.barbierNom}`,
+      undefined,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Aller réserver', onPress: () => router.push('/(tabs)/book') },
+      ]
+    );
+  };
+
+  const handleReceipt = (h: typeof HISTORIQUE[number], index: number) => {
+    const message = `${h.service}\n${h.jour} ${h.mois} · ${h.barbierNom} · ${h.prix}\nN° WB-${h.annee}-${String(index + 1).padStart(5, '0')}`;
+    if (Platform.OS === 'web') {
+      window.alert(`Reçu\n\n${message}`);
+      return;
+    }
+    Alert.alert('Reçu', message, [{ text: 'Fermer' }]);
   };
 
   return (
@@ -261,14 +360,14 @@ export default function ReservationsScreen() {
             <Text style={styles.soldeText}>Solde 42,70€ au salon</Text>
           </View>
 
-          <TouchableOpacity style={styles.btnPrimary} activeOpacity={0.85}>
+          <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
             <Text style={styles.btnPrimaryText}>📅  Ajouter au calendrier</Text>
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-            <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]} activeOpacity={0.85}>
+            <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
               <Text style={styles.btnOutlineText}>↺ Reprogrammer</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btnDangerSm} activeOpacity={0.85}>
+            <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={handleCancelNextRdv} activeOpacity={0.85}>
               <Text style={styles.btnDangerSmText}>Annuler</Text>
             </TouchableOpacity>
           </View>
@@ -298,7 +397,7 @@ export default function ReservationsScreen() {
             >
               <Text style={styles.btnPrimaryText}>Reprendre la même coupe</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.btnOutline, { paddingHorizontal: 18 }]} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.btnOutline, { paddingHorizontal: 18 }]} onPress={handleAdapter} activeOpacity={0.85}>
               <Text style={styles.btnOutlineText}>✏️ Adapter</Text>
             </TouchableOpacity>
           </View>
@@ -366,10 +465,10 @@ export default function ReservationsScreen() {
                 </View>
               </View>
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(tabs)/book')}>
+                <TouchableOpacity testID={`btn-rebook-${i}`} style={styles.iconBtn} onPress={() => handleRebook(h)}>
                   <Text style={{ color: '#C9A84C', fontSize: 15 }}>↺</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.iconBtn}>
+                <TouchableOpacity testID={`btn-receipt-${i}`} style={styles.iconBtn} onPress={() => handleReceipt(h, i)}>
                   <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15 }}>↓</Text>
                 </TouchableOpacity>
               </View>
