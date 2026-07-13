@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Linking,
   Platform,
   Text,
   TextInput,
@@ -46,11 +47,15 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [emailSuffix, setEmailSuffix] = useState<'' | '@gmail.com' | '@outlook.com'>('');
+  const [identifierSelection, setIdentifierSelection] = useState<{ start: number; end: number } | undefined>(undefined);
+  const [suffixOffset, setSuffixOffset] = useState(0);
 
   const identifierInputRef = useRef<TextInput>(null);
 
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const cardAnim = useRef(new Animated.Value(0.92)).current;
+  const identifierHighlightAnim = useRef(new Animated.Value(0)).current;
 
   const showLoginModal = (onSuccess?: () => void, msg?: string) => {
     setOnSuccessCallback(() => onSuccess ?? null);
@@ -118,7 +123,8 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleAccess = async () => {
-    const value = identifier.trim();
+    const rawValue = identifier.trim();
+    const value = emailSuffix && !rawValue.includes('@') ? `${rawValue}${emailSuffix}` : rawValue;
     if (!value) {
       setError('Veuillez saisir votre email ou numéro de téléphone.');
       return;
@@ -148,6 +154,50 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   };
 
   const focusIdentifier = () => identifierInputRef.current?.focus();
+
+  const focusIdentifierAtStart = () => {
+    identifierInputRef.current?.focus();
+    setIdentifierSelection({ start: 0, end: 0 });
+    setTimeout(() => setIdentifierSelection(undefined), 50);
+  };
+
+  const triggerIdentifierHighlight = () => {
+    identifierHighlightAnim.setValue(1);
+    Animated.timing(identifierHighlightAnim, {
+      toValue: 0,
+      duration: 1200,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const handleProviderSelect = (suffix: '@gmail.com' | '@outlook.com') => {
+    if (Platform.OS === 'web') {
+      const authUrl = suffix === '@gmail.com'
+        ? 'https://accounts.google.com/signin'
+        : 'https://login.live.com';
+      window.open(authUrl, '_blank');
+    } else {
+      const scheme = suffix === '@gmail.com' ? 'googlegmail://' : 'ms-outlook://';
+      Linking.openURL(scheme).catch(() => {});
+    }
+
+    setEmailSuffix(suffix);
+    setIdentifier((prev) => prev.split('@')[0]);
+    if (error) setError('');
+    focusIdentifierAtStart();
+  };
+
+  const handleOtherProvider = () => {
+    setEmailSuffix('');
+    focusIdentifier();
+    triggerIdentifierHighlight();
+  };
+
+  const identifierBorderColor = identifierHighlightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255,255,255,0.12)', '#C9A84C'],
+  });
 
   return (
     <AuthModalContext.Provider value={{ showLoginModal, hideLoginModal }}>
@@ -193,15 +243,23 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
               </Text>
 
               <View style={styles.quickRow}>
-                <TouchableOpacity style={styles.quickPill} onPress={focusIdentifier} activeOpacity={0.75}>
+                <TouchableOpacity
+                  style={styles.quickPill}
+                  onPress={() => handleProviderSelect('@gmail.com')}
+                  activeOpacity={0.75}
+                >
                   <Text style={styles.quickPillGmailIcon}>G</Text>
                   <Text style={styles.quickPillText}>Gmail</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickPill} onPress={focusIdentifier} activeOpacity={0.75}>
+                <TouchableOpacity
+                  style={styles.quickPill}
+                  onPress={() => handleProviderSelect('@outlook.com')}
+                  activeOpacity={0.75}
+                >
                   <Feather name="mail" size={14} color="#4A9EFF" />
                   <Text style={styles.quickPillText}>Outlook</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickPill} onPress={focusIdentifier} activeOpacity={0.75}>
+                <TouchableOpacity style={styles.quickPill} onPress={handleOtherProvider} activeOpacity={0.75}>
                   <Feather name="user" size={14} color="rgba(255,255,255,0.7)" />
                   <Text style={styles.quickPillText}>Autre</Text>
                 </TouchableOpacity>
@@ -236,26 +294,50 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
               </View>
 
               <Text style={styles.label}>E-MAIL OU TÉLÉPHONE</Text>
-              <View style={styles.inputWrap}>
+              <Animated.View style={[styles.inputWrap, { borderColor: identifierBorderColor }]}>
                 <Feather name={isPhone(identifier) ? 'phone' : 'mail'} size={16} color="rgba(255,255,255,0.4)" />
-                <TextInput
-                  ref={identifierInputRef}
-                  style={styles.input}
-                  value={identifier}
-                  onChangeText={(t) => {
-                    setIdentifier(t);
-                    if (error) setError('');
-                  }}
-                  placeholder="exemple@email.com ou +32 470 ..."
-                  placeholderTextColor="rgba(255,255,255,0.35)"
-                  keyboardType="default"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="off"
-                  returnKeyType="done"
-                  onSubmitEditing={handleAccess}
-                />
-              </View>
+                <View style={styles.identifierInner}>
+                  <TextInput
+                    ref={identifierInputRef}
+                    style={styles.input}
+                    value={identifier}
+                    selection={identifierSelection}
+                    onChangeText={(t) => {
+                      setIdentifier(t);
+                      if (error) setError('');
+                      if (emailSuffix && t.includes('@')) setEmailSuffix('');
+                    }}
+                    placeholder={emailSuffix ? '' : 'exemple@email.com ou +32 470 ...'}
+                    placeholderTextColor="rgba(255,255,255,0.35)"
+                    keyboardType="default"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="off"
+                    returnKeyType="done"
+                    onSubmitEditing={handleAccess}
+                  />
+                  {!!emailSuffix && (
+                    <>
+                      <Text
+                        style={[styles.input, styles.measureText]}
+                        onLayout={(e) => setSuffixOffset(e.nativeEvent.layout.width)}
+                      >
+                        {identifier}
+                      </Text>
+                      <Text style={[styles.suffixOverlay, { left: suffixOffset }]} pointerEvents="none">
+                        {emailSuffix}
+                      </Text>
+                    </>
+                  )}
+                </View>
+              </Animated.View>
+              {!!emailSuffix && (
+                <Text style={styles.providerHint}>
+                  {emailSuffix === '@gmail.com'
+                    ? 'Entrez votre adresse Gmail et continuez'
+                    : 'Entrez votre adresse Outlook et continuez'}
+                </Text>
+              )}
 
               <TouchableOpacity
                 style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
@@ -418,6 +500,30 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     color: '#fff',
     padding: 0,
+  },
+  identifierInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  measureText: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    opacity: 0,
+  },
+  suffixOverlay: {
+    position: 'absolute',
+    top: 0,
+    fontSize: 14.5,
+    color: '#6B6560',
+  },
+  providerHint: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.45)',
+    marginTop: -10,
+    marginBottom: 16,
   },
   btnPrimary: {
     backgroundColor: '#C9A84C',
