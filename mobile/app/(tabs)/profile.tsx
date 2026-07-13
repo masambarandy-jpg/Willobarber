@@ -109,18 +109,26 @@ export default function ProfileScreen() {
   const [aiText, setAiText] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated || !user?.ai_recommendations) {
+    if (!isAuthenticated || !aiRec) {
+      console.log('[AI Recommandations] Désactivé ou non authentifié — pas de fetch.');
       setAiText(null);
       return;
     }
+    console.log('[AI Recommandations] Toggle actif, appel de /recommendations/...');
     let cancelled = false;
     setAiLoading(true);
     recommendationsApi.get()
-      .then((data) => { if (!cancelled) setAiText(data.ai_text); })
-      .catch(() => { if (!cancelled) setAiText(null); })
+      .then((data) => {
+        console.log('[AI Recommandations] Réponse backend:', JSON.stringify(data));
+        if (!cancelled) setAiText(data.ai_text ?? null);
+      })
+      .catch((err) => {
+        console.log('[AI Recommandations] Erreur:', err?.response?.status, JSON.stringify(err?.response?.data ?? err?.message));
+        if (!cancelled) setAiText(null);
+      })
       .finally(() => { if (!cancelled) setAiLoading(false); });
     return () => { cancelled = true; };
-  }, [isAuthenticated, user?.ai_recommendations]);
+  }, [isAuthenticated, aiRec]);
 
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
