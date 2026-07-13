@@ -111,6 +111,7 @@ export default function ProfileScreen() {
   const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(null);
   const [showAiCard, setShowAiCard] = useState(false);
   const aiCardOpacity = useRef(new Animated.Value(0)).current;
+  const aiPatchRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated || !aiRec) {
@@ -120,10 +121,9 @@ export default function ProfileScreen() {
       aiCardOpacity.setValue(0);
       return;
     }
-    console.log('[AI Recommandations] Toggle actif, appel de /recommendations/...');
     let cancelled = false;
     let hideTimer: ReturnType<typeof setTimeout> | undefined;
-    const startTime = Date.now();
+    const pendingPatch = aiPatchRef.current;
 
     setAiLoading(true);
     setShowAiCard(false);
@@ -146,23 +146,33 @@ export default function ProfileScreen() {
       }, 8000);
     };
 
-    recommendationsApi.get()
-      .then(async (data) => {
+    (async () => {
+      if (pendingPatch) {
+        console.log('[AI Recommandations] PATCH /auth/me/ en cours — attente avant de fetch /recommendations/...');
+        await pendingPatch;
+        if (aiPatchRef.current === pendingPatch) aiPatchRef.current = null;
+      }
+      if (cancelled) return;
+
+      console.log('[AI Recommandations] Toggle actif, appel de /recommendations/...');
+      const startTime = Date.now();
+      try {
+        const data = await recommendationsApi.get();
         console.log('[AI Recommandations] Réponse backend:', JSON.stringify(data));
         const elapsed = Date.now() - startTime;
         await new Promise((r) => setTimeout(r, Math.max(0, 1500 - elapsed)));
         if (cancelled) return;
         setAiLoading(false);
         reveal(data.ai_text ?? null);
-      })
-      .catch(async (err) => {
+      } catch (err: any) {
         console.log('[AI Recommandations] Erreur:', err?.response?.status, JSON.stringify(err?.response?.data ?? err?.message));
         const elapsed = Date.now() - startTime;
         await new Promise((r) => setTimeout(r, Math.max(0, 1500 - elapsed)));
         if (cancelled) return;
         setAiLoading(false);
         reveal(null);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -297,14 +307,26 @@ export default function ProfileScreen() {
                 onValueChange={async v => {
                   console.log('[IA] token (TokenStorage.getAccess):', await TokenStorage.getAccess());
                   console.log('[IA] aiRec avant toggle:', aiRec, '-> nouvelle valeur:', v);
+                  console.log('[IA] PATCH payload:', { ai_recommendations: v });
+
+                  // Le PATCH démarre et sa promesse est enregistrée AVANT setAiRec(v),
+                  // pour que l'effet déclenché par le changement de aiRec puisse l'attendre
+                  // et ne fetch /recommendations/ qu'une fois le backend à jour.
+                  const patchPromise = (async () => {
+                    try {
+                      const res = await authApi.updateProfile({ ai_recommendations: v });
+                      console.log('[IA] PATCH response:', res);
+                      await refreshUser();
+                    } catch (e) {
+                      console.log('[IA] PATCH erreur (sauvegarde locale suffisante):', e);
+                    }
+                  })();
+                  aiPatchRef.current = patchPromise;
+
                   setAiRec(v);
                   await AsyncStorage.setItem('ai_recommendations', JSON.stringify(v));
-                  try {
-                    await authApi.updateProfile({ ai_recommendations: v });
-                    await refreshUser();
-                  } catch (e) {
-                    // Silencieux — sauvegarde locale suffisante
-                  }
+                  await patchPromise;
+
                   if (!v) {
                     Alert.alert('Recommandations IA désactivées', 'Vous pouvez les réactiver à tout moment.');
                   }
