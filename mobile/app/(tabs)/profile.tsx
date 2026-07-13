@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   Modal,
   Platform,
   Pressable,
@@ -18,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
-import { authApi, recommendationsApi } from '@/services/api';
+import { authApi, recommendationsApi, TokenStorage } from '@/services/api';
 import { Fonts } from '@/constants';
 
 
@@ -107,27 +108,66 @@ export default function ProfileScreen() {
 
   const [aiLoading, setAiLoading] = useState(false);
   const [aiText, setAiText] = useState<string | null>(null);
+  const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(null);
+  const [showAiCard, setShowAiCard] = useState(false);
+  const aiCardOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!isAuthenticated || !aiRec) {
       console.log('[AI Recommandations] Désactivé ou non authentifié — pas de fetch.');
       setAiText(null);
+      setShowAiCard(false);
+      aiCardOpacity.setValue(0);
       return;
     }
     console.log('[AI Recommandations] Toggle actif, appel de /recommendations/...');
     let cancelled = false;
+    let hideTimer: ReturnType<typeof setTimeout> | undefined;
+    const startTime = Date.now();
+
     setAiLoading(true);
+    setShowAiCard(false);
+    aiCardOpacity.setValue(0);
+
+    const reveal = (text: string | null) => {
+      if (cancelled) return;
+      setAiText(text);
+      setAiGeneratedAt(new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }));
+      if (!text) return;
+      setShowAiCard(true);
+      Animated.timing(aiCardOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+      hideTimer = setTimeout(() => {
+        Animated.timing(aiCardOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+          if (!cancelled) {
+            setShowAiCard(false);
+            setAiText(null);
+          }
+        });
+      }, 8000);
+    };
+
     recommendationsApi.get()
-      .then((data) => {
+      .then(async (data) => {
         console.log('[AI Recommandations] Réponse backend:', JSON.stringify(data));
-        if (!cancelled) setAiText(data.ai_text ?? null);
+        const elapsed = Date.now() - startTime;
+        await new Promise((r) => setTimeout(r, Math.max(0, 1500 - elapsed)));
+        if (cancelled) return;
+        setAiLoading(false);
+        reveal(data.ai_text ?? null);
       })
-      .catch((err) => {
+      .catch(async (err) => {
         console.log('[AI Recommandations] Erreur:', err?.response?.status, JSON.stringify(err?.response?.data ?? err?.message));
-        if (!cancelled) setAiText(null);
-      })
-      .finally(() => { if (!cancelled) setAiLoading(false); });
-    return () => { cancelled = true; };
+        const elapsed = Date.now() - startTime;
+        await new Promise((r) => setTimeout(r, Math.max(0, 1500 - elapsed)));
+        if (cancelled) return;
+        setAiLoading(false);
+        reveal(null);
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(hideTimer);
+    };
   }, [isAuthenticated, aiRec]);
 
   const [oldPw, setOldPw] = useState('');
@@ -255,6 +295,8 @@ export default function ProfileScreen() {
               <Switch
                 value={aiRec}
                 onValueChange={async v => {
+                  console.log('[IA] token (TokenStorage.getAccess):', await TokenStorage.getAccess());
+                  console.log('[IA] aiRec avant toggle:', aiRec, '-> nouvelle valeur:', v);
                   setAiRec(v);
                   await AsyncStorage.setItem('ai_recommendations', JSON.stringify(v));
                   try {
@@ -279,9 +321,9 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {aiRec && !aiLoading && aiText && (
-            <View style={styles.aiCard}>
-              <Text style={styles.aiCardTitle}>✨ Votre recommandation personnalisée</Text>
+          {aiRec && showAiCard && aiText && (
+            <Animated.View style={[styles.aiCard, { opacity: aiCardOpacity }]}>
+              <Text style={styles.aiCardBadge}>✨ Généré par Claude IA</Text>
               <Text style={styles.aiCardText}>{aiText}</Text>
               <TouchableOpacity
                 style={styles.aiCardButton}
@@ -290,7 +332,8 @@ export default function ProfileScreen() {
               >
                 <Text style={styles.aiCardButtonText}>Réserver maintenant</Text>
               </TouchableOpacity>
-            </View>
+              {aiGeneratedAt && <Text style={styles.aiCardTimestamp}>{aiGeneratedAt}</Text>}
+            </Animated.View>
           )}
         </View>
 
@@ -486,7 +529,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   aiLoadingText: { fontSize: 13.5, color: '#6B6560', fontStyle: 'italic' },
-  aiCardTitle: { fontSize: 14.5, fontWeight: '700', color: '#fff', marginBottom: 8 },
+  aiCardBadge: { fontSize: 12, fontWeight: '700', color: '#C9A84C', marginBottom: 8 },
   aiCardText: { fontSize: 13.5, color: 'rgba(255,255,255,0.8)', lineHeight: 20, marginBottom: 14 },
   aiCardButton: {
     backgroundColor: '#C9A84C',
@@ -495,6 +538,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   aiCardButtonText: { color: '#1A1208', fontWeight: '700', fontSize: 14 },
+  aiCardTimestamp: { fontSize: 11, color: '#6B6560', textAlign: 'right', marginTop: 8 },
 
   // Logout
   logoutBtn: {
