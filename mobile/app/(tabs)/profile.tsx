@@ -14,10 +14,24 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
-import { authApi } from '@/services/api';
+import { authApi, recommendationsApi } from '@/services/api';
 import { Fonts } from '@/constants';
+
+
+function LoadingDots() {
+  const [count, setCount] = useState(1);
+
+  useEffect(() => {
+    const id = setInterval(() => setCount((c) => (c % 3) + 1), 450);
+    return () => clearInterval(id);
+  }, []);
+
+  return <Text style={styles.aiLoadingText}>✨ Analyse de vos habitudes en cours{'.'.repeat(count)}</Text>;
+}
 
 
 function Avatar({ initial, size = 72 }: { initial: string; size?: number }) {
@@ -80,6 +94,7 @@ function ModalField({ label, value, onChangeText, placeholder, secureTextEntry, 
 export default function ProfileScreen() {
   const { user, isAuthenticated, logout, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
+  const router = useRouter();
   const [editModal, setEditModal] = useState(false);
   const [pwModal, setPwModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -89,6 +104,23 @@ export default function ProfileScreen() {
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [aiRec, setAiRec] = useState(user?.ai_recommendations ?? true);
+
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiText, setAiText] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.ai_recommendations) {
+      setAiText(null);
+      return;
+    }
+    let cancelled = false;
+    setAiLoading(true);
+    recommendationsApi.get()
+      .then((data) => { if (!cancelled) setAiText(data.ai_text); })
+      .catch(() => { if (!cancelled) setAiText(null); })
+      .finally(() => { if (!cancelled) setAiLoading(false); });
+    return () => { cancelled = true; };
+  }, [isAuthenticated, user?.ai_recommendations]);
 
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -214,12 +246,44 @@ export default function ProfileScreen() {
             rightElement={
               <Switch
                 value={aiRec}
-                onValueChange={async v => { setAiRec(v); await authApi.updateProfile({ ai_recommendations: v }); await refreshUser(); }}
+                onValueChange={async v => {
+                  setAiRec(v);
+                  await AsyncStorage.setItem('ai_recommendations', JSON.stringify(v));
+                  try {
+                    await authApi.updateProfile({ ai_recommendations: v });
+                    await refreshUser();
+                  } catch (e) {
+                    // Silencieux — sauvegarde locale suffisante
+                  }
+                  if (!v) {
+                    Alert.alert('Recommandations IA désactivées', 'Vous pouvez les réactiver à tout moment.');
+                  }
+                }}
                 trackColor={{ false: 'rgba(255,255,255,0.12)', true: 'rgba(201,168,76,0.4)' }}
                 thumbColor={aiRec ? '#C9A84C' : 'rgba(255,255,255,0.5)'}
               />
             }
           />
+
+          {aiRec && aiLoading && (
+            <View style={styles.aiCard}>
+              <LoadingDots />
+            </View>
+          )}
+
+          {aiRec && !aiLoading && aiText && (
+            <View style={styles.aiCard}>
+              <Text style={styles.aiCardTitle}>✨ Votre recommandation personnalisée</Text>
+              <Text style={styles.aiCardText}>{aiText}</Text>
+              <TouchableOpacity
+                style={styles.aiCardButton}
+                onPress={() => router.push('/(tabs)/book')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.aiCardButtonText}>Réserver maintenant</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Info */}
@@ -403,6 +467,26 @@ const styles = StyleSheet.create({
   settingLabel: { fontSize: 14.5, color: '#fff' },
   settingValue: { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 },
   settingArrow: { fontSize: 20, color: 'rgba(255,255,255,0.35)' },
+
+  // AI recommendation card
+  aiCard: {
+    backgroundColor: '#1A1814',
+    borderWidth: 1,
+    borderColor: '#C9A84C',
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 12,
+  },
+  aiLoadingText: { fontSize: 13.5, color: '#6B6560', fontStyle: 'italic' },
+  aiCardTitle: { fontSize: 14.5, fontWeight: '700', color: '#fff', marginBottom: 8 },
+  aiCardText: { fontSize: 13.5, color: 'rgba(255,255,255,0.8)', lineHeight: 20, marginBottom: 14 },
+  aiCardButton: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  aiCardButtonText: { color: '#1A1208', fontWeight: '700', fontSize: 14 },
 
   // Logout
   logoutBtn: {
