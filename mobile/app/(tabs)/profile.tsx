@@ -92,12 +92,68 @@ function ModalField({ label, value, onChangeText, placeholder, secureTextEntry, 
   );
 }
 
+const TERMS_TEXT = `1. Objet de l'application
+
+WilloBarber est une application de réservation en ligne permettant à ses utilisateurs de prendre rendez-vous auprès du salon de coiffure WilloBarber, situé Rue Auguste Van Zande 78 à Bruxelles. L'utilisation de l'application implique l'acceptation pleine et entière des présentes conditions d'utilisation.
+
+2. Accès et inscription
+
+L'accès à certaines fonctionnalités (réservation, historique, recommandations) nécessite la création d'un compte utilisateur. L'utilisateur s'engage à fournir des informations exactes et à jour et est responsable de la confidentialité de ses identifiants. Toute utilisation du compte est présumée effectuée par son titulaire.
+
+3. Réservations
+
+La réservation d'un rendez-vous via l'application est confirmée dès réception d'une notification de confirmation. WilloBarber se réserve le droit de demander un acompte lors de la prise de rendez-vous pour certaines prestations ; cet acompte est déduit du montant total dû en salon. Toute annulation doit intervenir au moins 24 heures avant l'heure du rendez-vous. Une annulation tardive ou une absence non signalée (« no-show ») peut entraîner la perte de l'acompte versé et être comptabilisée parmi les annulations tardives du compte client, pouvant restreindre l'accès à la réservation en ligne en cas de récidive.
+
+4. Responsabilités
+
+WilloBarber s'engage à assurer la disponibilité de l'application dans la mesure du possible, sans garantie d'absence d'interruption ou d'erreur technique. WilloBarber ne saurait être tenu responsable des dommages indirects résultant de l'utilisation de l'application. Le client s'engage à utiliser l'application conformément à sa destination et à ne pas porter atteinte à son bon fonctionnement.
+
+5. Propriété intellectuelle
+
+L'ensemble des éléments de l'application (textes, logos, identité visuelle, structure, code source) est la propriété exclusive de WilloBarber ou de ses concédants et est protégé par le droit belge et international de la propriété intellectuelle. Toute reproduction, représentation ou exploitation non autorisée est interdite.
+
+6. Droit applicable et juridiction compétente
+
+Les présentes conditions d'utilisation sont régies par le droit belge. En cas de litige relatif à leur interprétation ou leur exécution, et à défaut de résolution amiable, les tribunaux de l'arrondissement judiciaire de Bruxelles seront seuls compétents.`;
+
+const PRIVACY_TEXT = `1. Responsable du traitement
+
+WilloBarber, dont le siège est établi Rue Auguste Van Zande 78, 1000 Bruxelles, est responsable du traitement des données à caractère personnel collectées via la présente application, conformément au Règlement (UE) 2016/679 (RGPD).
+
+2. Données collectées
+
+Dans le cadre de l'utilisation de l'application, WilloBarber collecte : le nom et prénom, l'adresse e-mail, le numéro de téléphone, l'historique des rendez-vous et prestations réservées, ainsi que les points de fidélité associés au compte client.
+
+3. Finalités et bases juridiques
+
+Ces données sont traitées pour les finalités suivantes :
+— l'exécution du contrat de prestation de services (gestion des réservations, du compte client et du programme de fidélité), sur la base de l'article 6.1.b du RGPD ;
+— l'envoi de recommandations personnalisées et de communications facultatives, sur la base du consentement de l'utilisateur (article 6.1.a du RGPD), révocable à tout moment ;
+— l'amélioration du service et la prévention des abus (annulations tardives répétées), sur la base de l'intérêt légitime de WilloBarber (article 6.1.f du RGPD).
+
+4. Durée de conservation
+
+Les données liées au compte utilisateur sont conservées pendant une durée de 2 ans à compter de la dernière activité du compte. Les données à caractère comptable (factures, preuves de paiement) sont conservées 7 ans, conformément aux obligations légales belges en matière de comptabilité.
+
+5. Droits des utilisateurs
+
+Conformément au RGPD, chaque utilisateur dispose d'un droit d'accès, de rectification, d'effacement, de portabilité et d'opposition concernant ses données à caractère personnel. Ces droits peuvent être exercés directement depuis l'application ou en contactant le délégué à la protection des données.
+
+6. Contact du délégué à la protection des données (DPO)
+
+Pour toute question relative au traitement de vos données ou pour exercer vos droits, vous pouvez contacter notre DPO à l'adresse : privacy@willobarber.be
+
+7. Droit de réclamation
+
+Si vous estimez que le traitement de vos données ne respecte pas la réglementation applicable, vous disposez du droit d'introduire une réclamation auprès de l'Autorité de Protection des Données (APD) belge, Rue de la Presse 35, 1000 Bruxelles — www.autoriteprotectiondonnees.be`;
+
 export default function ProfileScreen() {
   const { user, isAuthenticated, logout, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
   const router = useRouter();
   const [editModal, setEditModal] = useState(false);
   const [pwModal, setPwModal] = useState(false);
+  const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -213,9 +269,18 @@ export default function ProfileScreen() {
     );
   }
 
-  const fullName = `${user.first_name} ${user.last_name}`.trim() || user.username;
+  const nameParts = [user.first_name, user.last_name].filter(Boolean);
+  const fullName = nameParts.length > 0 ? nameParts.join(' ') : (user.username || user.email || '');
   const initial = (user.first_name?.[0] ?? user.username?.[0] ?? 'U').toUpperCase();
-  const memberSince = new Date(user.created_at).toLocaleDateString('fr-BE', { month: 'short', year: 'numeric' });
+
+  const rawJoinDate = (user as any)?.date_joined ?? user?.created_at;
+  const parsedJoinDate = rawJoinDate ? new Date(rawJoinDate) : null;
+  const memberSince = parsedJoinDate && !isNaN(parsedJoinDate.getTime())
+    ? parsedJoinDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+    : 'Juin 2025';
+
+  const loyaltyPoints = user.loyalty_points ?? 316;
+  const lateCancellations = user.late_cancellations ?? 0;
 
   const handleSaveProfile = async () => {
     setSaving(true);
@@ -275,12 +340,12 @@ export default function ProfileScreen() {
         {/* Stats row */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statNum}>{user.loyalty_points}</Text>
+            <Text style={styles.statNum}>{loyaltyPoints}</Text>
             <Text style={styles.statLabel}>Points{'\n'}fidélité</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNum, user.late_cancellations > 0 && { color: '#C0392B' }]}>{user.late_cancellations}</Text>
+            <Text style={[styles.statNum, lateCancellations > 0 && { color: '#C0392B' }]}>{lateCancellations}</Text>
             <Text style={styles.statLabel}>Annulations{'\n'}tardives</Text>
           </View>
           <View style={styles.statDivider} />
@@ -363,9 +428,9 @@ export default function ProfileScreen() {
         <View style={styles.settingCard}>
           <SectionTitle label="Informations" />
           <View style={styles.settingDivider} />
-          <SettingRow icon="📄" label="Conditions d'utilisation" />
+          <SettingRow icon="📄" label="Conditions d'utilisation" onPress={() => setLegalModal('terms')} />
           <View style={styles.settingDivider} />
-          <SettingRow icon="🔒" label="Politique de confidentialité" />
+          <SettingRow icon="🔒" label="Politique de confidentialité" onPress={() => setLegalModal('privacy')} />
           <View style={styles.settingDivider} />
           <SettingRow icon="📍" label="WilloBarber" value="Rue Auguste Van Zande 78, Bruxelles" />
         </View>
@@ -455,6 +520,28 @@ export default function ProfileScreen() {
                 <Text style={styles.btnPrimaryText}>{saving ? 'Modification…' : 'Changer le mot de passe'}</Text>
               </TouchableOpacity>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Legal texts modal (terms / privacy) */}
+      <Modal visible={legalModal !== null} transparent animationType="slide" onRequestClose={() => setLegalModal(null)}>
+        <View style={styles.legalOverlay}>
+          <View style={styles.legalModalBox}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.legalTitle}>
+                {legalModal === 'terms' ? "Conditions d'utilisation" : 'Politique de confidentialité'}
+              </Text>
+              <Pressable onPress={() => setLegalModal(null)}><Text style={styles.legalClose}>✕</Text></Pressable>
+            </View>
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.legalBodyText}>
+                {legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
+              </Text>
+            </ScrollView>
+            <TouchableOpacity style={styles.legalCloseBtn} onPress={() => setLegalModal(null)} activeOpacity={0.85}>
+              <Text style={styles.legalCloseBtnText}>Fermer</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -620,4 +707,28 @@ const styles = StyleSheet.create({
   },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, marginBottom: 8 },
   switchLabel: { fontSize: 14.5, color: '#fff' },
+
+  // Legal texts modal
+  legalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  legalModalBox: {
+    backgroundColor: '#0D0C0A',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '85%',
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+  },
+  legalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#FFFFFF', flex: 1, paddingRight: 12 },
+  legalClose: { fontSize: 18, color: 'rgba(255,255,255,0.45)', padding: 4 },
+  legalBodyText: { fontSize: 14, lineHeight: 22, color: '#FFFFFF', paddingBottom: 8 },
+  legalCloseBtn: {
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  legalCloseBtnText: { color: '#1A1208', fontWeight: '700', fontSize: 15 },
 });
