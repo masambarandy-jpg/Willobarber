@@ -325,11 +325,15 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
 </body>
 </html>`;
 
-    const win = window.open('', '_blank');
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-    }
+    const blob = new Blob([html], { type: 'text/html' });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Facture_WilloBarber_WB-2026-${Math.floor(Math.random() * 90000) + 10000}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleCancelAppointment = () => {
