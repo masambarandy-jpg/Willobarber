@@ -313,10 +313,26 @@ export default function ProfileScreen() {
     }
   };
 
+  const performLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+      router.replace('/');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   const handleLogout = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Voulez-vous vous déconnecter ?')) {
+        performLogout();
+      }
+      return;
+    }
     Alert.alert('Déconnexion', 'Êtes-vous sûr de vouloir vous déconnecter ?', [
       { text: 'Annuler', style: 'cancel' },
-      { text: 'Se déconnecter', style: 'destructive', onPress: async () => { setLoggingOut(true); await logout(); setLoggingOut(false); } },
+      { text: 'Se déconnecter', style: 'destructive', onPress: performLogout },
     ]);
   };
 
