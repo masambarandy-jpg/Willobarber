@@ -22,6 +22,7 @@ import { BookingConfirmation } from '@/components/booking/BookingConfirmation';
 
 import {
   ACOMPTE_FIXE,
+  BARBERS,
   fmtPrice,
   type AmountChoice,
   type BookingState,
@@ -65,13 +66,41 @@ const EMPTY_CARD: CardForm = {
 export default function BookScreen() {
   const router  = useRouter();
   const insets  = useSafeAreaInsets();
-  const { serviceId } = useLocalSearchParams<{ serviceId?: string }>();
+  const {
+    serviceId,
+    quickbook,
+    prestation,
+    barbier: barbierParam,
+    date: dateParam,
+    heure,
+  } = useLocalSearchParams<{
+    serviceId?: string;
+    quickbook?: string;
+    prestation?: string;
+    prix?: string;
+    duree?: string;
+    barbier?: string;
+    date?: string;
+    heure?: string;
+  }>();
+  const isQuickbook = quickbook === 'true';
   const { isAuthenticated, user } = useAuth();
   const { showLoginModal } = useAuthModal();
   const prefilled = useRef(false);
-  const [step,          setStep]          = useState(1);
+  const [step,          setStep]          = useState(isQuickbook ? 4 : 1);
   const [confirmed,     setConfirmed]     = useState(false);
   const [booking,       setBooking]       = useState<BookingState>(() => {
+    if (isQuickbook) {
+      const service = SERVICES.find(s => s.name === prestation) ?? null;
+      const barber  = BARBERS.find(b => b.name === barbierParam) ?? null;
+      let date: Date | null = null;
+      if (dateParam === 'Demain') {
+        date = new Date();
+        date.setDate(date.getDate() + 1);
+        date.setHours(0, 0, 0, 0);
+      }
+      return { ...INITIAL_BOOKING, service, barber, date, time: heure ?? null };
+    }
     const preselected = SERVICES.find(s => s.id === serviceId);
     return preselected ? { ...INITIAL_BOOKING, service: preselected } : INITIAL_BOOKING;
   });

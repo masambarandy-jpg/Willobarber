@@ -392,7 +392,18 @@ export default function ReservationsScreen() {
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <TouchableOpacity
               style={[styles.btnPrimary, { flex: 1 }]}
-              onPress={() => router.push('/(tabs)/book')}
+              onPress={() => router.push({
+                pathname: '/(tabs)/book',
+                params: {
+                  quickbook: 'true',
+                  prestation: 'Signature WilloBarber',
+                  prix: '45',
+                  duree: '45',
+                  barbier: 'Willo',
+                  date: 'Demain',
+                  heure: '11:00',
+                },
+              })}
               activeOpacity={0.85}
             >
               <Text style={styles.btnPrimaryText}>Reprendre la même coupe</Text>
