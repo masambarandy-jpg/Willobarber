@@ -30,11 +30,11 @@ const MOCK_LOYALTY = {
 };
 
 const TRANSACTIONS = [
-  { id: 1, date: '17 juin 2026', reason: 'Coupe Signature',         points:  450, type: 'earn'  },
-  { id: 2, date: '03 juin 2026', reason: 'Le Rituel',               points:  750, type: 'earn'  },
-  { id: 3, date: '20 mai 2026',  reason: 'Coupe gratuite utilisée', points: -500, type: 'spend' },
-  { id: 4, date: '05 mai 2026',  reason: 'Rasage Traditionnel',     points:  280, type: 'earn'  },
-  { id: 5, date: 'Bonus',        reason: 'Première réservation',    points:   50, type: 'bonus' },
+  { id: 1, date: '13 juil. 2026', reason: 'Coupe Signature (45€ × 2pts)',      points:   90, type: 'earn'  },
+  { id: 2, date: '03 juin 2026',  reason: 'Le Rituel (75€ × 2pts)',            points:  150, type: 'earn'  },
+  { id: 3, date: '20 mai 2026',   reason: 'Coupe gratuite utilisée',           points: -1000, type: 'spend' },
+  { id: 4, date: '05 mai 2026',   reason: 'Rasage Traditionnel (28€ × 2pts)',  points:   56, type: 'earn'  },
+  { id: 5, date: 'Bonus bienvenue', reason: 'Première réservation',           points:   20, type: 'bonus' },
 ];
 
 const TIERS = [
