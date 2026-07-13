@@ -188,6 +188,14 @@ export interface WaitingListEntry {
   created_at: string;
 }
 
+// ─── AI Recommendations ───────────────────────────────────────────────────────
+
+export interface AiRecommendationResponse {
+  recommendations: unknown[] | Record<string, unknown>;
+  ai_text: string | null;
+  message?: string;
+}
+
 // ─── API Generic ─────────────────────────────────────────────────────────────
 
 export interface ApiError {

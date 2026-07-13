@@ -15,6 +15,7 @@ import type {
   AvailableSlotsResponse,
   SalonSettingsPublic,
   WaitingListEntry,
+  AiRecommendationResponse,
 } from '@/types';
 
 const SECURE_KEY_ACCESS = 'wb_access_token';
@@ -210,7 +211,7 @@ export const settingsApi = {
 // ─── Recommendations API ──────────────────────────────────────────────────────
 
 export const recommendationsApi = {
-  get: () => http.get('/recommendations/').then((r) => r.data),
+  get: () => http.get<AiRecommendationResponse>('/recommendations/').then((r) => r.data),
 };
 
 // ─── Appointments API ────────────────────────────────────────────────────────

@@ -1,3 +1,7 @@
+import logging
+import os
+
+import anthropic
 from rest_framework import viewsets, status, generics
 from rest_framework.decorators import api_view, permission_classes, throttle_classes, action
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
@@ -8,6 +12,8 @@ from django.contrib.auth import authenticate
 from django.utils import timezone
 from datetime import timedelta, datetime
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 
 from .models import (
     User, Barber, Service, Availability, Reservation,
@@ -533,13 +539,66 @@ class ReviewViewSet(viewsets.ModelViewSet):
 # ══════════════════════════════════════════
 # AI RECOMMENDATIONS
 # ══════════════════════════════════════════
+ANTHROPIC_MODEL = 'claude-sonnet-5'
+
+LOYALTY_TIERS = (
+    (500, 'OR'),
+    (200, 'ARGENT'),
+    (0, 'BRONZE'),
+)
+
+
+def _loyalty_tier(points):
+    for threshold, label in LOYALTY_TIERS:
+        if points >= threshold:
+            return label
+    return 'BRONZE'
+
+
+def _generate_ai_recommendation_text(user, fav_service, fav_service_count, fav_barber, last_reservation, avg_interval):
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        logger.warning('ANTHROPIC_API_KEY manquant — recommandation IA non générée.')
+        return None
+
+    prompt = (
+        "Tu es l'assistant IA de WilloBarber, un salon de coiffure premium à Bruxelles.\n"
+        "Basé sur cet historique client :\n"
+        f"- {fav_service.name} ({fav_service.price}€) avec {fav_barber.user.get_full_name() or fav_barber.user.username} "
+        f"— {fav_service_count} fois\n"
+        f"- Dernière visite : {last_reservation.date.strftime('%d %b').upper()}\n"
+        f"- Intervalle moyen : {round(avg_interval)} jours\n"
+        f"- Points fidélité : {user.loyalty_points} pts (niveau {_loyalty_tier(user.loyalty_points)})\n\n"
+        "Génère une recommandation courte et personnalisée (3-4 phrases max) pour ce client. "
+        "Suggère quand reprendre RDV, quelle prestation et pourquoi. Ton chic et bienveillant."
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=400,
+            thinking={'type': 'disabled'},
+            messages=[{'role': 'user', 'content': prompt}],
+        )
+    except anthropic.APIError:
+        logger.exception('Échec de l\'appel Anthropic pour la recommandation IA.')
+        return None
+
+    if response.stop_reason == 'refusal':
+        logger.warning('Recommandation IA refusée par les classifieurs de sécurité.')
+        return None
+
+    return next((block.text for block in response.content if block.type == 'text'), None)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def recommendations(request):
     user = request.user
 
     if not user.ai_recommendations:
-        return Response({'recommendations': [], 'message': 'Recommandations IA désactivées.'})
+        return Response({'recommendations': [], 'ai_text': None, 'message': 'Recommandations IA désactivées.'})
 
     reservations = Reservation.objects.filter(
         client=user,
@@ -550,6 +609,7 @@ def recommendations(request):
     if reservations.count() < 2:
         return Response({
             'recommendations': [],
+            'ai_text': None,
             'message': 'Pas assez d\'historique pour générer des recommandations.'
         })
 
@@ -579,6 +639,17 @@ def recommendations(request):
         barber__reservations__status__in=['pending', 'confirmed']
     ).order_by('date', 'start_time')[:3]
 
+    ai_text = None
+    if fav_service and fav_barber:
+        ai_text = _generate_ai_recommendation_text(
+            user,
+            Service.objects.get(pk=fav_service['service']),
+            fav_service['count'],
+            Barber.objects.get(pk=fav_barber['barber']),
+            last_reservation,
+            avg_interval,
+        )
+
     result = {
         'avg_interval_days': round(avg_interval),
         'predicted_next_date': predicted_date,
@@ -594,7 +665,7 @@ def recommendations(request):
         ]
     }
 
-    return Response({'recommendations': result})
+    return Response({'recommendations': result, 'ai_text': ai_text})
 
 
 # ══════════════════════════════════════════
