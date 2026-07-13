@@ -12,7 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fonts } from '@/constants';
 import {
-  calcDeposit,
+  ACOMPTE_FIXE,
   fmtPrice,
   type AmountChoice,
   type BookingState,
@@ -225,7 +225,7 @@ export function Step4Payment({
   const { service } = booking;
 
   const price   = service ? service.price : 0;
-  const deposit = calcDeposit(price);
+  const deposit = ACOMPTE_FIXE;
   const isFull  = amountChoice === 'full';
   const payNow  = isFull ? price : deposit;
   const solde   = isFull ? 0 : price - deposit;
@@ -248,7 +248,7 @@ export function Step4Payment({
         {/* Title */}
         <Text style={styles.title}>Acompte & paiement</Text>
         <Text style={styles.subtitle}>
-          Un acompte de 10 % sécurise votre créneau. Le solde se règle au salon.
+          Un acompte fixe de 5 € sécurise votre créneau. Le solde se règle au salon.
         </Text>
 
         {/* ── Informations de contact ───────────────────────────────────── */}
@@ -375,7 +375,7 @@ export function Step4Payment({
                     <Text style={styles.badgeGoldText}>OBLIGATOIRE</Text>
                   </View>
                 </View>
-                <Text style={styles.radioSub}>Acompte minimum pour sécuriser votre créneau</Text>
+                <Text style={styles.radioSub}>Acompte fixe pour sécuriser votre créneau</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -413,7 +413,7 @@ export function Step4Payment({
           </View>
           <View style={styles.amountRow}>
             <Text style={styles.amountLabel}>
-              {isFull ? 'Paiement total' : 'Acompte (10%)'}
+              {isFull ? 'Paiement total' : 'Acompte'}
             </Text>
             <Text style={[styles.amountValue, { color: GREEN_TEXT }]}>
               -{fmtPrice(payNow)}

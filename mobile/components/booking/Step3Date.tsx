@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { Fonts } from '@/constants';
-import { SLOT_GROUPS, type BookingState } from './data';
+import { SLOT_GROUPS, isSlotAvailable, type BookingState } from './data';
 
 const GOLD       = '#C9A84C';
 const CARD       = '#1A1814';
@@ -196,7 +196,7 @@ interface Props {
 }
 
 export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
-  const { date: selectedDate, time: selectedTime } = booking;
+  const { date: selectedDate, time: selectedTime, service } = booking;
 
   return (
     <ScrollView
@@ -230,26 +230,27 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
               <Text style={styles.slotGroupLabel}>{group.label}</Text>
               <View style={styles.slotsGrid}>
                 {group.slots.map((slot) => {
-                  const isOn    = selectedTime === slot.t;
-                  const unavail = !slot.ok;
+                  const isOn     = selectedTime === slot;
+                  const available = service ? isSlotAvailable(slot, service.dur) : true;
+                  const disabled  = !available;
                   return (
                     <TouchableOpacity
-                      key={slot.t}
+                      key={slot}
                       style={[
                         styles.slotPill,
-                        isOn    && styles.slotPillActive,
-                        unavail && styles.slotPillUnavail,
+                        isOn     && styles.slotPillActive,
+                        disabled && styles.slotPillDisabled,
                       ]}
-                      onPress={() => slot.ok && onTimeSelect(slot.t)}
-                      disabled={unavail}
+                      onPress={() => available && onTimeSelect(slot)}
+                      disabled={disabled}
                       activeOpacity={0.8}
                     >
                       <Text style={[
                         styles.slotText,
-                        isOn    && styles.slotTextActive,
-                        unavail && styles.slotTextUnavail,
+                        isOn     && styles.slotTextActive,
+                        disabled && styles.slotTextDisabled,
                       ]}>
-                        {slot.t}
+                        {slot}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -442,9 +443,8 @@ const styles = StyleSheet.create({
     backgroundColor: GOLD,
     borderColor: GOLD,
   },
-  slotPillUnavail: {
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
+  slotPillDisabled: {
+    opacity: 0.35,
   },
   slotText: {
     fontSize: 14,
@@ -455,8 +455,7 @@ const styles = StyleSheet.create({
     color: '#1a1208',
     fontWeight: '700',
   },
-  slotTextUnavail: {
+  slotTextDisabled: {
     color: 'rgba(255,255,255,0.45)',
-    textDecorationLine: 'line-through',
   },
 });

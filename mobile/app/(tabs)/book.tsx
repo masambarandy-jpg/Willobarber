@@ -21,7 +21,7 @@ import { Step4Payment }       from '@/components/booking/Step4Payment';
 import { BookingConfirmation } from '@/components/booking/BookingConfirmation';
 
 import {
-  calcDeposit,
+  ACOMPTE_FIXE,
   fmtPrice,
   type AmountChoice,
   type BookingState,
@@ -223,7 +223,7 @@ export default function BookScreen() {
               <Text style={styles.ctaFullText}>
                 {(() => {
                   const price = booking.service?.price ?? 0;
-                  const amt = amountChoice === 'full' ? price : calcDeposit(price);
+                  const amt = amountChoice === 'full' ? price : ACOMPTE_FIXE;
                   return `Payer ${fmtPrice(amt)} et réserver →`;
                 })()}
               </Text>

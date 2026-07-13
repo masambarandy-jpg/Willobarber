@@ -45,14 +45,9 @@ export interface BookingState {
   time: string | null;
 }
 
-export interface SlotInfo {
-  t: string;
-  ok: boolean;
-}
-
 export interface SlotGroup {
   label: string;
-  slots: SlotInfo[];
+  slots: string[];
 }
 
 // ─── Static data ──────────────────────────────────────────────────────────────
@@ -175,31 +170,23 @@ export const BARBERS: StaticBarber[] = [
 export const SLOT_GROUPS: SlotGroup[] = [
   {
     label: 'MATINÉE',
-    slots: [
-      { t: '11:00', ok: true  },
-      { t: '12:00', ok: false },
-    ],
+    slots: ['11:00', '11:30', '12:00', '12:30'],
   },
   {
     label: 'APRÈS-MIDI',
-    slots: [
-      { t: '13:00', ok: true  },
-      { t: '14:00', ok: true  },
-      { t: '15:00', ok: false },
-      { t: '16:00', ok: true  },
-    ],
+    slots: ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'],
   },
   {
     label: 'SOIRÉE',
-    slots: [
-      { t: '18:00', ok: true  },
-      { t: '19:00', ok: true  },
-      { t: '20:00', ok: false },
-    ],
+    slots: ['17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'],
   },
 ];
 
 export const LOYALTY_DISCOUNT = 5;
+
+export const ACOMPTE_FIXE = 5;
+
+const CLOSING_MINUTES = 20 * 60;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -241,8 +228,21 @@ export function daysUntil(date: Date): number {
   return Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-export function calcDeposit(price: number): number {
-  return Math.round(price * 0.1);
+export function getServiceDurationMinutes(dur: string): number {
+  if (dur.includes('h')) {
+    const [h, m] = dur.split('h');
+    const hours = parseInt(h, 10) || 0;
+    const mins  = parseInt(m, 10) || 0;
+    return hours * 60 + mins;
+  }
+  return parseInt(dur, 10) || 30;
+}
+
+export function isSlotAvailable(slot: string, serviceDur: string): boolean {
+  const [h, m]    = slot.split(':').map(Number);
+  const slotMinutes = h * 60 + m;
+  const endMinutes   = slotMinutes + getServiceDurationMinutes(serviceDur);
+  return endMinutes <= CLOSING_MINUTES;
 }
 
 export function fmtPrice(n: number): string {

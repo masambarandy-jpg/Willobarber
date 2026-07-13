@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Fonts } from '@/constants';
 import {
-  calcDeposit,
+  ACOMPTE_FIXE,
   dayBeforeLabel,
   fmtPrice,
   formatDateShortFr,
@@ -65,7 +65,7 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
   const { service, barber, date, time } = booking;
 
   const price   = service ? service.price : 0;
-  const deposit = calcDeposit(price);
+  const deposit = ACOMPTE_FIXE;
   const solde   = price - deposit;
 
   const smsDate    = date ? dayBeforeLabel(date) : '';
