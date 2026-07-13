@@ -5,7 +5,7 @@ from .models import User, Barbershop, Service, Reservation
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'phone']
+        fields = ['id', 'username', 'email', 'role', 'phone', 'ai_recommendations']
 
 
 class RegisterSerializer(serializers.ModelSerializer):

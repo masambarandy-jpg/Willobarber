@@ -11,6 +11,7 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='client')
     phone = models.CharField(max_length=20, blank=True, null=True)
+    ai_recommendations = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.username} ({self.role})"

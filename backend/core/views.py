@@ -1,5 +1,11 @@
+import logging
+import os
+from collections import Counter
+
+import anthropic
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -9,6 +15,10 @@ from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer,
 )
+
+logger = logging.getLogger(__name__)
+
+ANTHROPIC_MODEL = 'claude-sonnet-5'
 
 
 class BarbershopViewSet(viewsets.ModelViewSet):
@@ -80,6 +90,13 @@ class MeView(APIView):
     def get(self, request):
         return Response(UserSerializer(request.user).data)
 
+    def patch(self, request):
+        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
@@ -146,3 +163,76 @@ class CheckClientView(APIView):
         if user:
             return Response({'status': 'exists', 'first_name': user.first_name or user.username})
         return Response({'status': 'new'})
+
+
+def _generate_ai_recommendation_text(fav_service, fav_service_count, last_reservation, avg_interval):
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        logger.warning('ANTHROPIC_API_KEY manquant — recommandation IA non générée.')
+        return None
+
+    prompt = (
+        "Tu es l'assistant IA de WilloBarber, un salon de coiffure premium à Bruxelles.\n"
+        "Basé sur cet historique client :\n"
+        f"- {fav_service.name} ({fav_service.price}€) — {fav_service_count} fois\n"
+        f"- Dernière visite : {last_reservation.date.strftime('%d %b').upper()}\n"
+        f"- Intervalle moyen : {round(avg_interval)} jours\n\n"
+        "Génère une recommandation courte et personnalisée (3-4 phrases max) pour ce client. "
+        "Suggère quand reprendre RDV et pourquoi. Ton chic et bienveillant."
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=400,
+            thinking={'type': 'disabled'},
+            messages=[{'role': 'user', 'content': prompt}],
+        )
+    except anthropic.APIError:
+        logger.exception('Échec de l\'appel Anthropic pour la recommandation IA.')
+        return None
+
+    if response.stop_reason == 'refusal':
+        logger.warning('Recommandation IA refusée par les classifieurs de sécurité.')
+        return None
+
+    return next((block.text for block in response.content if block.type == 'text'), None)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def recommendations(request):
+    user = request.user
+
+    if not user.ai_recommendations:
+        return Response({'recommendations': [], 'ai_text': None, 'message': 'Recommandations IA désactivées.'})
+
+    history = Reservation.objects.filter(user=user).exclude(status='cancelled').order_by('date')
+
+    if history.count() < 2:
+        return Response({
+            'recommendations': [],
+            'ai_text': None,
+            'message': 'Pas assez d\'historique pour générer des recommandations.',
+        })
+
+    dates = list(history.values_list('date', flat=True))
+    intervals = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+    avg_interval = sum(intervals) / len(intervals) if intervals else 0
+
+    counts_by_service = Counter(history.values_list('service_id', flat=True))
+    fav_service_id, fav_service_count = counts_by_service.most_common(1)[0]
+    fav_service = Service.objects.get(pk=fav_service_id)
+    last_reservation = history.last()
+
+    ai_text = _generate_ai_recommendation_text(fav_service, fav_service_count, last_reservation, avg_interval)
+
+    return Response({
+        'recommendations': {
+            'avg_interval_days': round(avg_interval),
+            'favorite_service': ServiceSerializer(fav_service).data,
+            'last_reservation': ReservationSerializer(last_reservation).data,
+        },
+        'ai_text': ai_text,
+    })
