@@ -283,7 +283,7 @@ def generate_invoice(request):
     # Header
     header_data = [[
         Paragraph('<b>w willobarber</b><br/><font size=8 color=grey>SALON DE BARBIER · BERCHEM</font>', styles['Normal']),
-        Paragraph(f'<font size=28><i>Facture.</i></font><br/><font size=10 color=grey>N° {invoice_number}</font><br/><font size=10 color=grey>Émise le {today}</font>', ParagraphStyle('h', alignment=TA_RIGHT))
+        Paragraph(f'<font size=26><i>Facture.</i></font><br/><br/><font size=10 color=grey>N° {invoice_number}</font><br/><font size=10 color=grey>Émise le {today}</font>', ParagraphStyle('h', alignment=TA_RIGHT, spaceAfter=6, leading=32))
     ]]
     header_table = Table(header_data, colWidths=[90*mm, 90*mm])
     header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
