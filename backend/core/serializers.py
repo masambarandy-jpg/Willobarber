@@ -40,6 +40,7 @@ class ServiceSerializer(serializers.ModelSerializer):
 
 
 class ReservationSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
     user_username = serializers.CharField(source='user.username', read_only=True)
     service_name = serializers.CharField(source='service.name', read_only=True)
 

@@ -123,13 +123,10 @@ export interface Reservation {
 }
 
 export interface CreateReservationPayload {
-  barber: number;
   service: number;
   date: string;
-  start_time: string;
-  end_time: string;
+  time: string;
   notes?: string;
-  person_count?: number;
 }
 
 // ─── Review ──────────────────────────────────────────────────────────────────
