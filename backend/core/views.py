@@ -105,7 +105,16 @@ class ReservationViewSet(viewsets.ModelViewSet):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
 
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            print(f"[RESERVATION] Bad Request — data reçue: {request.data} — erreur: {e}")
+            raise
+
     def perform_create(self, serializer):
+        print(f"[RESERVATION] data: {self.request.data}")
+        print(f"[RESERVATION] user: {self.request.user}")
         reservation = serializer.save(user=self.request.user)
         send_confirmation_email(
             to_email=reservation.user.email,
