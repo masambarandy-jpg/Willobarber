@@ -1,13 +1,11 @@
-import io
 import logging
 import os
+import random
 from collections import Counter
+from datetime import datetime
 
 import anthropic
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from weasyprint import HTML as WeasyHTML
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
@@ -257,41 +255,114 @@ def recommendations(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def generate_invoice(request):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    styles = getSampleStyleSheet()
-    elements = []
+    user = request.user
+    invoice_number = f"WB-2026-{random.randint(10000, 99999)}"
+    today = datetime.now().strftime("%d %B %Y")
 
-    # Titre
-    elements.append(Paragraph("WilloBarber", styles['Title']))
-    elements.append(Paragraph("Facture", styles['Heading1']))
-    elements.append(Spacer(1, 20))
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body {{ font-family: Georgia, serif; background: #F5F0E8; margin: 0; padding: 40px; color: #1a1a1a; }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }}
+  .logo {{ display: flex; align-items: center; gap: 12px; }}
+  .logo-icon {{ background: #C9A84C; color: white; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; border-radius: 6px; }}
+  .logo-text h2 {{ margin: 0; font-size: 22px; color: #1a1a1a; }}
+  .logo-text p {{ margin: 0; font-size: 11px; color: #888; letter-spacing: 2px; }}
+  .facture-title {{ text-align: right; }}
+  .facture-title h1 {{ font-size: 42px; margin: 0; font-style: italic; }}
+  .facture-title p {{ margin: 4px 0; color: #666; font-size: 13px; }}
+  hr {{ border: none; border-top: 1px solid #1a1a1a; margin: 20px 0; }}
+  .parties {{ display: flex; justify-content: space-between; margin: 30px 0; position: relative; }}
+  .emetteur, .facture-a {{ flex: 1; }}
+  .parties label {{ font-size: 10px; letter-spacing: 2px; color: #888; text-transform: uppercase; }}
+  .parties h3 {{ margin: 8px 0 4px; font-size: 16px; }}
+  .parties p {{ margin: 2px 0; font-size: 13px; color: #444; }}
+  .paye {{ position: absolute; right: 0; top: 20px; border: 3px solid #2D6A4F; color: #2D6A4F; padding: 8px 16px; font-size: 28px; font-weight: bold; transform: rotate(-15deg); opacity: 0.4; border-radius: 4px; letter-spacing: 4px; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+  th {{ background: #1a1a1a; color: #C9A84C; padding: 10px; text-align: left; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }}
+  td {{ padding: 12px 10px; border-bottom: 1px solid #ddd; font-size: 13px; }}
+  .recap {{ display: flex; justify-content: flex-end; margin-top: 20px; }}
+  .recap-table {{ width: 300px; }}
+  .recap-table tr td {{ border: none; padding: 6px 0; font-size: 13px; }}
+  .recap-table tr td:last-child {{ text-align: right; }}
+  .total-row td {{ font-weight: bold; font-size: 16px; border-top: 2px solid #1a1a1a; padding-top: 10px; }}
+  .acompte-row td {{ color: #2D6A4F; }}
+  .regle-ce-jour {{ background: #1a1a1a; color: white; padding: 16px 20px; border-radius: 8px; display: flex; justify-content: space-between; margin-top: 16px; }}
+  .regle-ce-jour span:last-child {{ color: #C9A84C; font-size: 20px; font-weight: bold; }}
+  .note {{ font-size: 12px; color: #666; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }}
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">w</div>
+      <div class="logo-text">
+        <h2>willobarber</h2>
+        <p>SALON DE BARBIER · BERCHEM</p>
+      </div>
+    </div>
+    <div class="facture-title">
+      <h1>Facture.</h1>
+      <p>N° {invoice_number}</p>
+      <p>Émise le {today}</p>
+    </div>
+  </div>
+  <hr>
+  <div class="parties">
+    <div class="emetteur">
+      <label>Émetteur</label>
+      <h3>WilloBarber SRL</h3>
+      <p>78 rue Auguste van Zande</p>
+      <p>1082 Bruxelles · Belgique</p>
+      <p>contact@willobarber.be</p>
+      <p>+32 2 555 04 04</p>
+      <p>TVA BE 0789.123.456</p>
+    </div>
+    <div class="facture-a">
+      <label>Facturé à</label>
+      <h3>{user.first_name or user.username} {user.last_name or ''}</h3>
+      <p>{user.email}</p>
+      <div class="paye">PAYÉ</div>
+    </div>
+  </div>
+  <table>
+    <tr>
+      <th>Description</th>
+      <th>Qté</th>
+      <th>P.U. HT</th>
+      <th>TVA</th>
+      <th>Total TTC</th>
+    </tr>
+    <tr>
+      <td>Signature WilloBarber</td>
+      <td>1</td>
+      <td>37,19 €</td>
+      <td>21%</td>
+      <td>45,00 €</td>
+    </tr>
+  </table>
+  <div class="recap">
+    <table class="recap-table">
+      <tr><td>Méthode</td><td>Carte ····4242</td></tr>
+      <tr><td>Sous-total HT</td><td>37,19 €</td></tr>
+      <tr><td>TVA 21%</td><td>7,81 €</td></tr>
+      <tr class="total-row"><td>Total TTC</td><td>45,00 €</td></tr>
+      <tr class="acompte-row"><td>Acompte réglé</td><td>-5,00 €</td></tr>
+      <tr class="total-row"><td>Solde dû au salon</td><td>40,00 €</td></tr>
+    </table>
+  </div>
+  <div class="regle-ce-jour">
+    <span>RÉGLÉ CE JOUR · Acompte de réservation</span>
+    <span>5,00 €</span>
+  </div>
+  <p class="note">Cette facture concerne uniquement l'acompte de 5,00 € encaissé pour sécuriser la réservation. Une facture finale couvrant l'intégralité de la prestation sera émise à l'issue du rendez-vous.</p>
+</body>
+</html>"""
 
-    # Infos
-    elements.append(Paragraph(f"Client : {request.user.first_name} {request.user.last_name}", styles['Normal']))
-    elements.append(Paragraph(f"Email : {request.user.email}", styles['Normal']))
-    elements.append(Spacer(1, 20))
+    pdf_file = WeasyHTML(string=html_content).write_pdf()
 
-    # Tableau prestations
-    data = [
-        ['Description', 'Qté', 'P.U. HT', 'TVA', 'Total TTC'],
-        ['Signature WilloBarber', '1', '37,19 €', '21%', '45,00 €'],
-        ['', '', '', 'Acompte', '-5,00 €'],
-        ['', '', '', 'Solde au salon', '40,00 €'],
-    ]
-    table = Table(data, colWidths=[200, 40, 80, 80, 80])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1A1814')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#C9A84C')),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-    ]))
-    elements.append(table)
-
-    doc.build(elements)
-    buffer.seek(0)
-
-    response = HttpResponse(buffer, content_type='application/pdf')
-    response['Content-Disposition'] = 'attachment; filename="Facture_WilloBarber.pdf"'
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="Facture_WilloBarber_{invoice_number}.pdf"'
     return response
