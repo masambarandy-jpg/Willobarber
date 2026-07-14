@@ -9,9 +9,10 @@ import anthropic
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable, Flowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_RIGHT, TA_CENTER
+from reportlab.lib.colors import HexColor
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
@@ -29,6 +30,24 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_MODEL = 'claude-sonnet-5'
+
+
+class PayeStamp(Flowable):
+    def draw(self):
+        self.canv.saveState()
+        self.canv.translate(60, 30)
+        self.canv.rotate(-15)
+        stamp_color = HexColor('#7BAF9E')
+        self.canv.setStrokeColor(stamp_color)
+        self.canv.setFillColor(stamp_color)
+        self.canv.setLineWidth(2)
+        self.canv.roundRect(-45, -18, 90, 36, 4, stroke=1, fill=0)
+        self.canv.setFont('Helvetica-Bold', 22)
+        self.canv.drawCentredString(0, -8, 'PAYÉ')
+        self.canv.restoreState()
+
+    def wrap(self, *args):
+        return (120, 60)
 
 
 class BarbershopViewSet(viewsets.ModelViewSet):
@@ -296,10 +315,16 @@ def generate_invoice(request):
     last_name = user.last_name or ''
     parties_data = [[
         Paragraph(f'<font size=9 color=grey>ÉMETTEUR</font><br/><b>WilloBarber SRL</b><br/>78 rue Auguste van Zande<br/>1082 Bruxelles · Belgique<br/>contact@willobarber.be<br/>+32 2 555 04 04<br/><font size=9 color=grey>TVA BE 0789.123.456</font>', styles['Normal']),
-        Paragraph(f'<font size=9 color=grey>FACTURÉ À</font><br/><b>{first_name} {last_name}</b><br/>{user.email}<br/><br/><font size=20 color=green><b>✓ PAYÉ</b></font>', ParagraphStyle('right', alignment=TA_RIGHT))
+        [
+            Paragraph(f'<font size=9 color=grey>FACTURÉ À</font><br/><b>{first_name} {last_name}</b><br/>{user.email}', ParagraphStyle('right', alignment=TA_RIGHT)),
+            PayeStamp(),
+        ]
     ]]
     parties_table = Table(parties_data, colWidths=[90*mm, 90*mm])
-    parties_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
+    parties_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (1,0), (1,0), 'RIGHT'),
+    ]))
     elements.append(parties_table)
     elements.append(Spacer(1, 10*mm))
 
