@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { Fonts } from '@/constants';
+import { TokenStorage } from '@/services/api';
+import { API_BASE_URL, Fonts } from '@/constants';
 import {
   ACOMPTE_FIXE,
   dayBeforeLabel,
@@ -31,17 +32,6 @@ const GREEN_TEXT  = '#6fc191';
 const BORDER_THIN = 'rgba(255,255,255,0.08)';
 const ADDRESS     = 'Rue Auguste Van Zande 78';
 const BOOKING_NUMBER = 'WB-2026-08471';
-
-const MOIS_LONG = [
-  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
-];
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
-  ));
-}
 
 interface Props {
   booking: BookingState;
@@ -123,203 +113,21 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
     router.push('/(tabs)/reservations');
   };
 
-  const handleGenerateInvoice = () => {
+  const handleGenerateInvoice = async () => {
     if (Platform.OS !== 'web') {
       Alert.alert('Facture', 'La facture téléchargeable est disponible sur la version web.');
       return;
     }
 
-    const invoiceNumber = `WB-2026-${Math.floor(Math.random() * 90000) + 10000}`;
-
-    const qty      = service?.counter ? booking.childCount : 1;
-    const unitTTC  = service?.price ?? 0;
-    const totalTTC = unitTTC * qty;
-    const totalHT  = totalTTC / 1.21;
-    const unitHT   = unitTTC / 1.21;
-    const tva      = totalTTC - totalHT;
-    const soldeFacture = totalTTC - ACOMPTE_FIXE;
-
-    const clientName  = escapeHtml(
-      user?.username || `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim() || 'Client'
-    );
-    const clientEmail = escapeHtml(user?.email || '—');
-    const serviceName = escapeHtml(service?.name ?? 'Prestation');
-
-    const today = new Date();
-    const issueDateStr = `${today.getDate()} ${MOIS_LONG[today.getMonth()]} ${today.getFullYear()}`;
-
-    const invoiceHTML = `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8" />
-<title>Facture ${BOOKING_NUMBER} — WilloBarber</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: Georgia, 'Times New Roman', serif;
-    background: #F5F0E8;
-    color: #1A1814;
-    padding: 48px 24px;
-  }
-  .sheet {
-    max-width: 720px;
-    margin: 0 auto;
-    background: #F5F0E8;
-    position: relative;
-    padding: 48px;
-  }
-  .stamp {
-    position: absolute;
-    top: 220px;
-    right: 60px;
-    border: 4px solid #2D6A4F;
-    color: #2D6A4F;
-    font-weight: bold;
-    font-size: 34px;
-    letter-spacing: 4px;
-    padding: 10px 24px;
-    transform: rotate(-14deg);
-    opacity: 0.35;
-    border-radius: 8px;
-    pointer-events: none;
-  }
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    border-bottom: 2px solid #1A1814;
-    padding-bottom: 28px;
-    margin-bottom: 28px;
-  }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .logo {
-    width: 40px; height: 40px;
-    background: #C9A84C;
-    color: #1A1814;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: bold; font-size: 18px; border-radius: 8px;
-  }
-  .brand-name { font-size: 20px; letter-spacing: 1px; }
-  .brand-sub { font-size: 11px; letter-spacing: 2px; color: #6B6560; margin-top: 2px; }
-  .doc-title { text-align: right; }
-  .doc-title h1 { font-size: 34px; font-style: italic; font-weight: normal; }
-  .doc-title .meta { font-size: 12px; color: #6B6560; margin-top: 6px; line-height: 1.6; }
-  .parties { display: flex; justify-content: space-between; gap: 40px; margin-bottom: 36px; }
-  .party h3 { font-size: 11px; letter-spacing: 1.5px; color: #8a8378; text-transform: uppercase; margin-bottom: 8px; }
-  .party p { font-size: 13px; line-height: 1.6; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 28px; }
-  thead th { text-align: left; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #6B6560; border-bottom: 1px solid #1A1814; padding: 8px 6px; }
-  thead th.num, tbody td.num { text-align: right; }
-  tbody td { padding: 12px 6px; font-size: 13px; border-bottom: 1px solid rgba(26,24,20,0.12); }
-  .recap { margin-left: auto; width: 300px; margin-bottom: 24px; }
-  .recap-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
-  .recap-row.total { border-top: 1px solid #1A1814; margin-top: 6px; padding-top: 10px; font-weight: bold; font-size: 15px; }
-  .recap-row.deposit { color: #2D6A4F; }
-  .paid-block {
-    background: #1A1814;
-    color: #F5F0E8;
-    border-radius: 10px;
-    padding: 16px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-  .paid-block .label { font-size: 12px; letter-spacing: 1px; }
-  .paid-block .amount { font-size: 20px; color: #C9A84C; font-weight: bold; }
-  .note { font-size: 11.5px; color: #6B6560; line-height: 1.6; border-top: 1px solid rgba(26,24,20,0.15); padding-top: 16px; }
-</style>
-</head>
-<body>
-  <div class="sheet">
-    <p style="text-align:right; color:#888; font-size:12px; margin-bottom:20px;">
-      Pour obtenir un PDF : ouvrez ce fichier dans votre navigateur → Ctrl+P → Enregistrer en PDF
-    </p>
-    <div class="stamp">PAYÉ</div>
-
-    <div class="header">
-      <div class="brand">
-        <div class="logo">w</div>
-        <div>
-          <div class="brand-name">willobarber</div>
-          <div class="brand-sub">SALON DE BARBIER · BERCHEM</div>
-        </div>
-      </div>
-      <div class="doc-title">
-        <h1>Facture.</h1>
-        <div class="meta">N° ${BOOKING_NUMBER}<br/>Émise le ${issueDateStr}</div>
-      </div>
-    </div>
-
-    <div class="parties">
-      <div class="party">
-        <h3>Émetteur</h3>
-        <p>
-          WilloBarber SRL<br/>
-          78 rue Auguste van Zande<br/>
-          1082 Bruxelles<br/>
-          contact@willobarber.be<br/>
-          +32 2 555 04 04<br/>
-          TVA BE 0789.123.456
-        </p>
-      </div>
-      <div class="party">
-        <h3>Facturé à</h3>
-        <p>
-          ${clientName}<br/>
-          ${clientEmail}
-        </p>
-      </div>
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Description</th>
-          <th class="num">Qté</th>
-          <th class="num">P.U. HT</th>
-          <th class="num">TVA</th>
-          <th class="num">Total TTC</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>${serviceName}</td>
-          <td class="num">${qty}</td>
-          <td class="num">${fmtPrice(unitHT)}</td>
-          <td class="num">21%</td>
-          <td class="num">${fmtPrice(totalTTC)}</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="recap">
-      <div class="recap-row"><span>Méthode</span><span>Carte ····4242</span></div>
-      <div class="recap-row"><span>Sous-total HT</span><span>${fmtPrice(totalHT)}</span></div>
-      <div class="recap-row"><span>TVA 21%</span><span>${fmtPrice(tva)}</span></div>
-      <div class="recap-row total"><span>Total TTC</span><span>${fmtPrice(totalTTC)}</span></div>
-      <div class="recap-row deposit"><span>Acompte réglé</span><span>-${fmtPrice(ACOMPTE_FIXE)}</span></div>
-      <div class="recap-row total"><span>Solde dû au salon</span><span>${fmtPrice(soldeFacture)}</span></div>
-    </div>
-
-    <div class="paid-block">
-      <span class="label">RÉGLÉ CE JOUR · Acompte de réservation</span>
-      <span class="amount">${fmtPrice(ACOMPTE_FIXE)}</span>
-    </div>
-
-    <p class="note">
-      Cette facture concerne uniquement l'acompte de ${fmtPrice(ACOMPTE_FIXE)} encaissé pour sécuriser la réservation.
-      Une facture finale sera émise à l'issue du rendez-vous.
-    </p>
-  </div>
-</body>
-</html>`;
-
-    const blob = new Blob([invoiceHTML], { type: 'text/html;charset=utf-8' });
+    const token = await TokenStorage.getAccess();
+    const response = await fetch(`${API_BASE_URL}/reservations/invoice/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const blob = await response.blob();
     const url  = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Facture_WilloBarber_${invoiceNumber}.html`;
+    link.download = 'Facture_WilloBarber.pdf';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

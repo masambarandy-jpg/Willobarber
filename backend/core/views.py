@@ -1,8 +1,13 @@
+import io
 import logging
 import os
 from collections import Counter
 
 import anthropic
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
@@ -10,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
+from django.http import HttpResponse
 from .models import Barbershop, Service, Reservation, User
 from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
@@ -246,3 +252,46 @@ def recommendations(request):
         'recommendations': recommendations_data or [],
         'ai_text': ai_text,
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def generate_invoice(request):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # Titre
+    elements.append(Paragraph("WilloBarber", styles['Title']))
+    elements.append(Paragraph("Facture", styles['Heading1']))
+    elements.append(Spacer(1, 20))
+
+    # Infos
+    elements.append(Paragraph(f"Client : {request.user.first_name} {request.user.last_name}", styles['Normal']))
+    elements.append(Paragraph(f"Email : {request.user.email}", styles['Normal']))
+    elements.append(Spacer(1, 20))
+
+    # Tableau prestations
+    data = [
+        ['Description', 'Qté', 'P.U. HT', 'TVA', 'Total TTC'],
+        ['Signature WilloBarber', '1', '37,19 €', '21%', '45,00 €'],
+        ['', '', '', 'Acompte', '-5,00 €'],
+        ['', '', '', 'Solde au salon', '40,00 €'],
+    ]
+    table = Table(data, colWidths=[200, 40, 80, 80, 80])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1A1814')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#C9A84C')),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+    ]))
+    elements.append(table)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="Facture_WilloBarber.pdf"'
+    return response
