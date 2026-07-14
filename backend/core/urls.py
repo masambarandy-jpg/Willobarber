@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
 from .views import BarbershopViewSet, ServiceViewSet, ReservationViewSet
 
@@ -17,6 +18,7 @@ urlpatterns = [
     path('auth/me/', views.MeView.as_view(), name='me'),
     path('auth/change-password/', views.ChangePasswordView.as_view(), name='change-password'),
     path('auth/passwordless-login/', views.PasswordlessLoginView.as_view(), name='passwordless-login'),
+    path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('appointments/check-client/', views.CheckClientView.as_view(), name='check-client'),
     path('recommendations/', views.recommendations, name='recommendations'),
 ]
