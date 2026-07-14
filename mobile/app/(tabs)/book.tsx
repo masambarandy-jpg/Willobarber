@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { Fonts } from '@/constants';
+import { reservationsApi, servicesApi } from '@/services/api';
 
 import { BookingHeader }      from '@/components/booking/BookingHeader';
 import { BookingStepper }     from '@/components/booking/BookingStepper';
@@ -107,6 +108,25 @@ export default function BookScreen() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
   const [cardForm,      setCardForm]      = useState<CardForm>(EMPTY_CARD);
   const [amountChoice,  setAmountChoice]  = useState<AmountChoice>('deposit');
+  const [serviceIdMap,  setServiceIdMap]  = useState<Record<string, number>>({});
+
+  // Map slugs statiques → vrais IDs Django (/api/services/)
+  useEffect(() => {
+    servicesApi.list().then(services => {
+      const map: Record<string, number> = {};
+      services.forEach((s: any) => {
+        const name = s.name.toLowerCase();
+        if (name.includes('signature')) map['signature'] = s.id;
+        if (name.includes('taille')) map['barbe'] = s.id;
+        if (name.includes('rituel')) map['rituel'] = s.id;
+        if (name.includes('express')) map['express'] = s.id;
+        if (name.includes('camouflage')) map['camouflage'] = s.id;
+        if (name.includes('soin')) map['soin'] = s.id;
+        if (name.includes('enfant')) map['enfant'] = s.id;
+      });
+      setServiceIdMap(map);
+    }).catch(() => {}); // silencieux si pas connecté
+  }, []);
 
   // Pre-fill contact from authenticated user
   useEffect(() => {
@@ -129,13 +149,32 @@ export default function BookScreen() {
     else setStep(s => s - 1);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step === 1 && !isAuthenticated) {
       showLoginModal(() => setStep(2), 'Pour réserver, connectez-vous en 10 secondes.');
       return;
     }
-    if (step < 4) setStep(s => s + 1);
-    else setConfirmed(true);
+    if (step < 4) {
+      setStep(s => s + 1);
+      return;
+    }
+
+    if (isAuthenticated && booking.date && booking.time) {
+      try {
+        const d = booking.date;
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        await reservationsApi.create({
+          service: serviceIdMap[booking.service?.id ?? ''] || 1,
+          date: dateStr,
+          time: booking.time,
+          notes: `Barbier: ${booking.barber?.name || 'Willo'}`,
+        });
+      } catch (e) {
+        console.log('[RESERVATION] Erreur création:', e);
+        // Continue quand même vers la confirmation
+      }
+    }
+    setConfirmed(true);
   };
 
   const handleReschedule = () => {

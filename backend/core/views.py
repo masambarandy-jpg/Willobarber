@@ -6,6 +6,8 @@ from collections import Counter
 from datetime import datetime
 
 import anthropic
+import sendgrid
+from sendgrid.helpers.mail import Mail, Email, To, Content
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
@@ -60,9 +62,60 @@ class ServiceViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceSerializer
 
 
+def send_confirmation_email(to_email, first_name, service_name, date, time, barber, total_price, acompte=5):
+    try:
+        sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
+        solde = total_price - acompte
+        html_content = f"""
+        <div style="font-family: Georgia, serif; background-color: #0D0C0A; color: #FFFFFF; padding: 40px; max-width: 600px; margin: auto;">
+            <h1 style="color: #C9A84C; font-size: 32px; margin-bottom: 4px;">WilloBarber</h1>
+            <p style="color: #6B6560; font-size: 12px; letter-spacing: 2px; margin-top: 0;">SALON DE BARBIER · BRUXELLES</p>
+            <hr style="border: 1px solid #1A1814; margin: 24px 0;">
+            <h2 style="color: #FFFFFF;">Bonjour {first_name} 👋</h2>
+            <p style="color: #CCCCCC;">Votre réservation est confirmée ! Nous avons hâte de vous accueillir.</p>
+            <div style="background: #1A1814; border-radius: 12px; padding: 24px; margin: 24px 0;">
+                <table style="width: 100%; color: #FFFFFF;">
+                    <tr><td style="color: #6B6560; padding: 6px 0;">Prestation</td><td style="text-align:right; font-weight:bold;">{service_name}</td></tr>
+                    <tr><td style="color: #6B6560; padding: 6px 0;">Date</td><td style="text-align:right;">{date}</td></tr>
+                    <tr><td style="color: #6B6560; padding: 6px 0;">Heure</td><td style="text-align:right;">{time}</td></tr>
+                    <tr><td style="color: #6B6560; padding: 6px 0;">Barbier</td><td style="text-align:right;">{barber}</td></tr>
+                    <tr><td style="color: #6B6560; padding: 6px 0;">Acompte réglé</td><td style="text-align:right; color: #2D6A4F;">-{acompte}€</td></tr>
+                    <tr><td style="color: #6B6560; padding: 6px 0; font-weight:bold;">Solde au salon</td><td style="text-align:right; color: #C9A84C; font-weight:bold;">{solde}€</td></tr>
+                </table>
+            </div>
+            <p style="color: #CCCCCC;">📍 Rue Auguste Van Zande 78, Bruxelles</p>
+            <p style="color: #6B6560; font-size: 12px;">Annulation gratuite jusqu'à 24h avant le rendez-vous.</p>
+            <hr style="border: 1px solid #1A1814; margin: 24px 0;">
+            <p style="color: #C9A84C; font-size: 14px; text-align: center;">À bientôt chez WilloBarber ✂️</p>
+        </div>
+        """
+        message = Mail(
+            from_email=Email('masamba.randy@gmail.com', 'WilloBarber'),
+            to_emails=To(to_email),
+            subject=f'✂️ Confirmation — {service_name} le {date}',
+            html_content=Content('text/html', html_content)
+        )
+        sg.send(message)
+        logger.info(f"[EMAIL] Confirmation envoyée à {to_email}")
+    except Exception as e:
+        logger.error(f"[EMAIL ERROR] {str(e)}")
+
+
 class ReservationViewSet(viewsets.ModelViewSet):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
+
+    def perform_create(self, serializer):
+        reservation = serializer.save(user=self.request.user)
+        send_confirmation_email(
+            to_email=reservation.user.email,
+            first_name=reservation.user.first_name or reservation.user.username,
+            service_name=reservation.service.name,
+            date=reservation.date.strftime('%d/%m/%Y'),
+            time=reservation.time.strftime('%H:%M'),
+            barber='Willo',
+            total_price=reservation.service.price,
+        )
 
 
 class RegisterView(APIView):
