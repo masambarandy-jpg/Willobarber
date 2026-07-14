@@ -129,6 +129,8 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
       return;
     }
 
+    const invoiceNumber = `WB-2026-${Math.floor(Math.random() * 90000) + 10000}`;
+
     const qty      = service?.counter ? booking.childCount : 1;
     const unitTTC  = service?.price ?? 0;
     const totalTTC = unitTTC * qty;
@@ -146,7 +148,7 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
     const today = new Date();
     const issueDateStr = `${today.getDate()} ${MOIS_LONG[today.getMonth()]} ${today.getFullYear()}`;
 
-    const html = `<!DOCTYPE html>
+    const invoiceHTML = `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
@@ -166,20 +168,6 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
     position: relative;
     padding: 48px;
   }
-  .print-btn {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: #1A1814;
-    color: #F5F0E8;
-    border: none;
-    border-radius: 100px;
-    padding: 10px 20px;
-    font-family: Georgia, serif;
-    font-size: 14px;
-    cursor: pointer;
-  }
-  @media print { .print-btn { display: none; } }
   .stamp {
     position: absolute;
     top: 220px;
@@ -243,8 +231,10 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
 </style>
 </head>
 <body>
-  <button class="print-btn" onclick="window.print()">🖨 Imprimer</button>
   <div class="sheet">
+    <p style="text-align:right; color:#888; font-size:12px; margin-bottom:20px;">
+      Pour obtenir un PDF : ouvrez ce fichier dans votre navigateur → Ctrl+P → Enregistrer en PDF
+    </p>
     <div class="stamp">PAYÉ</div>
 
     <div class="header">
@@ -325,11 +315,11 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
 </body>
 </html>`;
 
-    const blob = new Blob([html], { type: 'text/html' });
+    const blob = new Blob([invoiceHTML], { type: 'text/html;charset=utf-8' });
     const url  = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Facture_WilloBarber_WB-2026-${Math.floor(Math.random() * 90000) + 10000}.html`;
+    link.download = `Facture_WilloBarber_${invoiceNumber}.html`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
