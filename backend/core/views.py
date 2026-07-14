@@ -96,9 +96,9 @@ def send_confirmation_email(to_email, first_name, service_name, date, time, barb
             html_content=Content('text/html', html_content)
         )
         sg.send(message)
-        logger.info(f"[EMAIL] Confirmation envoyée à {to_email}")
+        print(f"[EMAIL] Confirmation envoyée à {to_email}")
     except Exception as e:
-        logger.error(f"[EMAIL ERROR] {str(e)}")
+        print(f"[EMAIL ERROR] {str(e)}")
 
 
 class ReservationViewSet(viewsets.ModelViewSet):
@@ -116,15 +116,25 @@ class ReservationViewSet(viewsets.ModelViewSet):
         print(f"[RESERVATION] data: {self.request.data}")
         print(f"[RESERVATION] user: {self.request.user}")
         reservation = serializer.save(user=self.request.user)
-        send_confirmation_email(
-            to_email=reservation.user.email,
-            first_name=reservation.user.first_name or reservation.user.username,
-            service_name=reservation.service.name,
-            date=reservation.date.strftime('%d/%m/%Y'),
-            time=reservation.time.strftime('%H:%M'),
-            barber='Willo',
-            total_price=reservation.service.price,
-        )
+        print(f"[RESERVATION] sauvegardée: id={reservation.id}")
+
+        try:
+            print(f"[EMAIL] Tentative envoi à {self.request.user.email}")
+            send_confirmation_email(
+                to_email=self.request.user.email,
+                first_name=self.request.user.first_name or self.request.user.username,
+                service_name=reservation.service.name,
+                date=str(reservation.date),
+                time=str(reservation.time),
+                barber="Willo",
+                total_price=float(reservation.service.price),
+                acompte=5
+            )
+            print(f"[EMAIL] Envoyé avec succès à {self.request.user.email}")
+        except Exception as e:
+            import traceback
+            print(f"[EMAIL ERROR] {str(e)}")
+            print(traceback.format_exc())
 
 
 class RegisterView(APIView):
