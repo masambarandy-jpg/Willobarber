@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
@@ -69,36 +69,60 @@ const UPCOMING_CLIENTS: { letter: AvatarKey; name: string; service: string; barb
 ];
 
 function genererRapport() {
+  const date = new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
   const contenu = `
-RAPPORT WILLOBARBER — ${new Date().toLocaleDateString('fr-FR')}
-═══════════════════════════════════════
+╔══════════════════════════════════════════════════╗
+║           RAPPORT WILLOBARBER                   ║
+║           ${date.padEnd(38)}║
+╚══════════════════════════════════════════════════╝
 
-RÉSUMÉ GÉNÉRAL
-- Clients totaux : 2 412
-- Prestations actives : 14
-- Équipe : 3 barbiers
-- Rendez-vous ce mois : 386
+┌─────────────────────────────────────────────────┐
+│  RÉSUMÉ GÉNÉRAL                                 │
+├─────────────────────────────────────────────────┤
+│  👥  Clients totaux          2 412              │
+│  ✂️   Prestations actives    14                 │
+│  👨  Équipe                  3 barbiers         │
+│  📅  Rendez-vous ce mois     386                │
+└─────────────────────────────────────────────────┘
 
-CHIFFRE D'AFFAIRES
-- Total mensuel : 12 233,23 €
-- Jan: 7 200€ | Fév: 4 800€ | Mar: 9 120€
-- Avr: 10 080€ | Mai: 12 480€ | Juin: 7 200€ | Juil: 7 920€
+┌─────────────────────────────────────────────────┐
+│  CHIFFRE D'AFFAIRES MENSUEL                     │
+├─────────────────────────────────────────────────┤
+│  💰  Total                   12 233,23 €        │
+│                                                 │
+│  Jan  ████░░░░░░░░  7 200 €                     │
+│  Fév  ██░░░░░░░░░░  4 800 €                     │
+│  Mar  ████████░░░░  9 120 €  ← actif            │
+│  Avr  ██████████░░  10 080 €                    │
+│  Mai  ████████████  12 480 €                    │
+│  Juin ████░░░░░░░░  7 200 €                     │
+│  Juil █████░░░░░░░  7 920 €                     │
+└─────────────────────────────────────────────────┘
 
-TOP PRESTATIONS
-1. Signature WilloBarber — 38% (148 RDV)
-2. Taille & rasage — 25% (96 RDV)
-3. Le Rituel — 17% (64 RDV)
-4. Coupe express — 12% (48 RDV)
-5. Soin du visage — 8% (30 RDV)
+┌─────────────────────────────────────────────────┐
+│  TOP PRESTATIONS                                │
+├─────────────────────────────────────────────────┤
+│  🥇  Signature WilloBarber   38%  (148 RDV)    │
+│  🥈  Taille & rasage         25%  (96 RDV)     │
+│  🥉  Le Rituel               17%  (64 RDV)     │
+│  4.  Coupe express           12%  (48 RDV)     │
+│  5.  Soin du visage          8%   (30 RDV)     │
+└─────────────────────────────────────────────────┘
 
-PROCHAINS CLIENTS
-- 10:30 — Antoine Rivière (Signature · Willo)
-- 11:15 — Karim Benali (Barbe · Malik)
-- 14:00 — Léo Martin (Le Rituel · Willo)
-- 16:30 — Noé Vasseur (Camouflage · Idris)
+┌─────────────────────────────────────────────────┐
+│  PROCHAINS CLIENTS AUJOURD'HUI                  │
+├─────────────────────────────────────────────────┤
+│  10:30  Antoine Rivière    Signature · Willo    │
+│  11:15  Karim Benali       Barbe · Malik        │
+│  14:00  Léo Martin         Le Rituel · Willo    │
+│  16:30  Noé Vasseur        Camouflage · Idris   │
+└─────────────────────────────────────────────────┘
 
-═══════════════════════════════════════
-Généré par WilloBarber le ${new Date().toLocaleString('fr-FR')}
+══════════════════════════════════════════════════
+  Généré par WilloBarber · ${date} · ${heure}
+══════════════════════════════════════════════════
   `;
 
   if (typeof window !== 'undefined') {
@@ -114,12 +138,31 @@ Généré par WilloBarber le ${new Date().toLocaleString('fr-FR')}
 
 export default function CoiffeurDashboardScreen() {
   const [period, setPeriod] = useState<Period>('mois');
-  const [periodMenuOpen, setPeriodMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const periodBtnRef = useRef<View>(null);
 
   const caData = CA_DATA[period];
   const maxValue = Math.max(...caData.bars.map((b) => b.v), 1);
 
+  const selectPeriod = (p: Period) => {
+    setPeriod(p);
+    setMenuOpen(false);
+  };
+
+  const togglePeriodMenu = () => {
+    if (menuOpen) {
+      setMenuOpen(false);
+      return;
+    }
+    periodBtnRef.current?.measureInWindow((x, y, _width, height) => {
+      setMenuPos({ top: y + height + 6, left: x });
+      setMenuOpen(true);
+    });
+  };
+
   return (
+    <>
     <CoiffeurScreen active="dashboard">
       <View style={styles.headerRow}>
         <Text style={styles.title}>Aperçu</Text>
@@ -155,32 +198,11 @@ export default function CoiffeurDashboardScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
           <Text style={styles.cardTitle}>Chiffre d'affaires</Text>
-          <View style={styles.periodWrap}>
-            <TouchableOpacity style={styles.periodBtn} onPress={() => setPeriodMenuOpen((v) => !v)}>
+          <View ref={periodBtnRef} collapsable={false}>
+            <TouchableOpacity style={styles.periodBtn} onPress={togglePeriodMenu}>
               <Text style={styles.periodBtnText}>{PERIOD_LABELS[period]}</Text>
               <ChevronDownIcon size={12} />
             </TouchableOpacity>
-            {periodMenuOpen && (
-              <View style={styles.periodMenu}>
-                {PERIODS.map((p) => {
-                  const isActive = p === period;
-                  return (
-                    <TouchableOpacity
-                      key={p}
-                      style={styles.periodMenuItem}
-                      onPress={() => {
-                        setPeriod(p);
-                        setPeriodMenuOpen(false);
-                      }}
-                    >
-                      <Text style={[styles.periodMenuItemText, isActive && styles.periodMenuItemTextActive]}>
-                        {PERIOD_LABELS[p]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
           </View>
         </View>
         <Text style={styles.revenueAmount}>{caData.total}</Text>
@@ -256,6 +278,23 @@ export default function CoiffeurDashboardScreen() {
         ))}
       </View>
     </CoiffeurScreen>
+
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} />
+        <View style={[styles.periodMenu, { top: menuPos.top, left: menuPos.left }]}>
+          {PERIODS.map((p) => {
+            const isActive = p === period;
+            return (
+              <TouchableOpacity key={p} style={styles.periodMenuItem} onPress={() => selectPeriod(p)}>
+                <Text style={[styles.periodMenuItemText, isActive && styles.periodMenuItemTextActive]}>
+                  {PERIOD_LABELS[p]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -345,10 +384,6 @@ const styles = StyleSheet.create({
     fontSize: 19,
     color: CC.black,
   },
-  periodWrap: {
-    position: 'relative',
-    zIndex: 20,
-  },
   periodBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -365,10 +400,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: CC.black,
   },
+  menuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   periodMenu: {
     position: 'absolute',
-    top: 38,
-    right: 0,
     minWidth: 130,
     backgroundColor: CC.white,
     borderRadius: 12,
