@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import jsPDF from 'jspdf';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon } from '@/components/coiffeur/Icons';
@@ -69,71 +70,170 @@ const UPCOMING_CLIENTS: { letter: AvatarKey; name: string; service: string; barb
 ];
 
 function genererRapport() {
+  if (typeof window === 'undefined') return;
+
+  const doc = new jsPDF();
+  const gold: [number, number, number] = [139, 105, 20];
+  const dark: [number, number, number] = [26, 18, 8];
+  const gray: [number, number, number] = [138, 132, 124];
   const date = new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
-  const contenu = `
-╔══════════════════════════════════════════════════╗
-║           RAPPORT WILLOBARBER                   ║
-║           ${date.padEnd(38)}║
-╚══════════════════════════════════════════════════╝
+  // Header fond noir
+  doc.setFillColor(13, 12, 10);
+  doc.rect(0, 0, 210, 40, 'F');
+  doc.setTextColor(...gold);
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.text('willobarber', 15, 18);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.text('RAPPORT DE GESTION', 15, 28);
+  doc.text(date + ' · ' + heure, 15, 35);
 
-┌─────────────────────────────────────────────────┐
-│  RÉSUMÉ GÉNÉRAL                                 │
-├─────────────────────────────────────────────────┤
-│  👥  Clients totaux          2 412              │
-│  ✂️   Prestations actives    14                 │
-│  👨  Équipe                  3 barbiers         │
-│  📅  Rendez-vous ce mois     386                │
-└─────────────────────────────────────────────────┘
+  let y = 52;
 
-┌─────────────────────────────────────────────────┐
-│  CHIFFRE D'AFFAIRES MENSUEL                     │
-├─────────────────────────────────────────────────┤
-│  💰  Total                   12 233,23 €        │
-│                                                 │
-│  Jan  ████░░░░░░░░  7 200 €                     │
-│  Fév  ██░░░░░░░░░░  4 800 €                     │
-│  Mar  ████████░░░░  9 120 €  ← actif            │
-│  Avr  ██████████░░  10 080 €                    │
-│  Mai  ████████████  12 480 €                    │
-│  Juin ████░░░░░░░░  7 200 €                     │
-│  Juil █████░░░░░░░  7 920 €                     │
-└─────────────────────────────────────────────────┘
+  // Section helper
+  const section = (titre: string) => {
+    doc.setFillColor(245, 240, 232);
+    doc.rect(10, y - 5, 190, 8, 'F');
+    doc.setTextColor(...gold);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(titre, 15, y);
+    y += 10;
+  };
 
-┌─────────────────────────────────────────────────┐
-│  TOP PRESTATIONS                                │
-├─────────────────────────────────────────────────┤
-│  🥇  Signature WilloBarber   38%  (148 RDV)    │
-│  🥈  Taille & rasage         25%  (96 RDV)     │
-│  🥉  Le Rituel               17%  (64 RDV)     │
-│  4.  Coupe express           12%  (48 RDV)     │
-│  5.  Soin du visage          8%   (30 RDV)     │
-└─────────────────────────────────────────────────┘
+  const ligne = (label: string, valeur: string) => {
+    doc.setTextColor(...dark);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(label, 15, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text(valeur, 130, y);
+    y += 8;
+  };
 
-┌─────────────────────────────────────────────────┐
-│  PROCHAINS CLIENTS AUJOURD'HUI                  │
-├─────────────────────────────────────────────────┤
-│  10:30  Antoine Rivière    Signature · Willo    │
-│  11:15  Karim Benali       Barbe · Malik        │
-│  14:00  Léo Martin         Le Rituel · Willo    │
-│  16:30  Noé Vasseur        Camouflage · Idris   │
-└─────────────────────────────────────────────────┘
+  // RÉSUMÉ GÉNÉRAL
+  section('RÉSUMÉ GÉNÉRAL');
+  ligne('Clients totaux', '2 412');
+  ligne('Prestations actives', '14');
+  ligne('Équipe', '3 barbiers');
+  ligne('Rendez-vous ce mois', '386');
+  y += 6;
 
-══════════════════════════════════════════════════
-  Généré par WilloBarber · ${date} · ${heure}
-══════════════════════════════════════════════════
-  `;
+  // CHIFFRE D'AFFAIRES
+  section("CHIFFRE D'AFFAIRES MENSUEL");
+  doc.setTextColor(...gold);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('12 233,23 €', 15, y);
+  y += 10;
 
-  if (typeof window !== 'undefined') {
-    const blob = new Blob([contenu], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `rapport-willobarber-${new Date().toISOString().split('T')[0]}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  // Mini bar chart PDF
+  const bars: { label: string; v: number; active?: boolean }[] = [
+    { label: 'Jan', v: 30 },
+    { label: 'Fév', v: 20 },
+    { label: 'Mar', v: 38, active: true },
+    { label: 'Avr', v: 42 },
+    { label: 'Mai', v: 52 },
+    { label: 'Juin', v: 30 },
+    { label: 'Juil', v: 33 },
+  ];
+  const maxV = 52;
+  const barW = 18;
+  const barMaxH = 30;
+  const startX = 15;
+  bars.forEach((b, i) => {
+    const bh = (b.v / maxV) * barMaxH;
+    const bx = startX + i * (barW + 5);
+    const by = y + barMaxH - bh;
+    doc.setFillColor(b.active ? 201 : 236, b.active ? 168 : 228, b.active ? 76 : 211);
+    doc.roundedRect(bx, by, barW, bh, 2, 2, 'F');
+    doc.setTextColor(...gray);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', b.active ? 'bold' : 'normal');
+    if (b.active) doc.setTextColor(...gold);
+    doc.text(b.label, bx + barW / 2, y + barMaxH + 5, { align: 'center' });
+  });
+  y += barMaxH + 14;
+
+  // TOP PRESTATIONS
+  section('TOP PRESTATIONS');
+  const tops = [
+    { rank: '1', name: 'Signature WilloBarber', pct: '38%', rdv: '148 RDV' },
+    { rank: '2', name: 'Taille & rasage', pct: '25%', rdv: '96 RDV' },
+    { rank: '3', name: 'Le Rituel', pct: '17%', rdv: '64 RDV' },
+    { rank: '4', name: 'Coupe express', pct: '12%', rdv: '48 RDV' },
+    { rank: '5', name: 'Soin du visage', pct: '8%', rdv: '30 RDV' },
+  ];
+  tops.forEach((t) => {
+    doc.setFillColor(...gold);
+    doc.roundedRect(15, y - 4, 6, 6, 1, 1, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7);
+    doc.text(t.rank, 18, y, { align: 'center' });
+    doc.setTextColor(...dark);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(t.name, 25, y);
+    doc.setTextColor(...gold);
+    doc.setFont('helvetica', 'bold');
+    doc.text(t.pct, 150, y);
+    doc.setTextColor(...gray);
+    doc.setFont('helvetica', 'normal');
+    doc.text(t.rdv, 170, y);
+    // Barre progression
+    doc.setFillColor(240, 234, 223);
+    doc.rect(25, y + 2, 120, 2, 'F');
+    doc.setFillColor(...gold);
+    doc.rect(25, y + 2, (120 * parseInt(t.pct, 10)) / 100, 2, 'F');
+    y += 12;
+  });
+  y += 4;
+
+  // PROCHAINS CLIENTS
+  section("PROCHAINS CLIENTS AUJOURD'HUI");
+  const clients = [
+    { time: '10:30', name: 'Antoine Rivière', svc: 'Signature · Willo' },
+    { time: '11:15', name: 'Karim Benali', svc: 'Barbe · Malik' },
+    { time: '14:00', name: 'Léo Martin', svc: 'Le Rituel · Willo' },
+    { time: '16:30', name: 'Noé Vasseur', svc: 'Camouflage · Idris' },
+  ];
+  clients.forEach((c, i) => {
+    if (i > 0) {
+      doc.setDrawColor(240, 234, 223);
+      doc.line(15, y - 2, 195, y - 2);
+    }
+    doc.setTextColor(...gold);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(c.time, 15, y);
+    doc.setTextColor(...dark);
+    doc.setFont('helvetica', 'bold');
+    doc.text(c.name, 40, y);
+    doc.setTextColor(...gray);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(c.svc, 40, y + 5);
+    y += 14;
+  });
+
+  // Footer
+  doc.setFillColor(13, 12, 10);
+  doc.rect(0, 280, 210, 17, 'F');
+  doc.setTextColor(...gold);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('willobarber', 15, 288);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Rue Auguste Van Zande 78, 1082 Bruxelles', 15, 293);
+  doc.setTextColor(...gray);
+  doc.text('Généré le ' + date + ' à ' + heure, 195, 293, { align: 'right' });
+
+  doc.save(`rapport-willobarber-${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
 export default function CoiffeurDashboardScreen() {
