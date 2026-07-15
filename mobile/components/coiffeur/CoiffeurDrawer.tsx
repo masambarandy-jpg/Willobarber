@@ -53,7 +53,6 @@ export default function CoiffeurDrawer({ visible, onClose, active }: Props) {
 
   return (
     <View style={styles.overlayContainer}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={styles.drawer}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
@@ -112,6 +111,7 @@ export default function CoiffeurDrawer({ visible, onClose, active }: Props) {
           </LinearGradient>
         </ScrollView>
       </View>
+      <Pressable style={styles.backdrop} onPress={onClose} />
     </View>
   );
 }
@@ -128,15 +128,16 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   drawer: {
     width: 276,
+    height: '100%',
     backgroundColor: CC.cream,
     shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
     elevation: 16,
   },
   scrollContent: {
