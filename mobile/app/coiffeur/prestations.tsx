@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, StyleSheet } from 'react-native';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import { ScissorsIcon, ClockIcon, EditIcon, TrashIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
@@ -41,23 +41,72 @@ const TAB_TO_CATEGORY: Record<string, Category | null> = {
   Packs: 'Pack',
 };
 
+const EMPTY_EDIT_FORM = { name: '', description: '', price: '', duration: '', status: 'Actif' as Status };
+
 export default function CoiffeurPrestationsScreen() {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Toutes');
+  const [services, setServices] = useState<Service[]>(SERVICES);
+
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [serviceASupprimer, setServiceASupprimer] = useState<Service | null>(null);
+
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [serviceEnEdition, setServiceEnEdition] = useState<Service | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
 
   const category = TAB_TO_CATEGORY[activeTab];
-  const filtered = category ? SERVICES.filter((s) => s.category === category) : SERVICES;
+  const filtered = category ? services.filter((s) => s.category === category) : services;
   const avgPrice = Math.round(
-    SERVICES.reduce((sum, s) => sum + parseInt(s.price, 10), 0) / SERVICES.length
+    services.reduce((sum, s) => sum + parseInt(s.price, 10), 0) / services.length
   );
 
+  const demanderSuppression = (service: Service) => {
+    setServiceASupprimer(service);
+    setDeleteModalVisible(true);
+  };
+
+  const confirmerSuppression = () => {
+    if (serviceASupprimer) {
+      setServices((prev) => prev.filter((s) => s.name !== serviceASupprimer.name));
+    }
+    setDeleteModalVisible(false);
+    setServiceASupprimer(null);
+  };
+
+  const ouvrirEdition = (service: Service) => {
+    setServiceEnEdition(service);
+    setEditForm({
+      name: service.name,
+      description: service.description,
+      price: service.price,
+      duration: service.duration,
+      status: service.status,
+    });
+    setEditModalVisible(true);
+  };
+
+  const updateEditField = (key: keyof typeof EMPTY_EDIT_FORM, value: string) => {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const sauvegarderModification = () => {
+    if (!serviceEnEdition) return;
+    setServices((prev) =>
+      prev.map((s) => (s.name === serviceEnEdition.name ? { ...s, ...editForm } : s))
+    );
+    setEditModalVisible(false);
+    setServiceEnEdition(null);
+  };
+
   return (
+    <>
     <CoiffeurScreen active="prestations">
       <Text style={styles.title}>Prestations</Text>
 
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>TOTAL</Text>
-          <Text style={styles.statValue}>{SERVICES.length}</Text>
+          <Text style={styles.statValue}>{services.length}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>PRIX MOYEN</Text>
@@ -113,10 +162,10 @@ export default function CoiffeurPrestationsScreen() {
                 <Text style={[styles.statusBadgeText, statusTextStyle]}>{s.status}</Text>
               </View>
               <View style={styles.actionsRow}>
-                <TouchableOpacity style={styles.actionBtn}>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => ouvrirEdition(s)}>
                   <EditIcon size={14} />
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDanger]}>
+                <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDanger]} onPress={() => demanderSuppression(s)}>
                   <TrashIcon size={14} />
                 </TouchableOpacity>
               </View>
@@ -125,6 +174,102 @@ export default function CoiffeurPrestationsScreen() {
         );
       })}
     </CoiffeurScreen>
+
+    <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
+      <View style={styles.deleteOverlay}>
+        <View style={styles.deleteCard}>
+          <View style={styles.deleteIconWrap}>
+            <TrashIcon size={22} color={CC.errorText} />
+          </View>
+
+          <Text style={styles.deleteTitle}>Supprimer la prestation ?</Text>
+          <Text style={styles.deleteText}>
+            « {serviceASupprimer?.name} » sera définitivement supprimée. Cette action est irréversible.
+          </Text>
+
+          <View style={styles.modalActionsRow}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setDeleteModalVisible(false)}>
+              <Text style={styles.cancelBtnText}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.deleteConfirmBtn} onPress={confirmerSuppression}>
+              <Text style={styles.deleteConfirmBtnText}>Supprimer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+
+    <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
+      <View style={styles.editOverlay}>
+        <View style={styles.editCard}>
+          <Text style={styles.modalTitle}>Modifier la prestation</Text>
+
+          <Text style={styles.fieldLabel}>NOM</Text>
+          <TextInput
+            value={editForm.name}
+            onChangeText={(v) => updateEditField('name', v)}
+            style={styles.input}
+            placeholder="Nom de la prestation"
+            placeholderTextColor={CC.textSecondary}
+          />
+
+          <Text style={styles.fieldLabel}>DESCRIPTION</Text>
+          <TextInput
+            value={editForm.description}
+            onChangeText={(v) => updateEditField('description', v)}
+            style={[styles.input, styles.inputMultiline]}
+            placeholder="Description"
+            placeholderTextColor={CC.textSecondary}
+            multiline
+          />
+
+          <Text style={styles.fieldLabel}>PRIX (€)</Text>
+          <TextInput
+            value={editForm.price}
+            onChangeText={(v) => updateEditField('price', v)}
+            style={styles.input}
+            placeholder="45€"
+            placeholderTextColor={CC.textSecondary}
+            keyboardType="numeric"
+          />
+
+          <Text style={styles.fieldLabel}>DURÉE</Text>
+          <TextInput
+            value={editForm.duration}
+            onChangeText={(v) => updateEditField('duration', v)}
+            style={styles.input}
+            placeholder="45 min"
+            placeholderTextColor={CC.textSecondary}
+          />
+
+          <Text style={styles.fieldLabel}>STATUT</Text>
+          <View style={styles.statusToggle}>
+            {(['Actif', 'Brouillon'] as Status[]).map((status) => {
+              const active = editForm.status === status;
+              return (
+                <TouchableOpacity
+                  key={status}
+                  style={[styles.statusToggleItem, active && styles.statusToggleItemActive]}
+                  onPress={() => setEditForm((prev) => ({ ...prev, status }))}
+                >
+                  <Text style={[styles.statusToggleText, active && styles.statusToggleTextActive]}>{status}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.modalActionsRow}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditModalVisible(false)}>
+              <Text style={styles.cancelBtnText}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.confirmBtn} onPress={sauvegarderModification}>
+              <Text style={styles.confirmBtnText}>Enregistrer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -299,5 +444,147 @@ const styles = StyleSheet.create({
   },
   actionBtnDanger: {
     borderColor: 'rgba(192,57,43,0.3)',
+  },
+  deleteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  deleteCard: {
+    backgroundColor: CC.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+  },
+  deleteIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: CC.errorBg,
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deleteTitle: {
+    fontFamily: SERIF,
+    fontWeight: '600',
+    fontSize: 20,
+    color: CC.black,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  deleteText: {
+    fontSize: 14,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 100,
+    backgroundColor: CC.errorText,
+    alignItems: 'center',
+  },
+  deleteConfirmBtnText: {
+    fontWeight: '600',
+    color: CC.white,
+  },
+  editOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  editCard: {
+    backgroundColor: CC.cream,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+  },
+  modalTitle: {
+    fontFamily: SERIF,
+    fontWeight: '600',
+    fontSize: 22,
+    color: CC.black,
+    marginBottom: 20,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: CC.textSecondary,
+    letterSpacing: 0.5,
+    marginBottom: 7,
+  },
+  input: {
+    backgroundColor: CC.white,
+    borderWidth: 1,
+    borderColor: CC.inputBorder,
+    borderRadius: 10,
+    padding: 13,
+    fontSize: 14,
+    color: CC.black,
+    marginBottom: 14,
+  },
+  inputMultiline: {
+    minHeight: 70,
+    textAlignVertical: 'top',
+  },
+  statusToggle: {
+    flexDirection: 'row',
+    backgroundColor: CC.barTrackBg,
+    borderRadius: 9,
+    padding: 3,
+    marginBottom: 20,
+  },
+  statusToggleItem: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 7,
+    alignItems: 'center',
+  },
+  statusToggleItemActive: {
+    backgroundColor: CC.white,
+  },
+  statusToggleText: {
+    fontSize: 13,
+    color: CC.textSecondary,
+    fontWeight: '600',
+  },
+  statusToggleTextActive: {
+    color: CC.black,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: CC.border,
+    alignItems: 'center',
+    backgroundColor: CC.white,
+  },
+  cancelBtnText: {
+    fontWeight: '600',
+    color: CC.black,
+  },
+  confirmBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 100,
+    backgroundColor: CC.gold,
+    alignItems: 'center',
+  },
+  confirmBtnText: {
+    fontWeight: '700',
+    color: CC.black,
   },
 });
