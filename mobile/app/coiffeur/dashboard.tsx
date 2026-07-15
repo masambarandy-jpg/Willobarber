@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
@@ -5,16 +6,52 @@ import Avatar from '@/components/coiffeur/Avatar';
 import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF, AvatarKey } from '@/components/coiffeur/theme';
 
-const BAR_MAX = 52;
-const REVENUE_BARS: { label: string; value: number; active?: boolean }[] = [
-  { label: 'Jan', value: 30 },
-  { label: 'Fév', value: 20 },
-  { label: 'Mar', value: 38, active: true },
-  { label: 'Avr', value: 42 },
-  { label: 'Mai', value: 52 },
-  { label: 'Juin', value: 30 },
-  { label: 'Juil', value: 33 },
-];
+type Period = 'jour' | 'semaine' | 'mois';
+
+const PERIODS: Period[] = ['jour', 'semaine', 'mois'];
+const PERIOD_LABELS: Record<Period, string> = { jour: 'Jour', semaine: 'Semaine', mois: 'Mois' };
+
+const CA_DATA: Record<Period, { total: string; bars: { label: string; v: number }[]; active: string }> = {
+  jour: {
+    total: '487,50 €',
+    bars: [
+      { label: '9h', v: 45 },
+      { label: '10h', v: 90 },
+      { label: '11h', v: 75 },
+      { label: '12h', v: 30 },
+      { label: '14h', v: 120 },
+      { label: '15h', v: 87 },
+      { label: '16h', v: 40 },
+    ],
+    active: '14h',
+  },
+  semaine: {
+    total: '2 840 €',
+    bars: [
+      { label: 'Lun', v: 0 },
+      { label: 'Mar', v: 520 },
+      { label: 'Mer', v: 480 },
+      { label: 'Jeu', v: 610 },
+      { label: 'Ven', v: 590 },
+      { label: 'Sam', v: 640 },
+      { label: 'Dim', v: 0 },
+    ],
+    active: 'Sam',
+  },
+  mois: {
+    total: '12 233,23 €',
+    bars: [
+      { label: 'Jan', v: 30 },
+      { label: 'Fév', v: 20 },
+      { label: 'Mar', v: 38 },
+      { label: 'Avr', v: 42 },
+      { label: 'Mai', v: 52 },
+      { label: 'Juin', v: 30 },
+      { label: 'Juil', v: 33 },
+    ],
+    active: 'Mar',
+  },
+};
 
 const TOP_SERVICES = [
   { name: 'Signature WilloBarber', pct: 38 },
@@ -31,12 +68,62 @@ const UPCOMING_CLIENTS: { letter: AvatarKey; name: string; service: string; barb
   { letter: 'N', name: 'Noé Vasseur', service: 'Camouflage', barber: 'Idris', time: '16:30' },
 ];
 
+function genererRapport() {
+  const contenu = `
+RAPPORT WILLOBARBER — ${new Date().toLocaleDateString('fr-FR')}
+═══════════════════════════════════════
+
+RÉSUMÉ GÉNÉRAL
+- Clients totaux : 2 412
+- Prestations actives : 14
+- Équipe : 3 barbiers
+- Rendez-vous ce mois : 386
+
+CHIFFRE D'AFFAIRES
+- Total mensuel : 12 233,23 €
+- Jan: 7 200€ | Fév: 4 800€ | Mar: 9 120€
+- Avr: 10 080€ | Mai: 12 480€ | Juin: 7 200€ | Juil: 7 920€
+
+TOP PRESTATIONS
+1. Signature WilloBarber — 38% (148 RDV)
+2. Taille & rasage — 25% (96 RDV)
+3. Le Rituel — 17% (64 RDV)
+4. Coupe express — 12% (48 RDV)
+5. Soin du visage — 8% (30 RDV)
+
+PROCHAINS CLIENTS
+- 10:30 — Antoine Rivière (Signature · Willo)
+- 11:15 — Karim Benali (Barbe · Malik)
+- 14:00 — Léo Martin (Le Rituel · Willo)
+- 16:30 — Noé Vasseur (Camouflage · Idris)
+
+═══════════════════════════════════════
+Généré par WilloBarber le ${new Date().toLocaleString('fr-FR')}
+  `;
+
+  if (typeof window !== 'undefined') {
+    const blob = new Blob([contenu], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rapport-willobarber-${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+}
+
 export default function CoiffeurDashboardScreen() {
+  const [period, setPeriod] = useState<Period>('mois');
+  const [periodMenuOpen, setPeriodMenuOpen] = useState(false);
+
+  const caData = CA_DATA[period];
+  const maxValue = Math.max(...caData.bars.map((b) => b.v), 1);
+
   return (
     <CoiffeurScreen active="dashboard">
       <View style={styles.headerRow}>
         <Text style={styles.title}>Aperçu</Text>
-        <TouchableOpacity style={styles.reportBtn}>
+        <TouchableOpacity style={styles.reportBtn} onPress={genererRapport}>
           <DownloadIcon color={CC.black} size={13} />
           <Text style={styles.reportBtnText}>Rapport</Text>
         </TouchableOpacity>
@@ -68,30 +155,56 @@ export default function CoiffeurDashboardScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
           <Text style={styles.cardTitle}>Chiffre d'affaires</Text>
-          <TouchableOpacity style={styles.periodBtn}>
-            <Text style={styles.periodBtnText}>Mensuel</Text>
-            <ChevronDownIcon size={12} />
-          </TouchableOpacity>
+          <View style={styles.periodWrap}>
+            <TouchableOpacity style={styles.periodBtn} onPress={() => setPeriodMenuOpen((v) => !v)}>
+              <Text style={styles.periodBtnText}>{PERIOD_LABELS[period]}</Text>
+              <ChevronDownIcon size={12} />
+            </TouchableOpacity>
+            {periodMenuOpen && (
+              <View style={styles.periodMenu}>
+                {PERIODS.map((p) => {
+                  const isActive = p === period;
+                  return (
+                    <TouchableOpacity
+                      key={p}
+                      style={styles.periodMenuItem}
+                      onPress={() => {
+                        setPeriod(p);
+                        setPeriodMenuOpen(false);
+                      }}
+                    >
+                      <Text style={[styles.periodMenuItemText, isActive && styles.periodMenuItemTextActive]}>
+                        {PERIOD_LABELS[p]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
         </View>
-        <Text style={styles.revenueAmount}>12 233,23 €</Text>
+        <Text style={styles.revenueAmount}>{caData.total}</Text>
 
         <View style={styles.chart}>
-          {REVENUE_BARS.map((bar) => (
-            <View key={bar.label} style={styles.chartCol}>
-              <View style={styles.chartBarTrack}>
-                <View
-                  style={[
-                    styles.chartBar,
-                    {
-                      height: (bar.value / BAR_MAX) * 130,
-                      backgroundColor: bar.active ? CC.gold : CC.barTrackBg,
-                    },
-                  ]}
-                />
+          {caData.bars.map((bar) => {
+            const isActive = bar.label === caData.active;
+            return (
+              <View key={bar.label} style={styles.chartCol}>
+                <View style={styles.chartBarTrack}>
+                  <View
+                    style={[
+                      styles.chartBar,
+                      {
+                        height: (bar.v / maxValue) * 130,
+                        backgroundColor: isActive ? CC.gold : CC.barTrackBg,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.chartLabel, isActive && styles.chartLabelActive]}>{bar.label}</Text>
               </View>
-              <Text style={[styles.chartLabel, bar.active && styles.chartLabelActive]}>{bar.label}</Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
       </View>
 
@@ -232,6 +345,10 @@ const styles = StyleSheet.create({
     fontSize: 19,
     color: CC.black,
   },
+  periodWrap: {
+    position: 'relative',
+    zIndex: 20,
+  },
   periodBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -241,11 +358,38 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     paddingVertical: 7,
     paddingHorizontal: 12,
+    backgroundColor: CC.white,
   },
   periodBtnText: {
     fontSize: 12.5,
     fontWeight: '600',
     color: CC.black,
+  },
+  periodMenu: {
+    position: 'absolute',
+    top: 38,
+    right: 0,
+    minWidth: 130,
+    backgroundColor: CC.white,
+    borderRadius: 12,
+    paddingVertical: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  periodMenuItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  periodMenuItemText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: CC.black,
+  },
+  periodMenuItemTextActive: {
+    color: CC.goldDark,
   },
   linkText: {
     fontSize: 13,
