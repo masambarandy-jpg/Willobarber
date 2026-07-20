@@ -98,25 +98,37 @@ export default function CoiffeurAvisScreen() {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const [localReplies, setLocalReplies] = useState<Record<string, Reply>>({});
+  const [reviews, setReviews] = useState<Review[]>(REVIEWS);
 
-  const filtered = REVIEWS.filter((r) => {
+  const filtered = reviews.filter((r) => {
     if (activeTab === 'Tous') return true;
     if (activeTab === '5★') return r.rating === 5;
     if (activeTab === '4★') return r.rating === 4;
     if (activeTab === '3★ et -') return r.rating <= 3;
-    if (activeTab === 'Sans réponse') return !r.reply && !localReplies[r.name];
+    if (activeTab === 'Sans réponse') return !r.reply;
     return true;
   });
 
   const submitReply = (name: string) => {
     if (!draft.trim()) return;
-    setLocalReplies((prev) => ({
-      ...prev,
-      [name]: { author: 'Willo D.', role: 'Gérant', when: 'répondu à l’instant', text: draft.trim() },
-    }));
+    setReviews((prev) =>
+      prev.map((r) =>
+        r.name === name
+          ? {
+              ...r,
+              badge: 'Vérifié',
+              reply: { author: 'Willo D.', role: 'Gérant', when: 'répondu à l’instant', text: draft.trim() },
+            }
+          : r
+      )
+    );
     setDraft('');
     setReplyingTo(null);
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+    setDraft('');
   };
 
   return (
@@ -171,7 +183,6 @@ export default function CoiffeurAvisScreen() {
 
       {filtered.map((r) => {
         const bs = badgeStyle(r.badge);
-        const activeReply = localReplies[r.name] ?? r.reply;
         const isReplying = replyingTo === r.name;
         return (
           <View key={r.name} style={styles.reviewCard}>
@@ -196,15 +207,15 @@ export default function CoiffeurAvisScreen() {
 
             <Text style={styles.reviewText}>{r.text}</Text>
 
-            {activeReply ? (
+            {r.reply ? (
               <View style={styles.replyBlock}>
                 <View style={styles.replyTopRow}>
                   <Avatar letter="W" size={26} />
                   <Text style={styles.replyAuthor}>
-                    {activeReply.author} · {activeReply.role} · {activeReply.when}
+                    {r.reply.author} · {r.reply.role} · {r.reply.when}
                   </Text>
                 </View>
-                <Text style={styles.replyText}>{activeReply.text}</Text>
+                <Text style={styles.replyText}>{r.reply.text}</Text>
               </View>
             ) : isReplying ? (
               <View style={styles.replyForm}>
@@ -216,9 +227,17 @@ export default function CoiffeurAvisScreen() {
                   style={styles.replyInput}
                   multiline
                 />
-                <TouchableOpacity style={styles.sendBtn} onPress={() => submitReply(r.name)}>
-                  <Text style={styles.sendBtnText}>Envoyer</Text>
-                </TouchableOpacity>
+                <View style={styles.replyActionsRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={cancelReply}>
+                    <Text style={styles.cancelBtnText}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.sendBtn, !draft.trim() && styles.sendBtnDisabled]}
+                    onPress={() => submitReply(r.name)}
+                  >
+                    <Text style={[styles.sendBtnText, !draft.trim() && styles.sendBtnTextDisabled]}>Envoyer</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : (
               <TouchableOpacity style={styles.replyBtn} onPress={() => setReplyingTo(r.name)}>
@@ -428,16 +447,39 @@ const styles = StyleSheet.create({
     color: CC.black,
     minHeight: 44,
   },
+  replyActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: CC.border,
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: CC.black,
+  },
   sendBtn: {
-    alignSelf: 'flex-start',
+    flex: 1,
     backgroundColor: CC.gold,
     borderRadius: 100,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  sendBtnDisabled: {
+    backgroundColor: CC.barTrackBg,
   },
   sendBtnText: {
     fontSize: 12.5,
     fontWeight: '700',
     color: CC.black,
+  },
+  sendBtnTextDisabled: {
+    color: '#a89f93',
   },
 });
