@@ -1,6 +1,7 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, useWindowDimensions, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { HamburgerIcon, BellIcon } from './Icons';
+import { HamburgerIcon, BellIcon, GearIcon, PersonIcon, HelpIcon, LogOutIcon } from './Icons';
 import Avatar from './Avatar';
 import { CC, SERIF } from './theme';
 import { useIsTablet } from './useIsTablet';
@@ -9,8 +10,45 @@ type Props = {
   onMenuPress: () => void;
 };
 
+const MENU_ITEMS: { label: string; icon: (color: string) => React.ReactNode; action: () => void }[] = [
+  { label: 'Paramètres', icon: (c) => <GearIcon color={c} size={16} />, action: () => router.push('/coiffeur/parametres') },
+  { label: 'Mon profil', icon: (c) => <PersonIcon color={c} size={16} />, action: () => router.push('/coiffeur/parametres') },
+  { label: 'Notifications', icon: (c) => <BellIcon color={c} size={16} />, action: () => router.push('/coiffeur/notifications') },
+  { label: 'Aide & support', icon: (c) => <HelpIcon color={c} size={16} />, action: () => {} },
+];
+
 export default function CoiffeurTopBar({ onMenuPress }: Props) {
   const isTablet = useIsTablet();
+  const { width: windowWidth } = useWindowDimensions();
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const avatarRef = useRef<View>(null);
+
+  const toggleProfileMenu = () => {
+    avatarRef.current?.measureInWindow((x, y, width, height) => {
+      setMenuPos({ top: y + height + 8, right: windowWidth - (x + width) });
+      setProfileMenuVisible(true);
+    });
+  };
+
+  const selectMenuItem = (action: () => void) => {
+    setProfileMenuVisible(false);
+    action();
+  };
+
+  const confirmerDeconnexion = () => {
+    setProfileMenuVisible(false);
+
+    if (typeof window !== 'undefined') {
+      const ok = window.confirm('Voulez-vous vraiment vous déconnecter ?');
+      if (ok) router.replace('/coiffeur');
+    } else {
+      Alert.alert('Se déconnecter', 'Voulez-vous vraiment vous déconnecter ?', [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Se déconnecter', style: 'destructive', onPress: () => router.replace('/coiffeur') },
+      ]);
+    }
+  };
 
   return (
     <View style={styles.bar}>
@@ -32,8 +70,48 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
           <BellIcon />
           <View style={styles.dot} />
         </TouchableOpacity>
-        <Avatar letter="W" size={36} />
+        <View ref={avatarRef} collapsable={false}>
+          <TouchableOpacity onPress={toggleProfileMenu} hitSlop={6}>
+            <Avatar letter="W" size={36} />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      <Modal
+        visible={profileMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProfileMenuVisible(false)}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={() => setProfileMenuVisible(false)} />
+        <View style={[styles.profileMenu, { top: menuPos.top, right: menuPos.right }]}>
+          <View style={styles.profileMenuHeader}>
+            <Avatar letter="W" size={36} />
+            <View>
+              <Text style={styles.profileMenuName}>Willo Diallo</Text>
+              <Text style={styles.profileMenuRole}>Gérant</Text>
+            </View>
+          </View>
+
+          {MENU_ITEMS.map((item) => (
+            <TouchableOpacity
+              key={item.label}
+              onPress={() => selectMenuItem(item.action)}
+              style={styles.profileMenuItem}
+            >
+              {item.icon(CC.textSecondary)}
+              <Text style={styles.profileMenuItemText}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+
+          <View style={styles.profileMenuDivider} />
+
+          <TouchableOpacity onPress={confirmerDeconnexion} style={styles.profileMenuItem}>
+            <LogOutIcon size={16} />
+            <Text style={styles.profileMenuLogoutText}>Se déconnecter</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -88,5 +166,64 @@ const styles = StyleSheet.create({
     backgroundColor: '#C0392B',
     borderWidth: 1.5,
     borderColor: CC.white,
+  },
+  menuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  profileMenu: {
+    position: 'absolute',
+    minWidth: 220,
+    backgroundColor: CC.white,
+    borderRadius: 16,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  profileMenuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: CC.trackBg,
+  },
+  profileMenuName: {
+    fontWeight: '700',
+    fontSize: 14,
+    color: CC.black,
+  },
+  profileMenuRole: {
+    fontSize: 12,
+    color: CC.textSecondary,
+    marginTop: 1,
+  },
+  profileMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 10,
+  },
+  profileMenuItemText: {
+    fontSize: 14,
+    color: CC.black,
+  },
+  profileMenuDivider: {
+    height: 1,
+    backgroundColor: CC.trackBg,
+    marginVertical: 4,
+  },
+  profileMenuLogoutText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: CC.errorText,
   },
 });
