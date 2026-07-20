@@ -3,18 +3,23 @@ import { router } from 'expo-router';
 import { HamburgerIcon, BellIcon } from './Icons';
 import Avatar from './Avatar';
 import { CC, SERIF } from './theme';
+import { useIsTablet } from './useIsTablet';
 
 type Props = {
   onMenuPress: () => void;
 };
 
 export default function CoiffeurTopBar({ onMenuPress }: Props) {
+  const isTablet = useIsTablet();
+
   return (
     <View style={styles.bar}>
       <View style={styles.left}>
-        <TouchableOpacity onPress={onMenuPress} hitSlop={10} style={styles.menuBtn}>
-          <HamburgerIcon />
-        </TouchableOpacity>
+        {!isTablet && (
+          <TouchableOpacity onPress={onMenuPress} hitSlop={10} style={styles.menuBtn}>
+            <HamburgerIcon />
+          </TouchableOpacity>
+        )}
         <Text style={styles.logo}>{'{w}'}</Text>
         <Text style={styles.brand}>willobarber</Text>
       </View>

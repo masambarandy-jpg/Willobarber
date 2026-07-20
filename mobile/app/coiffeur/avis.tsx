@@ -4,6 +4,7 @@ import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { StarIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF, AvatarKey } from '@/components/coiffeur/theme';
+import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 
 type Badge = 'Vérifié' | 'Sans réponse' | 'Nouveau client';
 
@@ -95,6 +96,7 @@ function badgeStyle(badge: Badge) {
 }
 
 export default function CoiffeurAvisScreen() {
+  const isTablet = useIsTablet();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -135,6 +137,8 @@ export default function CoiffeurAvisScreen() {
     <CoiffeurScreen active="avis">
       <Text style={styles.title}>Avis clients</Text>
 
+      <View style={isTablet && styles.tabletRow}>
+      <View style={isTablet ? styles.summaryColTablet : undefined}>
       <View style={styles.summaryCard}>
         <View style={styles.summaryRow}>
           <View style={styles.summaryLeft}>
@@ -165,7 +169,9 @@ export default function CoiffeurAvisScreen() {
           <Text style={styles.newReviewsBold}>12 nouveaux</Text> ce mois
         </Text>
       </View>
+      </View>
 
+      <View style={isTablet ? styles.listColTablet : undefined}>
       <View style={styles.tabsRow}>
         {TABS.map((tab) => {
           const active = tab === activeTab;
@@ -247,6 +253,8 @@ export default function CoiffeurAvisScreen() {
           </View>
         );
       })}
+      </View>
+      </View>
     </CoiffeurScreen>
   );
 }
@@ -258,6 +266,18 @@ const styles = StyleSheet.create({
     fontSize: 30,
     color: CC.black,
     marginBottom: 18,
+  },
+  tabletRow: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'flex-start',
+  },
+  summaryColTablet: {
+    width: '34%',
+  },
+  listColTablet: {
+    flex: 1,
+    minWidth: 0,
   },
   summaryCard: {
     backgroundColor: CC.white,
