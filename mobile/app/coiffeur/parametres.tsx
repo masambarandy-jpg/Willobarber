@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal } from 'react-native';
+import { router } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
-import { CameraIcon, LockIcon, LogOutIcon, TrashIcon } from '@/components/coiffeur/Icons';
+import { CameraIcon, LockIcon, LogOutIcon, TrashIcon, ArrowRightIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 
 const TABS = ['Profil', 'Établissement', 'Notifications', 'Paiement', 'Sécurité'] as const;
@@ -481,28 +482,59 @@ function PaiementTab() {
   );
 }
 
-function SecuriteTab() {
-  const [currentPassword, setCurrentPassword] = useState('••••••••');
-  const [newPassword, setNewPassword] = useState('');
-  const [twoFactor, setTwoFactor] = useState(true);
-  const [motDePasseMisAJour, setMotDePasseMisAJour] = useState(false);
+type Session = { id: string; device: string; when: string; current: boolean };
 
-  const mettreAJourMotDePasse = () => {
-    setMotDePasseMisAJour(true);
-    setTimeout(() => setMotDePasseMisAJour(false), 3000);
+const DEFAULT_SESSIONS: Session[] = [
+  { id: '1', device: 'MacBook Pro · Bruxelles', when: 'Maintenant', current: true },
+  { id: '2', device: 'iPhone 15 · Bruxelles', when: 'il y a 2 h', current: false },
+];
+
+function SecuriteTab() {
+  const [mdpActuel, setMdpActuel] = useState('');
+  const [nouveauMdp, setNouveauMdp] = useState('');
+  const [mdpMisAJour, setMdpMisAJour] = useState(false);
+  const [mdpErreur, setMdpErreur] = useState('');
+  const [twoFactor, setTwoFactor] = useState(true);
+
+  const [sessions, setSessions] = useState<Session[]>(DEFAULT_SESSIONS);
+  const [sessionASupprimer, setSessionASupprimer] = useState<string | null>(null);
+  const [deconnexionVisible, setDeconnexionVisible] = useState(false);
+
+  const mettreAJourMdp = () => {
+    if (!mdpActuel.trim()) {
+      setMdpErreur('Veuillez entrer votre mot de passe actuel.');
+      return;
+    }
+    if (nouveauMdp.length < 6) {
+      setMdpErreur('Le nouveau mot de passe doit contenir au moins 6 caractères.');
+      return;
+    }
+    setMdpErreur('');
+    setMdpMisAJour(true);
+    setMdpActuel('');
+    setNouveauMdp('');
+    setTimeout(() => setMdpMisAJour(false), 3000);
   };
+
+  const deconnecterSession = (id: string) => {
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    setSessionASupprimer(null);
+  };
+
+  const sessionCible = sessions.find((s) => s.id === sessionASupprimer);
 
   return (
     <>
       <View style={styles.card}>
-        <Field label="MOT DE PASSE ACTUEL" value={currentPassword} onChangeText={setCurrentPassword} />
-        <Field label="NOUVEAU MOT DE PASSE" value={newPassword} onChangeText={setNewPassword} />
+        <Field label="MOT DE PASSE ACTUEL" value={mdpActuel} onChangeText={setMdpActuel} secureTextEntry />
+        <Field label="NOUVEAU MOT DE PASSE" value={nouveauMdp} onChangeText={setNouveauMdp} secureTextEntry />
+        {!!mdpErreur && <Text style={styles.mdpErreurText}>{mdpErreur}</Text>}
         <TouchableOpacity
-          onPress={mettreAJourMotDePasse}
-          style={[styles.saveBtn, motDePasseMisAJour && styles.saveBtnDone]}
+          onPress={mettreAJourMdp}
+          style={[styles.saveBtn, mdpMisAJour && styles.saveBtnDone]}
         >
-          <Text style={[styles.saveBtnText, motDePasseMisAJour && styles.saveBtnTextDone]}>
-            {motDePasseMisAJour ? '✓ Mot de passe mis à jour !' : 'Mettre à jour'}
+          <Text style={[styles.saveBtnText, mdpMisAJour && styles.saveBtnTextDone]}>
+            {mdpMisAJour ? '✓ Mot de passe mis à jour !' : 'Mettre à jour'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -520,31 +552,81 @@ function SecuriteTab() {
 
       <View style={styles.card}>
         <Text style={styles.sessionsLabel}>SESSIONS ACTIVES</Text>
-        <View style={styles.sessionRow}>
-          <View style={styles.sessionInfo}>
-            <Text style={styles.sessionDevice}>MacBook Pro · Bruxelles</Text>
-            <Text style={styles.sessionMeta}>Maintenant</Text>
+        {sessions.map((session, i) => (
+          <View key={session.id}>
+            {i > 0 && <View style={styles.sessionDivider} />}
+            <View style={styles.sessionRow}>
+              <View style={styles.sessionInfo}>
+                <Text style={styles.sessionDevice}>{session.device}</Text>
+                <Text style={styles.sessionMeta}>{session.when}</Text>
+              </View>
+              {session.current ? (
+                <View style={[styles.badge, styles.badgeActif]}>
+                  <Text style={[styles.badgeText, styles.badgeActifText]}>Actuelle</Text>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.disconnectBtn} onPress={() => setSessionASupprimer(session.id)}>
+                  <Text style={styles.disconnectBtnText}>Déconnecter</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-          <View style={[styles.badge, styles.badgeActif]}>
-            <Text style={[styles.badgeText, styles.badgeActifText]}>Actuelle</Text>
-          </View>
-        </View>
-        <View style={styles.sessionDivider} />
-        <View style={styles.sessionRow}>
-          <View style={styles.sessionInfo}>
-            <Text style={styles.sessionDevice}>iPhone 15 · Bruxelles</Text>
-            <Text style={styles.sessionMeta}>il y a 2 h</Text>
-          </View>
-          <TouchableOpacity style={styles.disconnectBtn}>
-            <Text style={styles.disconnectBtnText}>Déconnecter</Text>
-          </TouchableOpacity>
-        </View>
+        ))}
       </View>
 
-      <TouchableOpacity style={styles.logoutBtn}>
+      <TouchableOpacity style={styles.logoutBtn} onPress={() => setDeconnexionVisible(true)}>
         <LogOutIcon />
         <Text style={styles.logoutBtnText}>Déconnexion</Text>
       </TouchableOpacity>
+
+      <Modal visible={!!sessionASupprimer} transparent animationType="fade" onRequestClose={() => setSessionASupprimer(null)}>
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteCard}>
+            <View style={styles.deleteIconWrap}>
+              <LogOutIcon size={22} color={CC.errorText} />
+            </View>
+            <Text style={styles.deleteTitle}>Déconnecter cet appareil ?</Text>
+            <Text style={styles.deleteText}>{sessionCible?.device} sera déconnecté immédiatement.</Text>
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setSessionASupprimer(null)}>
+                <Text style={styles.cancelBtnText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteConfirmBtn}
+                onPress={() => sessionASupprimer && deconnecterSession(sessionASupprimer)}
+              >
+                <Text style={styles.deleteConfirmBtnText}>Déconnecter</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={deconnexionVisible} transparent animationType="fade" onRequestClose={() => setDeconnexionVisible(false)}>
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteCard}>
+            <View style={styles.deleteIconWrap}>
+              <ArrowRightIcon size={22} color={CC.errorText} />
+            </View>
+            <Text style={styles.deleteTitle}>Se déconnecter ?</Text>
+            <Text style={styles.deleteText}>Vous serez redirigé vers la page de connexion.</Text>
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setDeconnexionVisible(false)}>
+                <Text style={styles.cancelBtnText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteConfirmBtn}
+                onPress={() => {
+                  setDeconnexionVisible(false);
+                  router.replace('/coiffeur');
+                }}
+              >
+                <Text style={styles.deleteConfirmBtnText}>Se déconnecter</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -707,6 +789,12 @@ const styles = StyleSheet.create({
   },
   saveBtnTextDone: {
     color: '#fff',
+  },
+  mdpErreurText: {
+    fontSize: 12.5,
+    color: CC.errorText,
+    marginTop: -8,
+    marginBottom: 14,
   },
   hoursLabel: {
     fontSize: 11,
