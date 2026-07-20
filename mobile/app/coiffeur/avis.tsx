@@ -5,6 +5,7 @@ import Avatar from '@/components/coiffeur/Avatar';
 import { StarIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF, AvatarKey } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
+import { useCoiffeurProfile } from '@/contexts/CoiffeurProfileContext';
 
 type Badge = 'Vérifié' | 'Sans réponse' | 'Nouveau client';
 
@@ -97,6 +98,8 @@ function badgeStyle(badge: Badge) {
 
 export default function CoiffeurAvisScreen() {
   const isTablet = useIsTablet();
+  const { profile } = useCoiffeurProfile();
+  const avatarLetter = profile.firstName.charAt(0).toUpperCase() || 'W';
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -119,7 +122,12 @@ export default function CoiffeurAvisScreen() {
           ? {
               ...r,
               badge: 'Vérifié',
-              reply: { author: 'Willo D.', role: 'Gérant', when: 'répondu à l’instant', text: draft.trim() },
+              reply: {
+                author: `${profile.firstName} ${profile.lastName.charAt(0)}.`,
+                role: profile.role,
+                when: 'répondu à l’instant',
+                text: draft.trim(),
+              },
             }
           : r
       )
@@ -216,7 +224,7 @@ export default function CoiffeurAvisScreen() {
             {r.reply ? (
               <View style={styles.replyBlock}>
                 <View style={styles.replyTopRow}>
-                  <Avatar letter="W" size={26} />
+                  <Avatar letter={avatarLetter} size={26} />
                   <Text style={styles.replyAuthor}>
                     {r.reply.author} · {r.reply.role} · {r.reply.when}
                   </Text>
