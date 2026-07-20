@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal } from 'react-native';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { CameraIcon, LockIcon, LogOutIcon } from '@/components/coiffeur/Icons';
@@ -85,45 +85,126 @@ function ProfilTab() {
   );
 }
 
-const DEFAULT_HOURS: { day: string; open: boolean }[] = [
-  { day: 'Lundi', open: false },
-  { day: 'Mardi', open: true },
-  { day: 'Mercredi', open: true },
-  { day: 'Jeudi', open: true },
-  { day: 'Vendredi', open: true },
-  { day: 'Samedi', open: true },
-  { day: 'Dimanche', open: true },
+type DayHours = { day: string; open: boolean; debut: string; fin: string };
+
+const DEFAULT_HOURS: DayHours[] = [
+  { day: 'Lundi', open: false, debut: '11:00', fin: '20:00' },
+  { day: 'Mardi', open: true, debut: '11:00', fin: '20:00' },
+  { day: 'Mercredi', open: true, debut: '11:00', fin: '20:00' },
+  { day: 'Jeudi', open: true, debut: '11:00', fin: '20:00' },
+  { day: 'Vendredi', open: true, debut: '11:00', fin: '20:00' },
+  { day: 'Samedi', open: true, debut: '11:00', fin: '20:00' },
+  { day: 'Dimanche', open: true, debut: '11:00', fin: '20:00' },
+];
+
+const HOURS_OPTIONS = [
+  '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
+  '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00',
 ];
 
 function EtablissementTab() {
   const [name, setName] = useState('WilloBarber');
   const [address, setAddress] = useState('Rue Auguste Van Zande 78, 1082 Bruxelles');
   const [description, setDescription] = useState('Barber privé sur rendez-vous uniquement.');
-  const [hours, setHours] = useState(DEFAULT_HOURS);
+  const [hours, setHours] = useState<DayHours[]>(DEFAULT_HOURS);
+
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerIndex, setPickerIndex] = useState(0);
+  const [pickerType, setPickerType] = useState<'debut' | 'fin'>('debut');
+  const [horairesEnregistres, setHorairesEnregistres] = useState(false);
+
+  const enregistrerHoraires = () => {
+    setHorairesEnregistres(true);
+    setTimeout(() => setHorairesEnregistres(false), 3000);
+  };
 
   const toggleDay = (day: string) => {
     setHours((prev) => prev.map((h) => (h.day === day ? { ...h, open: !h.open } : h)));
   };
 
-  return (
-    <View style={styles.card}>
-      <Field label="NOM DU SALON" value={name} onChangeText={setName} />
-      <Field label="ADRESSE" value={address} onChangeText={setAddress} />
-      <Field label="DESCRIPTION" value={description} onChangeText={setDescription} multiline />
+  const openPicker = (index: number, type: 'debut' | 'fin') => {
+    setPickerIndex(index);
+    setPickerType(type);
+    setPickerVisible(true);
+  };
 
-      <Text style={styles.hoursLabel}>HORAIRES</Text>
-      {hours.map((h) => (
-        <View key={h.day} style={styles.hourRow}>
-          <Text style={styles.hourDay}>{h.day}</Text>
-          <View style={styles.hourRight}>
-            <Text style={[styles.hourValue, !h.open && styles.hourValueClosed]}>
-              {h.open ? '11h — 20h' : 'Fermé'}
-            </Text>
-            <Toggle value={h.open} onChange={() => toggleDay(h.day)} />
+  const selectHeure = (heure: string) => {
+    setHours((prev) => prev.map((h, i) => (i === pickerIndex ? { ...h, [pickerType]: heure } : h)));
+    setPickerVisible(false);
+  };
+
+  const heureSelectionnee = hours[pickerIndex]?.[pickerType];
+
+  return (
+    <>
+      <View style={styles.card}>
+        <Field label="NOM DU SALON" value={name} onChangeText={setName} />
+        <Field label="ADRESSE" value={address} onChangeText={setAddress} />
+        <Field label="DESCRIPTION" value={description} onChangeText={setDescription} multiline />
+
+        <Text style={styles.hoursLabel}>HORAIRES</Text>
+        {hours.map((h, i) => (
+          <View key={h.day} style={styles.hourRow}>
+            <Text style={styles.hourDay}>{h.day}</Text>
+            <View style={styles.hourRight}>
+              {h.open ? (
+                <View style={styles.hourTimesRow}>
+                  <TouchableOpacity style={styles.hourTimeChip} onPress={() => openPicker(i, 'debut')}>
+                    <Text style={styles.hourTimeText}>{h.debut}</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.hourTimeSeparator}>—</Text>
+                  <TouchableOpacity style={styles.hourTimeChip} onPress={() => openPicker(i, 'fin')}>
+                    <Text style={styles.hourTimeText}>{h.fin}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={[styles.hourValue, styles.hourValueClosed]}>Fermé</Text>
+              )}
+              <Toggle value={h.open} onChange={() => toggleDay(h.day)} />
+            </View>
+          </View>
+        ))}
+
+        <TouchableOpacity
+          onPress={enregistrerHoraires}
+          style={[styles.saveHorairesBtn, horairesEnregistres && styles.saveHorairesBtnDone]}
+        >
+          <Text style={[styles.saveBtnText, horairesEnregistres && styles.saveHorairesTextDone]}>
+            {horairesEnregistres ? '✓ Horaires enregistrés !' : 'Enregistrer les horaires'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal visible={pickerVisible} transparent animationType="slide" onRequestClose={() => setPickerVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {pickerType === 'debut' ? "Heure d'ouverture" : 'Heure de fermeture'}
+              </Text>
+              <TouchableOpacity onPress={() => setPickerVisible(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {HOURS_OPTIONS.map((heure) => {
+                const active = heure === heureSelectionnee;
+                return (
+                  <TouchableOpacity
+                    key={heure}
+                    onPress={() => selectHeure(heure)}
+                    style={[styles.modalHeureItem, active && styles.modalHeureItemActive]}
+                  >
+                    <Text style={[styles.modalHeureText, active && styles.modalHeureTextActive]}>{heure}</Text>
+                    {active && <Text style={styles.modalCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </View>
-      ))}
-    </View>
+      </Modal>
+    </>
   );
 }
 
@@ -459,6 +540,94 @@ const styles = StyleSheet.create({
   },
   hourValueClosed: {
     color: CC.textSecondary,
+  },
+  hourTimesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  hourTimeChip: {
+    backgroundColor: CC.trackBg,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  hourTimeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: CC.black,
+  },
+  hourTimeSeparator: {
+    fontSize: 13,
+    color: CC.textSecondary,
+  },
+  saveHorairesBtn: {
+    backgroundColor: CC.gold,
+    borderRadius: 100,
+    paddingVertical: 14,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+  },
+  saveHorairesBtnDone: {
+    backgroundColor: '#2D6A4F',
+  },
+  saveHorairesTextDone: {
+    color: '#fff',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalSheet: {
+    backgroundColor: CC.cream,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: 420,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontFamily: SERIF,
+    fontSize: 20,
+    fontWeight: '600',
+    color: CC.black,
+  },
+  modalClose: {
+    fontSize: 20,
+    color: CC.textSecondary,
+  },
+  modalHeureItem: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalHeureItemActive: {
+    backgroundColor: 'rgba(201,168,76,0.15)',
+  },
+  modalHeureText: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: CC.black,
+  },
+  modalHeureTextActive: {
+    fontWeight: '700',
+    color: CC.goldDark,
+  },
+  modalCheck: {
+    fontSize: 18,
+    color: CC.goldDark,
   },
   toggleTrack: {
     width: 44,
