@@ -295,9 +295,351 @@ export default function ReservationsScreen() {
         </View>
       )}
 
+      {isTablet ? (
+        <View style={styles.tabletContainer}>
+          {/* ── HEADER (pleine largeur, au-dessus des 2 colonnes) ────── */}
+          <Text style={styles.kicker}>— BONJOUR {username.toUpperCase()}</Text>
+          <Text style={styles.pageTitle}>
+            Votre espace, <GoldItalic>au poil.</GoldItalic>
+          </Text>
+          <TouchableOpacity style={styles.newRdvBtn} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
+            <Text style={styles.newRdvBtnText}>📅  Nouveau rendez-vous →</Text>
+          </TouchableOpacity>
+
+          <View style={styles.tabletRow}>
+            {/* ═══ COLONNE GAUCHE (40%) ═══════════════════════════════ */}
+            <ScrollView
+              style={styles.tabletLeftCol}
+              contentContainerStyle={styles.tabletColContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Stats */}
+              <View style={styles.statsGrid}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNum}>12</Text>
+                  <Text style={styles.statLabel}>VISITES</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNum}>28</Text>
+                  <Text style={styles.statNumSub}>jours</Text>
+                  <Text style={styles.statLabel}>DERNIÈRE VISITE</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={[styles.statNum, { color: '#C9A84C' }]}>{MOCK_LOYALTY.points}</Text>
+                  <Text style={styles.statNumSub}>/ 1000</Text>
+                  <Text style={styles.statLabel}>POINTS FIDÉLITÉ</Text>
+                </View>
+              </View>
+
+              {/* Prochain rendez-vous */}
+              <View style={styles.nextRdvBadgeWrap}>
+                <View style={styles.nextRdvBadge}>
+                  <Text style={styles.nextRdvBadgeText}>PROCHAIN RENDEZ-VOUS · DANS 4 JOURS</Text>
+                </View>
+              </View>
+
+              <View style={styles.mockRdvCard}>
+                <View style={styles.mockRdvInner}>
+                  <View style={styles.mockDateBox}>
+                    <Text style={styles.mockDateNum}>23</Text>
+                    <Text style={styles.mockDateMon}>MAI</Text>
+                    <Text style={styles.mockDateDay}>SAM.</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.mockRdvService}>
+                      Coupe + <GoldItalic>Barbe</GoldItalic>
+                    </Text>
+                    <View style={styles.mockRdvInfoRow}>
+                      <Text style={styles.mockRdvKey}>Heure</Text>
+                      <Text style={styles.mockRdvVal}>10:30</Text>
+                    </View>
+                    <View style={styles.mockRdvInfoRow}>
+                      <Text style={styles.mockRdvKey}>Barbier</Text>
+                      <Text style={styles.mockRdvVal}>Willo</Text>
+                    </View>
+                    <View style={styles.mockRdvInfoRow}>
+                      <Text style={styles.mockRdvKey}>Adresse</Text>
+                      <Text style={styles.mockRdvVal}>Rue Auguste Van Zande 78</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.soldePill}>
+                  <Text style={styles.soldeText}>Solde 42,70€ au salon</Text>
+                </View>
+
+                <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
+                  <Text style={styles.btnPrimaryText}>📅  Ajouter au calendrier</Text>
+                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                  <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
+                    <Text style={styles.btnOutlineText}>↺ Reprogrammer</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={handleCancelNextRdv} activeOpacity={0.85}>
+                    <Text style={styles.btnDangerSmText}>Annuler</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Reprenez là où vous en étiez */}
+              <Text style={styles.sectionTitle}>Reprenez là où vous en étiez</Text>
+
+              <View style={styles.resumeCard}>
+                <View style={styles.resumeBadge}>
+                  <Text style={styles.resumeBadgeText}>VOTRE COUPE HABITUELLE · 8 FOIS</Text>
+                </View>
+                <View style={styles.resumeRow}>
+                  <View style={styles.scissorsBox}>
+                    <Text style={{ fontSize: 22 }}>✂️</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.resumeServiceName}>Signature WilloBarber</Text>
+                    <Text style={styles.resumeServiceMeta}>45 min · avec Willo · 45€</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity
+                    style={[styles.btnPrimary, { flex: 1 }]}
+                    onPress={() => router.push({
+                      pathname: '/(tabs)/book',
+                      params: {
+                        quickbook: 'true',
+                        prestation: 'Signature WilloBarber',
+                        prix: '45',
+                        duree: '45',
+                        barbier: 'Willo',
+                        date: 'Demain',
+                        heure: '11:00',
+                      },
+                    })}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.btnPrimaryText}>Reprendre la même coupe</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.btnOutline, { paddingHorizontal: 18 }]} onPress={handleAdapter} activeOpacity={0.85}>
+                    <Text style={styles.btnOutlineText}>✏️ Adapter</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Vos favoris */}
+              <Text style={styles.sectionTitle}>Vos favoris</Text>
+
+              <View style={styles.favGrid}>
+                {FAVORIS.map((fav, i) => (
+                  <View key={i} style={[styles.favCard, styles.favCardTablet]}>
+                    <Text style={styles.favStar}>★</Text>
+                    <Text style={styles.favName}>{fav.nom}</Text>
+                    <Text style={styles.favMeta}>
+                      {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
+                    </Text>
+                    <View style={styles.favDivider} />
+                    <Text style={styles.favCount}>{fav.count} · dernière {fav.date}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* ═══ COLONNE DROITE (60%) ═══════════════════════════════ */}
+            <ScrollView
+              style={styles.tabletRightCol}
+              contentContainerStyle={styles.tabletColContent}
+              showsVerticalScrollIndicator={false}
+              refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#C9A84C" />}
+            >
+              {/* Historique des réservations */}
+              <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Historique</Text>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, marginBottom: 14 }}
+              >
+                {['Tous', '2026', '2025'].map(t => (
+                  <Pressable
+                    key={t}
+                    onPress={() => { setHistFilter(t); setSelectedHistIndex(0); }}
+                    style={[styles.filterChip, histFilter === t && styles.filterChipActive]}
+                  >
+                    <Text style={[styles.filterChipText, histFilter === t && styles.filterChipTextActive]}>{t}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              {filteredHist.length === 0 ? (
+                <Text style={styles.emptyHist}>Aucun historique à afficher.</Text>
+              ) : (
+                <View style={styles.histSplit}>
+                  <View style={styles.histSplitList}>
+                    {filteredHist.map((h, i) => {
+                      const isSelected = i === Math.min(selectedHistIndex, filteredHist.length - 1);
+                      return (
+                        <Pressable
+                          key={i}
+                          onPress={() => setSelectedHistIndex(i)}
+                          style={[styles.histListRow, isSelected && styles.histListRowActive]}
+                        >
+                          <View style={styles.histDateBox}>
+                            <Text style={styles.histDateNum}>{h.jour}</Text>
+                            <Text style={styles.histDateMon}>{h.mois}</Text>
+                          </View>
+                          <View style={{ flex: 1, gap: 3 }}>
+                            <Text style={styles.histService} numberOfLines={1}>{h.service}</Text>
+                            <Text style={styles.histMeta}>{h.barbierNom} · {h.prix}</Text>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {(() => {
+                    const h = filteredHist[Math.min(selectedHistIndex, filteredHist.length - 1)];
+                    const i = Math.min(selectedHistIndex, filteredHist.length - 1);
+                    return (
+                      <View style={styles.histSplitDetail}>
+                        <View style={styles.histDetailHeader}>
+                          <View style={[styles.histDateBox, { backgroundColor: '#2A2520' }]}>
+                            <Text style={styles.histDateNum}>{h.jour}</Text>
+                            <Text style={styles.histDateMon}>{h.mois}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.histDetailService}>{h.service}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                              <View style={[
+                                styles.avatar,
+                                { width: 30, height: 30, borderRadius: 15, backgroundColor: h.couleur + '33', borderColor: h.couleur },
+                              ]}>
+                                <Text style={[styles.avatarText, { fontSize: 12, color: h.couleur }]}>{h.barbier}</Text>
+                              </View>
+                              <Text style={styles.histMeta}>{h.barbierNom}</Text>
+                              <Text style={{ color: '#C9A84C', fontSize: 14, fontWeight: '700' }}>{h.prix}</Text>
+                            </View>
+                          </View>
+                        </View>
+                        <Text style={styles.histDetailRef}>N° WB-{h.annee}-{String(i + 1).padStart(5, '0')}</Text>
+                        <View style={{ flexDirection: 'column', gap: 10, marginTop: 18 }}>
+                          <TouchableOpacity testID={`btn-rebook-${i}`} style={[styles.btnPrimary, { width: '100%' }]} onPress={() => handleRebook(h)} activeOpacity={0.85}>
+                            <Text style={styles.btnPrimaryText}>↺ Rebooker</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity testID={`btn-receipt-${i}`} style={[styles.btnOutline, { width: '100%' }]} onPress={() => handleReceipt(h, i)} activeOpacity={0.85}>
+                            <Text style={styles.btnOutlineText}>↓ Reçu</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })()}
+                </View>
+              )}
+
+              {/* Programme fidélité */}
+              <Text style={[styles.sectionKicker, { marginTop: 28 }]}>PROGRAMME FIDÉLITÉ</Text>
+              <View style={styles.loyaltyCard}>
+                <View style={styles.loyaltyHeader}>
+                  <View>
+                    <Text style={styles.loyaltyBrandLogo}>{'{w}'} willobarber</Text>
+                    <Text style={styles.loyaltyBrandSub}>Programme Fidélité</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.loyaltyPoints}>{MOCK_LOYALTY.points}</Text>
+                    <Text style={styles.loyaltyPtsSuffix}>pts</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.loyaltyProgressLabel}>Progression vers la coupe gratuite</Text>
+                <View style={styles.loyaltyBarBg}>
+                  <Animated.View
+                    style={[
+                      styles.loyaltyBarFill,
+                      {
+                        width: barAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '100%'],
+                        }),
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.loyaltyBarCaption}>
+                  {ptsRestants} pts avant votre prochaine coupe offerte
+                </Text>
+
+                <View style={styles.loyaltyTiersRow}>
+                  {TIERS.map((tier, i) => {
+                    const reached  = MOCK_LOYALTY.points >= tier.min;
+                    const nextTier = TIERS[i + 1];
+                    const isActive  = reached && (!nextTier || MOCK_LOYALTY.points < nextTier.min);
+                    const isDepasse = reached && !isActive;
+                    return (
+                      <View key={tier.label} style={styles.tierBadgeWrap}>
+                        <View
+                          style={[
+                            styles.tierBadge,
+                            isActive  && { backgroundColor: tier.color },
+                            isDepasse && { backgroundColor: '#2A2520', borderWidth: 1, borderColor: tier.color },
+                            !reached  && { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.tierBadgeText,
+                              isActive  && { color: '#1A1208' },
+                              isDepasse && { color: tier.color },
+                              !reached  && { color: 'rgba(255,255,255,0.35)' },
+                            ]}
+                          >
+                            {tier.label}
+                          </Text>
+                        </View>
+                        <Text style={styles.tierThreshold}>{tier.threshold}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {MOCK_LOYALTY.points >= 500 ? (
+                  <>
+                    <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85}>
+                      <Text style={styles.loyaltyCtaText}>Utiliser 500 pts — Coupe offerte →</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.loyaltyCtaNote}>Valable sur toute coupe · Sans date d'expiration</Text>
+                  </>
+                ) : (
+                  <Text style={styles.loyaltyCtaDisabled}>
+                    500 points requis ({500 - MOCK_LOYALTY.points} restants)
+                  </Text>
+                )}
+              </View>
+
+              {/* Historique des points */}
+              <Text style={[styles.sectionKicker, { marginTop: 24 }]}>HISTORIQUE DES POINTS</Text>
+              {TRANSACTIONS.map(tx => {
+                const isSpend = tx.type === 'spend';
+                const isBonus = tx.type === 'bonus';
+                const iconColor = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#C9A84C';
+                const ptColor   = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#4CAF50';
+                const ptPrefix  = isSpend ? '' : '+';
+                const iconChar  = isSpend ? '−' : isBonus ? '+' : '★';
+                return (
+                  <View key={tx.id} style={styles.txRow}>
+                    <View style={[styles.txIconCircle, { backgroundColor: iconColor + '22', borderColor: iconColor + '55' }]}>
+                      <Text style={{ color: iconColor, fontSize: 14 }}>{iconChar}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.txReason}>{tx.reason}</Text>
+                      <Text style={styles.txDate}>{tx.date}</Text>
+                    </View>
+                    <Text style={[styles.txPoints, { color: ptColor }]}>
+                      {ptPrefix}{Math.abs(tx.points)} pts
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      ) : (
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, isTablet && { maxWidth: 1100, alignSelf: 'center', width: '100%', paddingTop: 40 }]}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#C9A84C" />}
       >
@@ -673,6 +1015,7 @@ export default function ReservationsScreen() {
           );
         })}
       </ScrollView>
+      )}
 
       <CancelModal
         visible={!!cancelTarget}
@@ -704,6 +1047,30 @@ const styles = StyleSheet.create({
 
   scroll:        { flex: 1 },
   scrollContent: { padding: 22, paddingBottom: 56 },
+
+  // ── iPad — layout 2 colonnes ────────────────────────────────────────────────
+  tabletContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    maxWidth: 1100,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  tabletRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 20,
+  },
+  tabletLeftCol: {
+    flex: 2,
+  },
+  tabletRightCol: {
+    flex: 3,
+  },
+  tabletColContent: {
+    paddingBottom: 56,
+  },
 
   kicker:    { fontSize: 11, fontWeight: '600', letterSpacing: 2, color: '#C9A84C', textTransform: 'uppercase', marginBottom: 6 },
   pageTitle: { fontFamily: Fonts.bold, fontSize: 34, fontWeight: '700', color: '#fff', lineHeight: 40, marginBottom: 18 },
