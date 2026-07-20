@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import { ChevronLeftIcon, ChevronRightIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
+import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 
 const HOUR_HEIGHT = 66;
 const START_HOUR = 11;
@@ -155,7 +156,8 @@ const VIEW_MODES = ['Jour', 'Semaine', 'Mois'] as const;
 const WEEKDAY_LABELS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
 export default function CoiffeurPlanningScreen() {
-  const [viewMode, setViewMode] = useState<(typeof VIEW_MODES)[number]>('Jour');
+  const isTablet = useIsTablet();
+  const [viewMode, setViewMode] = useState<(typeof VIEW_MODES)[number]>(() => (isTablet ? 'Semaine' : 'Jour'));
   const [selectedBarbers, setSelectedBarbers] = useState<Barber[]>(['Willo', 'Malik', 'Idris']);
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [nowPosition, setNowPosition] = useState(getNowPosition());
@@ -238,43 +240,94 @@ export default function CoiffeurPlanningScreen() {
         </View>
       </View>
 
-      <View style={styles.dateNav}>
-        <TouchableOpacity style={styles.navBtn} onPress={goBack}>
-          <ChevronLeftIcon size={14} />
-        </TouchableOpacity>
-        <Text style={styles.dateText}>{formatDateLabel(currentDate, viewMode)}</Text>
-        <TouchableOpacity style={styles.navBtn} onPress={goNext}>
-          <ChevronRightIcon size={14} />
-        </TouchableOpacity>
-      </View>
+      {isTablet ? (
+        <View style={styles.tabletToolbar}>
+          <View style={styles.tabletToolbarRow}>
+            <View style={styles.dateNavCompact}>
+              <TouchableOpacity style={styles.navBtn} onPress={goBack}>
+                <ChevronLeftIcon size={14} />
+              </TouchableOpacity>
+              <Text style={styles.dateTextCompact}>{formatDateLabel(currentDate, viewMode)}</Text>
+              <TouchableOpacity style={styles.navBtn} onPress={goNext}>
+                <ChevronRightIcon size={14} />
+              </TouchableOpacity>
+            </View>
 
-      <View style={styles.viewToggle}>
-        {VIEW_MODES.map((mode) => (
-          <TouchableOpacity
-            key={mode}
-            style={[styles.viewToggleItem, viewMode === mode && styles.viewToggleItemActive]}
-            onPress={() => setViewMode(mode)}
-          >
-            <Text style={[styles.viewToggleText, viewMode === mode && styles.viewToggleTextActive]}>{mode}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+            <View style={styles.viewToggleCompact}>
+              {VIEW_MODES.map((mode) => (
+                <TouchableOpacity
+                  key={mode}
+                  style={[styles.viewToggleItemCompact, viewMode === mode && styles.viewToggleItemActive]}
+                  onPress={() => setViewMode(mode)}
+                >
+                  <Text
+                    style={[styles.viewToggleText, viewMode === mode && styles.viewToggleTextActive]}
+                    numberOfLines={1}
+                  >
+                    {mode}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
 
-      <View style={styles.filterRow}>
-        {BARBER_CHIPS.map((chip) => {
-          const active = selectedBarbers.includes(chip.key);
-          return (
-            <TouchableOpacity
-              key={chip.key}
-              style={[styles.chip, !active && styles.chipInactive]}
-              onPress={() => toggleBarber(chip.key)}
-            >
-              <View style={[styles.chipDot, { backgroundColor: chip.color }]} />
-              <Text style={styles.chipText}>{chip.key}</Text>
+          <View style={styles.filterRow}>
+            {BARBER_CHIPS.map((chip) => {
+              const active = selectedBarbers.includes(chip.key);
+              return (
+                <TouchableOpacity
+                  key={chip.key}
+                  style={[styles.chip, !active && styles.chipInactive]}
+                  onPress={() => toggleBarber(chip.key)}
+                >
+                  <View style={[styles.chipDot, { backgroundColor: chip.color }]} />
+                  <Text style={styles.chipText}>{chip.key}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      ) : (
+        <>
+          <View style={styles.dateNav}>
+            <TouchableOpacity style={styles.navBtn} onPress={goBack}>
+              <ChevronLeftIcon size={14} />
             </TouchableOpacity>
-          );
-        })}
-      </View>
+            <Text style={styles.dateText}>{formatDateLabel(currentDate, viewMode)}</Text>
+            <TouchableOpacity style={styles.navBtn} onPress={goNext}>
+              <ChevronRightIcon size={14} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.viewToggle}>
+            {VIEW_MODES.map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={[styles.viewToggleItem, viewMode === mode && styles.viewToggleItemActive]}
+                onPress={() => setViewMode(mode)}
+              >
+                <Text style={[styles.viewToggleText, viewMode === mode && styles.viewToggleTextActive]}>{mode}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.filterRow}>
+            {BARBER_CHIPS.map((chip) => {
+              const active = selectedBarbers.includes(chip.key);
+              return (
+                <TouchableOpacity
+                  key={chip.key}
+                  style={[styles.chip, !active && styles.chipInactive]}
+                  onPress={() => toggleBarber(chip.key)}
+                >
+                  <View style={[styles.chipDot, { backgroundColor: chip.color }]} />
+                  <Text style={styles.chipText}>{chip.key}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
+      )}
 
       {viewMode === 'Jour' && (
         <View style={styles.calendar}>
@@ -430,6 +483,34 @@ const styles = StyleSheet.create({
     gap: 16,
     marginBottom: 14,
   },
+  tabletToolbar: {
+    marginBottom: 4,
+  },
+  tabletToolbarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  dateNavCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dateTextCompact: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: CC.black,
+    minWidth: 170,
+    textAlign: 'center',
+  },
+  viewToggleCompact: {
+    flexDirection: 'row',
+    backgroundColor: CC.barTrackBg,
+    borderRadius: 9,
+    padding: 3,
+    width: 240,
+  },
   navBtn: {
     width: 30,
     height: 30,
@@ -457,6 +538,13 @@ const styles = StyleSheet.create({
   viewToggleItem: {
     flex: 1,
     paddingVertical: 8,
+    borderRadius: 7,
+    alignItems: 'center',
+  },
+  viewToggleItemCompact: {
+    flex: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 4,
     borderRadius: 7,
     alignItems: 'center',
   },

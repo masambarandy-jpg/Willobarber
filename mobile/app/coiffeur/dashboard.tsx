@@ -6,6 +6,7 @@ import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF, AvatarKey } from '@/components/coiffeur/theme';
+import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 
 type Period = 'jour' | 'semaine' | 'mois';
 
@@ -237,6 +238,7 @@ function genererRapport() {
 }
 
 export default function CoiffeurDashboardScreen() {
+  const isTablet = useIsTablet();
   const [period, setPeriod] = useState<Period>('mois');
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -273,87 +275,89 @@ export default function CoiffeurDashboardScreen() {
       </View>
 
       <View style={styles.statsGrid}>
-        <View style={[styles.statCard, styles.statCardDark]}>
+        <View style={[styles.statCard, styles.statCardDark, isTablet && styles.statCardTablet]}>
           <UsersIcon color={CC.white} size={18} />
           <Text style={styles.statLabelDark}>Clients totaux</Text>
           <Text style={styles.statValueDark}>2 412</Text>
         </View>
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, isTablet && styles.statCardTablet]}>
           <ListIcon color={CC.black} size={18} />
           <Text style={styles.statLabel}>Prestations</Text>
           <Text style={styles.statValue}>14</Text>
         </View>
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, isTablet && styles.statCardTablet]}>
           <PersonIcon color={CC.black} size={18} />
           <Text style={styles.statLabel}>Équipe</Text>
           <Text style={styles.statValue}>3</Text>
         </View>
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, isTablet && styles.statCardTablet]}>
           <CalendarIcon color={CC.black} size={18} />
           <Text style={styles.statLabel}>Rendez-vous</Text>
           <Text style={styles.statValue}>386</Text>
         </View>
       </View>
 
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <Text style={styles.cardTitle}>Chiffre d'affaires</Text>
-          <View ref={periodBtnRef} collapsable={false}>
-            <TouchableOpacity style={styles.periodBtn} onPress={togglePeriodMenu}>
-              <Text style={styles.periodBtnText}>{PERIOD_LABELS[period]}</Text>
-              <ChevronDownIcon size={12} />
+      <View style={isTablet && styles.twoColRow}>
+        <View style={[styles.card, isTablet && styles.cardHalf]}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Chiffre d'affaires</Text>
+            <View ref={periodBtnRef} collapsable={false}>
+              <TouchableOpacity style={styles.periodBtn} onPress={togglePeriodMenu}>
+                <Text style={styles.periodBtnText}>{PERIOD_LABELS[period]}</Text>
+                <ChevronDownIcon size={12} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <Text style={styles.revenueAmount}>{caData.total}</Text>
+
+          <View style={styles.chart}>
+            {caData.bars.map((bar) => {
+              const isActive = bar.label === caData.active;
+              return (
+                <View key={bar.label} style={styles.chartCol}>
+                  <View style={styles.chartBarTrack}>
+                    <View
+                      style={[
+                        styles.chartBar,
+                        {
+                          height: (bar.v / maxValue) * 130,
+                          backgroundColor: isActive ? CC.gold : CC.barTrackBg,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.chartLabel, isActive && styles.chartLabelActive]}>{bar.label}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={[styles.card, isTablet && styles.cardHalf]}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Top prestations</Text>
+            <TouchableOpacity onPress={() => router.push('/coiffeur/prestations')}>
+              <Text style={styles.linkText}>Voir tout →</Text>
             </TouchableOpacity>
           </View>
-        </View>
-        <Text style={styles.revenueAmount}>{caData.total}</Text>
 
-        <View style={styles.chart}>
-          {caData.bars.map((bar) => {
-            const isActive = bar.label === caData.active;
-            return (
-              <View key={bar.label} style={styles.chartCol}>
-                <View style={styles.chartBarTrack}>
-                  <View
-                    style={[
-                      styles.chartBar,
-                      {
-                        height: (bar.v / maxValue) * 130,
-                        backgroundColor: isActive ? CC.gold : CC.barTrackBg,
-                      },
-                    ]}
-                  />
+          {TOP_SERVICES.map((s, i) => (
+            <View key={s.name} style={styles.topServiceRow}>
+              <View style={styles.rankBadge}>
+                <Text style={styles.rankBadgeText}>{i + 1}</Text>
+              </View>
+              <View style={styles.topServiceInfo}>
+                <View style={styles.topServiceTop}>
+                  <Text style={styles.topServiceName}>{s.name}</Text>
+                  <Text style={styles.topServicePct}>{s.pct}%</Text>
                 </View>
-                <Text style={[styles.chartLabel, isActive && styles.chartLabelActive]}>{bar.label}</Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <Text style={styles.cardTitle}>Top prestations</Text>
-          <TouchableOpacity onPress={() => router.push('/coiffeur/prestations')}>
-            <Text style={styles.linkText}>Voir tout →</Text>
-          </TouchableOpacity>
-        </View>
-
-        {TOP_SERVICES.map((s, i) => (
-          <View key={s.name} style={styles.topServiceRow}>
-            <View style={styles.rankBadge}>
-              <Text style={styles.rankBadgeText}>{i + 1}</Text>
-            </View>
-            <View style={styles.topServiceInfo}>
-              <View style={styles.topServiceTop}>
-                <Text style={styles.topServiceName}>{s.name}</Text>
-                <Text style={styles.topServicePct}>{s.pct}%</Text>
-              </View>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${s.pct}%` }]} />
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${s.pct}%` }]} />
+                </View>
               </View>
             </View>
-          </View>
-        ))}
+          ))}
+        </View>
       </View>
 
       <View style={styles.card}>
@@ -438,6 +442,9 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
   },
+  statCardTablet: {
+    width: '23%',
+  },
   statCardDark: {
     backgroundColor: CC.cardBlack,
   },
@@ -471,6 +478,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  twoColRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  cardHalf: {
+    flex: 1,
   },
   cardHeaderRow: {
     flexDirection: 'row',

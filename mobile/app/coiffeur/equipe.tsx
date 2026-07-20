@@ -5,6 +5,7 @@ import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { ChatIcon, EditIcon, TrashIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
+import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 
 type SlotState = 'ferme' | 'reserve' | 'dispo';
 type Status = 'Actif' | 'Absent';
@@ -85,6 +86,7 @@ function slotColor(state: SlotState) {
 }
 
 export default function CoiffeurEquipeScreen() {
+  const isTablet = useIsTablet();
   const [team, setTeam] = useState<TeamMember[]>(INITIAL_TEAM);
 
   const [chatModalVisible, setChatModalVisible] = useState(false);
@@ -214,6 +216,7 @@ export default function CoiffeurEquipeScreen() {
           </TouchableOpacity>
         </View>
 
+        <View style={isTablet && styles.teamGrid}>
         {team.map((m) => {
           const stats = [
             { value: String(m.rdv), label: 'RDV/mois' },
@@ -221,7 +224,7 @@ export default function CoiffeurEquipeScreen() {
             { value: m.exp, label: 'Expérience' },
           ];
           return (
-            <View key={m.id} style={styles.card}>
+            <View key={m.id} style={[styles.card, isTablet && styles.cardTablet]}>
               <View style={styles.topRow}>
                 <Avatar letter={m.initial} size={56} />
                 <View style={styles.identity}>
@@ -282,6 +285,7 @@ export default function CoiffeurEquipeScreen() {
             </View>
           );
         })}
+        </View>
 
         <View style={styles.legendCard}>
           <View style={styles.legendItem}>
@@ -334,9 +338,9 @@ export default function CoiffeurEquipeScreen() {
         </View>
       </Modal>
 
-      <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={fermerEdition}>
-        <View style={styles.editOverlay}>
-          <View style={styles.editCard}>
+      <Modal visible={editModalVisible} transparent animationType={isTablet ? 'fade' : 'slide'} onRequestClose={fermerEdition}>
+        <View style={[styles.editOverlay, isTablet && styles.editOverlayTablet]}>
+          <View style={[styles.editCard, isTablet && styles.editCardTablet]}>
             <Text style={styles.editTitle}>Modifier le membre</Text>
 
             {memberEnEdition && (
@@ -571,6 +575,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
+  teamGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
   card: {
     backgroundColor: CC.white,
     borderRadius: 16,
@@ -581,6 +590,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  cardTablet: {
+    width: '48%',
   },
   topRow: {
     flexDirection: 'row',
@@ -750,7 +762,7 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 480,
     backgroundColor: CC.cream,
     borderRadius: 20,
     padding: 22,
@@ -868,6 +880,16 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
+  },
+  editOverlayTablet: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  editCardTablet: {
+    width: '100%',
+    maxWidth: 480,
+    borderRadius: 24,
   },
   editTitle: {
     fontFamily: SERIF,

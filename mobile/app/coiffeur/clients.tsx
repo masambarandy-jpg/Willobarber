@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
-import { EditIcon } from '@/components/coiffeur/Icons';
+import { EditIcon, MailIcon, PhoneIcon, PersonIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
+import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 
 type Badge = 'VIP' | 'Nouveau' | 'Inactif' | null;
 
@@ -42,6 +43,7 @@ const EMPTY_EDIT_FORM = { name: '', email: '', phone: '', badge: '' as EditBadge
 const BADGE_OPTIONS: Exclude<EditBadge, ''>[] = ['VIP', 'Nouveau', 'Inactif'];
 
 export default function CoiffeurClientsScreen() {
+  const isTablet = useIsTablet();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
   const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
   const [modalVisible, setModalVisible] = useState(false);
@@ -50,6 +52,7 @@ export default function CoiffeurClientsScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [clientEnEdition, setClientEnEdition] = useState<Client | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
+  const [panelEditing, setPanelEditing] = useState(false);
 
   const filter = TAB_TO_BADGE[activeTab];
   const filtered = filter === 'ALL' ? clients : clients.filter((c) => c.badge === filter);
@@ -81,10 +84,23 @@ export default function CoiffeurClientsScreen() {
     closeModal();
   };
 
-  const ouvrirEdition = (client: Client) => {
+  const fillEditForm = (client: Client) => {
     setClientEnEdition(client);
     setEditForm({ name: client.name, email: client.email, phone: client.phone, badge: client.badge || '' });
-    setEditModalVisible(true);
+  };
+
+  const selectClient = (client: Client) => {
+    fillEditForm(client);
+    setPanelEditing(false);
+  };
+
+  const ouvrirEdition = (client: Client) => {
+    fillEditForm(client);
+    if (isTablet) {
+      setPanelEditing(true);
+    } else {
+      setEditModalVisible(true);
+    }
   };
 
   const updateEditField = (key: 'name' | 'email' | 'phone', value: string) => {
@@ -96,26 +112,89 @@ export default function CoiffeurClientsScreen() {
     setClientEnEdition(null);
   };
 
+  const fermerPanelEdition = () => {
+    if (clientEnEdition) fillEditForm(clientEnEdition);
+    setPanelEditing(false);
+  };
+
   const sauvegarderClient = () => {
     if (!clientEnEdition) return;
     const name = editForm.name.trim();
+    const updated: Client = {
+      ...clientEnEdition,
+      name,
+      letter: name.charAt(0).toUpperCase() || clientEnEdition.letter,
+      email: editForm.email.trim(),
+      phone: editForm.phone.trim(),
+      badge: editForm.badge || null,
+    };
 
-    setClients((prev) =>
-      prev.map((c) =>
-        c.name === clientEnEdition.name
-          ? {
-              ...c,
-              name,
-              letter: name.charAt(0).toUpperCase() || c.letter,
-              email: editForm.email.trim(),
-              phone: editForm.phone.trim(),
-              badge: editForm.badge || null,
-            }
-          : c
-      )
-    );
-    closeEditModal();
+    setClients((prev) => prev.map((c) => (c.name === clientEnEdition.name ? updated : c)));
+
+    if (isTablet) {
+      setClientEnEdition(updated);
+      setPanelEditing(false);
+    } else {
+      closeEditModal();
+    }
   };
+
+  useEffect(() => {
+    if (isTablet && !clientEnEdition && clients.length) {
+      selectClient(clients[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTablet]);
+
+  const editFields = (
+    <>
+      <Text style={styles.fieldLabel}>NOM COMPLET</Text>
+      <TextInput
+        value={editForm.name}
+        onChangeText={(v) => updateEditField('name', v)}
+        style={styles.input}
+        placeholder="Nom complet"
+        placeholderTextColor={CC.textSecondary}
+      />
+
+      <Text style={styles.fieldLabel}>EMAIL</Text>
+      <TextInput
+        value={editForm.email}
+        onChangeText={(v) => updateEditField('email', v)}
+        style={styles.input}
+        placeholder="email@exemple.com"
+        placeholderTextColor={CC.textSecondary}
+        autoCapitalize="none"
+        keyboardType="email-address"
+      />
+
+      <Text style={styles.fieldLabel}>TÉLÉPHONE</Text>
+      <TextInput
+        value={editForm.phone}
+        onChangeText={(v) => updateEditField('phone', v)}
+        style={styles.input}
+        placeholder="06 00 00 00 00"
+        placeholderTextColor={CC.textSecondary}
+        keyboardType="phone-pad"
+      />
+
+      <Text style={styles.fieldLabel}>STATUT</Text>
+      <View style={styles.badgeToggleRow}>
+        {BADGE_OPTIONS.map((option) => {
+          const active = editForm.badge === option;
+          return (
+            <TouchableOpacity
+              key={option}
+              style={[styles.badgeToggleItem, active && badgeToggleActiveStyle(option)]}
+              onPress={() => setEditForm((prev) => ({ ...prev, badge: option }))}
+            >
+              <Text style={[styles.badgeToggleText, active && badgeToggleActiveTextStyle(option)]}>{option}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </>
+  );
 
   return (
     <>
@@ -145,6 +224,8 @@ export default function CoiffeurClientsScreen() {
           </View>
         </View>
 
+        <View style={isTablet && styles.tabletRow}>
+        <View style={isTablet ? styles.listColTablet : undefined}>
         <View style={styles.tabsRow}>
           {TABS.map((tab) => {
             const active = tab === activeTab;
@@ -160,8 +241,15 @@ export default function CoiffeurClientsScreen() {
           })}
         </View>
 
-        {filtered.map((c, i) => (
-          <View key={`${c.name}-${i}`} style={styles.clientCard}>
+        {filtered.map((c, i) => {
+          const selected = isTablet && clientEnEdition?.name === c.name;
+          return (
+          <TouchableOpacity
+            key={`${c.name}-${i}`}
+            activeOpacity={isTablet ? 0.6 : 1}
+            onPress={() => isTablet && selectClient(c)}
+            style={[styles.clientCard, selected && styles.clientCardSelected]}
+          >
             <View style={styles.clientTopRow}>
               <Avatar letter={c.letter} size={42} />
               <Text style={styles.clientName}>{c.name}</Text>
@@ -192,8 +280,100 @@ export default function CoiffeurClientsScreen() {
                 <Text style={styles.statColumnValue}>{c.total}</Text>
               </View>
             </View>
+          </TouchableOpacity>
+          );
+        })}
+        </View>
+
+        {isTablet && (
+          <View style={styles.detailColTablet}>
+            {clientEnEdition ? (
+              <View style={styles.detailPanel}>
+                {panelEditing ? (
+                  <>
+                    <View style={styles.editAvatarWrap}>
+                      <Avatar letter={clientEnEdition.letter} size={56} />
+                    </View>
+
+                    {editFields}
+
+                    <View style={styles.modalActionsRow}>
+                      <TouchableOpacity style={styles.cancelBtn} onPress={fermerPanelEdition}>
+                        <Text style={styles.cancelBtnText}>Annuler</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.confirmBtn} onPress={sauvegarderClient}>
+                        <Text style={styles.confirmBtnText}>Enregistrer</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.detailAvatarWrap}>
+                      <Avatar letter={clientEnEdition.letter} size={80} />
+                    </View>
+                    <Text style={styles.detailName}>{clientEnEdition.name}</Text>
+                    {clientEnEdition.badge && (
+                      <View style={[styles.badge, badgeStyle(clientEnEdition.badge), styles.detailBadge]}>
+                        <Text style={[styles.badgeText, badgeTextStyle(clientEnEdition.badge)]}>
+                          {clientEnEdition.badge}
+                        </Text>
+                      </View>
+                    )}
+
+                    <View style={styles.detailDivider} />
+
+                    <View style={styles.detailContactBlock}>
+                      <View style={styles.detailContactRow}>
+                        <MailIcon size={16} color={CC.textSecondary} />
+                        <Text style={styles.detailContactText}>{clientEnEdition.email}</Text>
+                      </View>
+                      <View style={styles.detailContactRow}>
+                        <PhoneIcon size={16} color={CC.textSecondary} />
+                        <Text style={styles.detailContactText}>{clientEnEdition.phone}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.detailDivider} />
+
+                    <View style={styles.detailStatsRow}>
+                      <View style={styles.detailStatCol}>
+                        <Text style={styles.detailStatValue}>{clientEnEdition.rdv}</Text>
+                        <Text style={styles.detailStatLabel}>RDV</Text>
+                      </View>
+                      <View style={styles.detailStatCol}>
+                        <Text style={styles.detailStatValue}>{clientEnEdition.last}</Text>
+                        <Text style={styles.detailStatLabel}>Dernière visite</Text>
+                      </View>
+                      <View style={styles.detailStatCol}>
+                        <Text style={styles.detailStatValue}>{clientEnEdition.total}</Text>
+                        <Text style={styles.detailStatLabel}>Total dépensé</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.detailDivider} />
+
+                    <View style={styles.detailActionsRow}>
+                      <TouchableOpacity style={styles.detailEditBtn} onPress={() => setPanelEditing(true)}>
+                        <EditIcon size={14} color={CC.black} />
+                        <Text style={styles.detailEditBtnText}>Modifier</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.detailCallBtn}>
+                        <PhoneIcon size={18} color={CC.black} />
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+            ) : (
+              <View style={[styles.detailPanel, styles.detailEmptyPanel]}>
+                <PersonIcon size={36} color={CC.textSecondary} />
+                <Text style={styles.detailEmptyTitle}>Sélectionner un client</Text>
+                <Text style={styles.detailEmptyText}>Cliquez sur un client pour voir ses détails</Text>
+              </View>
+            )}
           </View>
-        ))}
+        )}
+        </View>
       </CoiffeurScreen>
 
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={closeModal}>
@@ -263,56 +443,7 @@ export default function CoiffeurClientsScreen() {
               </View>
             )}
 
-            <Text style={styles.fieldLabel}>NOM COMPLET</Text>
-            <TextInput
-              value={editForm.name}
-              onChangeText={(v) => updateEditField('name', v)}
-              style={styles.input}
-              placeholder="Nom complet"
-              placeholderTextColor={CC.textSecondary}
-            />
-
-            <Text style={styles.fieldLabel}>EMAIL</Text>
-            <TextInput
-              value={editForm.email}
-              onChangeText={(v) => updateEditField('email', v)}
-              style={styles.input}
-              placeholder="email@exemple.com"
-              placeholderTextColor={CC.textSecondary}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-
-            <Text style={styles.fieldLabel}>TÉLÉPHONE</Text>
-            <TextInput
-              value={editForm.phone}
-              onChangeText={(v) => updateEditField('phone', v)}
-              style={styles.input}
-              placeholder="06 00 00 00 00"
-              placeholderTextColor={CC.textSecondary}
-              keyboardType="phone-pad"
-            />
-
-            <Text style={styles.fieldLabel}>STATUT</Text>
-            <View style={styles.badgeToggleRow}>
-              {BADGE_OPTIONS.map((option) => {
-                const active = editForm.badge === option;
-                return (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.badgeToggleItem,
-                      active && badgeToggleActiveStyle(option),
-                    ]}
-                    onPress={() => setEditForm((prev) => ({ ...prev, badge: option }))}
-                  >
-                    <Text style={[styles.badgeToggleText, active && badgeToggleActiveTextStyle(option)]}>
-                      {option}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {editFields}
 
             <View style={styles.modalActionsRow}>
               <TouchableOpacity style={styles.cancelBtn} onPress={closeEditModal}>
@@ -430,6 +561,125 @@ const styles = StyleSheet.create({
     color: '#6fc191',
     marginTop: 2,
   },
+  tabletRow: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'flex-start',
+  },
+  listColTablet: {
+    width: '40%',
+  },
+  detailColTablet: {
+    flex: 1,
+    minWidth: 0,
+  },
+  detailPanel: {
+    backgroundColor: CC.white,
+    borderRadius: 20,
+    padding: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  detailAvatarWrap: {
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  detailName: {
+    fontFamily: SERIF,
+    fontWeight: '700',
+    fontSize: 24,
+    color: CC.black,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  detailBadge: {
+    alignSelf: 'center',
+  },
+  detailDivider: {
+    height: 1,
+    backgroundColor: CC.trackBg,
+    marginVertical: 20,
+  },
+  detailContactBlock: {
+    gap: 12,
+  },
+  detailContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  detailContactText: {
+    fontSize: 14,
+    color: CC.black,
+    flexShrink: 1,
+  },
+  detailStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  detailStatCol: {
+    alignItems: 'center',
+  },
+  detailStatValue: {
+    fontFamily: SERIF,
+    fontWeight: '700',
+    fontSize: 22,
+    color: CC.black,
+  },
+  detailStatLabel: {
+    fontSize: 11,
+    color: CC.textSecondary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  detailActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  detailEditBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: CC.gold,
+    borderRadius: 100,
+    paddingVertical: 14,
+  },
+  detailEditBtnText: {
+    fontWeight: '700',
+    color: CC.black,
+    fontSize: 15,
+  },
+  detailCallBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: CC.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailEmptyPanel: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+  },
+  detailEmptyTitle: {
+    fontFamily: SERIF,
+    fontSize: 18,
+    color: CC.black,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  detailEmptyText: {
+    fontSize: 14,
+    color: CC.textSecondary,
+    textAlign: 'center',
+  },
   tabsRow: {
     flexDirection: 'row',
     gap: 8,
@@ -465,6 +715,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  clientCardSelected: {
+    borderWidth: 1.5,
+    borderColor: CC.gold,
   },
   clientTopRow: {
     flexDirection: 'row',
@@ -532,7 +786,7 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 480,
     backgroundColor: CC.cream,
     borderRadius: 20,
     padding: 22,

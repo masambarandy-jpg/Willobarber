@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, StyleSheet 
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import { ScissorsIcon, ClockIcon, EditIcon, TrashIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
+import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 
 type Category = 'Coupe' | 'Rasage' | 'Pack' | 'Soin';
 type Status = 'Actif' | 'Brouillon';
@@ -44,6 +45,7 @@ const TAB_TO_CATEGORY: Record<string, Category | null> = {
 const EMPTY_EDIT_FORM = { name: '', description: '', price: '', duration: '', status: 'Actif' as Status };
 
 export default function CoiffeurPrestationsScreen() {
+  const isTablet = useIsTablet();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Toutes');
   const [services, setServices] = useState<Service[]>(SERVICES);
 
@@ -133,12 +135,13 @@ export default function CoiffeurPrestationsScreen() {
         })}
       </ScrollView>
 
+      <View style={isTablet && styles.serviceGrid}>
       {filtered.map((s) => {
         const catStyle = CATEGORY_STYLE[s.category];
         const statusStyle = s.status === 'Actif' ? styles.statusActif : styles.statusBrouillon;
         const statusTextStyle = s.status === 'Actif' ? styles.statusActifText : styles.statusBrouillonText;
         return (
-          <View key={s.name} style={styles.serviceCard}>
+          <View key={s.name} style={[styles.serviceCard, isTablet && styles.serviceCardTablet]}>
             <View style={styles.serviceTop}>
               <View style={styles.serviceIconWrap}>
                 <ScissorsIcon color={CC.gold} size={20} />
@@ -173,6 +176,7 @@ export default function CoiffeurPrestationsScreen() {
           </View>
         );
       })}
+      </View>
     </CoiffeurScreen>
 
     <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
@@ -199,9 +203,9 @@ export default function CoiffeurPrestationsScreen() {
       </View>
     </Modal>
 
-    <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
-      <View style={styles.editOverlay}>
-        <View style={styles.editCard}>
+    <Modal visible={editModalVisible} transparent animationType={isTablet ? 'fade' : 'slide'} onRequestClose={() => setEditModalVisible(false)}>
+      <View style={[styles.editOverlay, isTablet && styles.editOverlayTablet]}>
+        <View style={[styles.editCard, isTablet && styles.editCardTablet]}>
           <Text style={styles.modalTitle}>Modifier la prestation</Text>
 
           <Text style={styles.fieldLabel}>NOM</Text>
@@ -337,6 +341,11 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: CC.white,
   },
+  serviceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
   serviceCard: {
     backgroundColor: CC.white,
     borderRadius: 14,
@@ -347,6 +356,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  serviceCardTablet: {
+    width: '48%',
   },
   serviceTop: {
     flexDirection: 'row',
@@ -505,6 +517,16 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
+  },
+  editOverlayTablet: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  editCardTablet: {
+    width: '100%',
+    maxWidth: 480,
+    borderRadius: 24,
   },
   modalTitle: {
     fontFamily: SERIF,
