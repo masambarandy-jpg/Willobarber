@@ -211,7 +211,11 @@ export const settingsApi = {
 // ─── Recommendations API ──────────────────────────────────────────────────────
 
 export const recommendationsApi = {
-  get: () => http.get<AiRecommendationResponse>('/recommendations/').then((r) => r.data),
+  get: () => http.get<AiRecommendationResponse>('/recommendations/').then((r) => {
+    console.log('[IA] fetch recommendations response status:', r.status);
+    console.log('[IA] fetch recommendations data:', JSON.stringify(r.data));
+    return r.data;
+  }),
 };
 
 // ─── Appointments API ────────────────────────────────────────────────────────
