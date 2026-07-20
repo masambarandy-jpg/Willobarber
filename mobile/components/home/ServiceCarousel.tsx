@@ -78,6 +78,11 @@ export function ServiceCarousel() {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 768;
+
+  // Pour mobile, recalcule la largeur de slide dynamiquement
+  const mobileSlideW = windowWidth - PADDING_H * 2 - PEEK;
+  const mobileSnapInterval = mobileSlideW + GAP;
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -86,13 +91,13 @@ export function ServiceCarousel() {
   const isPausedRef = useRef(false);
 
   const progress = useSharedValue(0);
-  const trackWidth = useSharedValue(SLIDE_W);
+  const trackWidth = useSharedValue(mobileSlideW);
 
   const handleAutoAdvance = useCallback(() => {
     const next = (currentSlideRef.current + 1) % SERVICES.length;
     currentSlideRef.current = next;
     setCurrentSlide(next);
-    scrollRef.current?.scrollTo({ x: next * SNAP_INTERVAL, animated: true });
+    scrollRef.current?.scrollTo({ x: next * mobileSnapInterval, animated: true });
   }, []);
 
   const goToSlide = useCallback((index: number) => {
@@ -101,7 +106,7 @@ export function ServiceCarousel() {
     isPausedRef.current = false;
     setCurrentSlide(i);
     setIsPaused(false);
-    scrollRef.current?.scrollTo({ x: i * SNAP_INTERVAL, animated: true });
+    scrollRef.current?.scrollTo({ x: i * mobileSnapInterval, animated: true });
   }, []);
 
   useEffect(() => {
@@ -128,7 +133,7 @@ export function ServiceCarousel() {
 
   const handleMomentumScrollEnd = useCallback((e: any) => {
     const x = e.nativeEvent.contentOffset.x;
-    const idx = Math.round(x / SNAP_INTERVAL);
+    const idx = Math.round(x / mobileSnapInterval);
     const clamped = Math.max(0, Math.min(idx, SERVICES.length - 1));
 
     if (clamped !== currentSlideRef.current) {
@@ -212,7 +217,7 @@ export function ServiceCarousel() {
         horizontal
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
-        snapToInterval={SNAP_INTERVAL}
+        snapToInterval={mobileSnapInterval}
         snapToAlignment="start"
         scrollEventThrottle={16}
         onScrollBeginDrag={handleScrollBeginDrag}
@@ -221,7 +226,7 @@ export function ServiceCarousel() {
         style={Platform.OS === 'web' ? ({ cursor: 'grab' } as any) : undefined}
       >
         {SERVICES.map((svc) => (
-          <View key={svc.id} style={styles.slide}>
+          <View key={svc.id} style={[styles.slide, { width: mobileSlideW }]}>
 
             {/* ── Photo zone ── */}
             <View style={styles.photoZone}>
@@ -308,7 +313,6 @@ const styles = StyleSheet.create({
     paddingRight: PADDING_H,
   },
   slide: {
-    width: SLIDE_W,
     backgroundColor: '#1A1814',
     borderRadius: 16,
     overflow: 'hidden',
