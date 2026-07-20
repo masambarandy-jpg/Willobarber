@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
 import { Fonts } from '@/constants';
 import {
   ACOMPTE_FIXE,
@@ -358,21 +359,21 @@ export function Step4Payment({
         <View style={{ marginTop: 16 }}>
           <Text style={styles.amountNowKicker}>MONTANT À RÉGLER MAINTENANT</Text>
 
-          {/* Option 1 — Acompte 10% obligatoire */}
+          {/* Option 1 — Acompte fixe obligatoire */}
           <TouchableOpacity
             style={[styles.radioCard, amountChoice === 'deposit' && styles.radioCardActive]}
             onPress={() => onAmountChoiceChange('deposit')}
             activeOpacity={0.85}
           >
             <View style={styles.radioRow}>
-              <View style={[styles.radioCircle, amountChoice === 'deposit' && styles.radioCircleActive]}>
-                {amountChoice === 'deposit' && <Text style={styles.radioCheck}>✓</Text>}
+              <View style={[styles.radioIconCircle, amountChoice === 'deposit' && styles.radioIconCircleActive]}>
+                <Feather name="shield" size={18} color={amountChoice === 'deposit' ? '#1A1208' : GOLD} />
               </View>
               <View style={{ flex: 1 }}>
                 <View style={styles.radioLabelRow}>
                   <Text style={styles.radioAmount}>{fmtPrice(deposit)}</Text>
-                  <View style={styles.badgeGold}>
-                    <Text style={styles.badgeGoldText}>OBLIGATOIRE</Text>
+                  <View style={styles.badgeGreen}>
+                    <Text style={styles.badgeGreenText}>OBLIGATOIRE</Text>
                   </View>
                 </View>
                 <Text style={styles.radioSub}>Acompte fixe pour sécuriser votre créneau</Text>
@@ -380,15 +381,15 @@ export function Step4Payment({
             </View>
           </TouchableOpacity>
 
-          {/* Option 2 — Totalité optionnel */}
+          {/* Option 2 — Totalité optionnelle */}
           <TouchableOpacity
             style={[styles.radioCard, amountChoice === 'full' && styles.radioCardActive]}
             onPress={() => onAmountChoiceChange('full')}
             activeOpacity={0.85}
           >
             <View style={styles.radioRow}>
-              <View style={[styles.radioCircle, amountChoice === 'full' && styles.radioCircleActive]}>
-                {amountChoice === 'full' && <Text style={styles.radioCheck}>✓</Text>}
+              <View style={[styles.radioIconCircle, amountChoice === 'full' && styles.radioIconCircleActive]}>
+                <Feather name="award" size={18} color={amountChoice === 'full' ? '#1A1208' : GOLD} />
               </View>
               <View style={{ flex: 1 }}>
                 <View style={styles.radioLabelRow}>
@@ -398,6 +399,10 @@ export function Step4Payment({
                   </View>
                 </View>
                 <Text style={styles.radioSub}>Réglez la totalité maintenant, rien à payer au salon</Text>
+                <View style={styles.economyRow}>
+                  <Feather name="check-circle" size={12} color={GREEN_TEXT} />
+                  <Text style={styles.economyText}>Évitez la file d'attente au salon</Text>
+                </View>
               </View>
             </View>
           </TouchableOpacity>
@@ -546,30 +551,27 @@ const styles = StyleSheet.create({
   },
   radioCardActive: {
     borderColor: GOLD,
+    backgroundColor: 'rgba(201,168,76,0.08)',
   },
   radioRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
   },
-  radioCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  radioIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(201,168,76,0.4)',
+    backgroundColor: 'rgba(201,168,76,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  radioCircleActive: {
+  radioIconCircleActive: {
     backgroundColor: GOLD,
     borderColor: GOLD,
-  },
-  radioCheck: {
-    fontSize: 12,
-    color: '#1A1208',
-    fontWeight: '700',
-    lineHeight: 14,
   },
   radioLabelRow: {
     flexDirection: 'row',
@@ -579,25 +581,36 @@ const styles = StyleSheet.create({
   },
   radioAmount: {
     fontFamily: Fonts.bold,
-    fontSize: 22,
-    color: '#FFFFFF',
+    fontSize: 28,
+    color: GOLD,
     fontWeight: '700',
   },
   radioSub: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: GREY,
   },
-  badgeGold: {
-    backgroundColor: 'rgba(201,168,76,0.15)',
+  economyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+  },
+  economyText: {
+    fontSize: 12,
+    color: GREEN_TEXT,
+    fontWeight: '500',
+  },
+  badgeGreen: {
+    backgroundColor: '#1B4332',
     borderRadius: 100,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  badgeGoldText: {
+  badgeGreenText: {
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 1,
-    color: GOLD,
+    color: '#2D6A4F',
   },
   badgeGrey: {
     backgroundColor: 'rgba(255,255,255,0.08)',
