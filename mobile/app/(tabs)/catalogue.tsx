@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Fonts } from '@/constants';
 import { SERVICES, type StaticService } from '@/components/booking/data';
+import { useIsTablet } from '@/components/client/useIsTablet';
 
 const GOLD  = '#C9A84C';
 const CARD  = '#1A1814';
@@ -35,6 +37,9 @@ function matchesFilter(svc: StaticService, filter: Filter): boolean {
 
 export default function CatalogueScreen() {
   const router = useRouter();
+  const isTablet = useIsTablet();
+  const { width } = useWindowDimensions();
+  const columns = !isTablet ? 1 : width >= 1024 ? 3 : 2;
   const [activeFilter, setActiveFilter] = useState<Filter>('Tous');
 
   const filteredServices = useMemo(
@@ -52,7 +57,7 @@ export default function CatalogueScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.kicker}>NOS PRESTATIONS</Text>
-          <Text style={styles.title}>Services</Text>
+          <Text style={[styles.title, isTablet && { fontSize: 38 }]}>Services</Text>
           <Text style={styles.subtitle}>Découvrez nos rituels signature.</Text>
         </View>
 
@@ -78,9 +83,13 @@ export default function CatalogueScreen() {
         </ScrollView>
 
         {/* Liste des prestations */}
-        <View style={styles.list}>
+        <View style={[styles.list, isTablet && styles.listGrid]}>
           {filteredServices.map(svc => (
-            <View key={svc.id} style={styles.card}>
+            <View
+              key={svc.id}
+              style={isTablet ? { width: `${100 / columns}%`, paddingHorizontal: 8, marginBottom: 16 } : undefined}
+            >
+            <View style={[styles.card, isTablet && { marginHorizontal: 0, marginBottom: 0 }]}>
               {/* Zone photo */}
               <View style={styles.photoZone}>
                 {svc.photo ? (
@@ -138,6 +147,7 @@ export default function CatalogueScreen() {
                   </View>
                 </TouchableOpacity>
               </View>
+            </View>
             </View>
           ))}
         </View>
@@ -212,6 +222,14 @@ const styles = StyleSheet.create({
   // Liste
   list: {
     marginTop: 24,
+  },
+  listGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    maxWidth: 1100,
+    alignSelf: 'center',
+    width: '100%',
   },
 
   // Card

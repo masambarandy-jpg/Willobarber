@@ -24,6 +24,7 @@ import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useReservations } from '@/hooks/useReservations';
 import type { Reservation } from '@/types';
 import { Fonts } from '@/constants';
+import { useIsTablet } from '@/components/client/useIsTablet';
 
 const MOCK_LOYALTY = {
   points: 980,
@@ -95,10 +96,11 @@ interface CancelModalProps {
 }
 function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps) {
   const [reason, setReason] = useState('');
+  const isTablet = useIsTablet();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalBox}>
+      <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
+        <View style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
           <Text style={styles.modalTitle}>Annuler ce rendez-vous</Text>
           <Text style={styles.modalSub}>Annulation gratuite 24h avant. Au-delà, l'acompte peut être conservé.</Text>
           <Text style={styles.fieldLabel}>Raison (optionnel)</Text>
@@ -129,10 +131,12 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
 
 export default function ReservationsScreen() {
   const router = useRouter();
+  const isTablet = useIsTablet();
   const { user, isAuthenticated } = useAuth();
   const { showLoginModal } = useAuthModal();
   const { isLoading, refetch, cancel } = useReservations();
   const [histFilter, setHistFilter] = useState('Tous');
+  const [selectedHistIndex, setSelectedHistIndex] = useState(0);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const barAnim = useRef(new Animated.Value(0)).current;
@@ -277,21 +281,23 @@ export default function ReservationsScreen() {
   return (
     <View style={styles.root}>
       {/* Sticky top bar */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerLogo}>{'{w}'}</Text>
-          <Text style={styles.headerBrand}>willobarber</Text>
+      {!isTablet && (
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerLogo}>{'{w}'}</Text>
+            <Text style={styles.headerBrand}>willobarber</Text>
+          </View>
+          <View style={[styles.avatar, { width: 32, height: 32, borderRadius: 16 }]}>
+            <Text style={[styles.avatarText, { fontSize: 12 }]}>
+              {(username[0] ?? 'U').toUpperCase()}
+            </Text>
+          </View>
         </View>
-        <View style={[styles.avatar, { width: 32, height: 32, borderRadius: 16 }]}>
-          <Text style={[styles.avatarText, { fontSize: 12 }]}>
-            {(username[0] ?? 'U').toUpperCase()}
-          </Text>
-        </View>
-      </View>
+      )}
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, isTablet && { maxWidth: 1100, alignSelf: 'center', width: '100%', paddingTop: 40 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#C9A84C" />}
       >
@@ -417,23 +423,39 @@ export default function ReservationsScreen() {
         {/* ── 5. VOS FAVORIS ────────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>Vos favoris</Text>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 12, paddingRight: 4, marginBottom: 24 }}
-        >
-          {FAVORIS.map((fav, i) => (
-            <View key={i} style={styles.favCard}>
-              <Text style={styles.favStar}>★</Text>
-              <Text style={styles.favName}>{fav.nom}</Text>
-              <Text style={styles.favMeta}>
-                {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
-              </Text>
-              <View style={styles.favDivider} />
-              <Text style={styles.favCount}>{fav.count} · dernière {fav.date}</Text>
-            </View>
-          ))}
-        </ScrollView>
+        {isTablet ? (
+          <View style={styles.favGrid}>
+            {FAVORIS.map((fav, i) => (
+              <View key={i} style={[styles.favCard, styles.favCardTablet]}>
+                <Text style={styles.favStar}>★</Text>
+                <Text style={styles.favName}>{fav.nom}</Text>
+                <Text style={styles.favMeta}>
+                  {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
+                </Text>
+                <View style={styles.favDivider} />
+                <Text style={styles.favCount}>{fav.count} · dernière {fav.date}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 12, paddingRight: 4, marginBottom: 24 }}
+          >
+            {FAVORIS.map((fav, i) => (
+              <View key={i} style={styles.favCard}>
+                <Text style={styles.favStar}>★</Text>
+                <Text style={styles.favName}>{fav.nom}</Text>
+                <Text style={styles.favMeta}>
+                  {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
+                </Text>
+                <View style={styles.favDivider} />
+                <Text style={styles.favCount}>{fav.count} · dernière {fav.date}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        )}
 
         {/* ── 6. HISTORIQUE DES RÉSERVATIONS ────────────────────────── */}
         <Text style={styles.sectionTitle}>Historique</Text>
@@ -446,7 +468,7 @@ export default function ReservationsScreen() {
           {['Tous', '2026', '2025'].map(t => (
             <Pressable
               key={t}
-              onPress={() => setHistFilter(t)}
+              onPress={() => { setHistFilter(t); setSelectedHistIndex(0); }}
               style={[styles.filterChip, histFilter === t && styles.filterChipActive]}
             >
               <Text style={[styles.filterChipText, histFilter === t && styles.filterChipTextActive]}>{t}</Text>
@@ -454,9 +476,69 @@ export default function ReservationsScreen() {
           ))}
         </ScrollView>
 
-        {filteredHist.length === 0
-          ? <Text style={styles.emptyHist}>Aucun historique à afficher.</Text>
-          : filteredHist.map((h, i) => (
+        {filteredHist.length === 0 ? (
+          <Text style={styles.emptyHist}>Aucun historique à afficher.</Text>
+        ) : isTablet ? (
+          <View style={styles.histSplit}>
+            <View style={styles.histSplitList}>
+              {filteredHist.map((h, i) => {
+                const isSelected = i === Math.min(selectedHistIndex, filteredHist.length - 1);
+                return (
+                  <Pressable
+                    key={i}
+                    onPress={() => setSelectedHistIndex(i)}
+                    style={[styles.histListRow, isSelected && styles.histListRowActive]}
+                  >
+                    <View style={styles.histDateBox}>
+                      <Text style={styles.histDateNum}>{h.jour}</Text>
+                      <Text style={styles.histDateMon}>{h.mois}</Text>
+                    </View>
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <Text style={styles.histService} numberOfLines={1}>{h.service}</Text>
+                      <Text style={styles.histMeta}>{h.barbierNom} · {h.prix}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {(() => {
+              const h = filteredHist[Math.min(selectedHistIndex, filteredHist.length - 1)];
+              const i = Math.min(selectedHistIndex, filteredHist.length - 1);
+              return (
+                <View style={styles.histSplitDetail}>
+                  <View style={styles.histDetailHeader}>
+                    <View style={[styles.histDateBox, { backgroundColor: '#2A2520' }]}>
+                      <Text style={styles.histDateNum}>{h.jour}</Text>
+                      <Text style={styles.histDateMon}>{h.mois}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.histDetailService}>{h.service}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                        <View style={[
+                          styles.avatar,
+                          { width: 30, height: 30, borderRadius: 15, backgroundColor: h.couleur + '33', borderColor: h.couleur },
+                        ]}>
+                          <Text style={[styles.avatarText, { fontSize: 12, color: h.couleur }]}>{h.barbier}</Text>
+                        </View>
+                        <Text style={styles.histMeta}>{h.barbierNom}</Text>
+                        <Text style={{ color: '#C9A84C', fontSize: 14, fontWeight: '700' }}>{h.prix}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <Text style={styles.histDetailRef}>N° WB-{h.annee}-{String(i + 1).padStart(5, '0')}</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+                    <TouchableOpacity testID={`btn-rebook-${i}`} style={[styles.btnPrimary, { flex: 1 }]} onPress={() => handleRebook(h)} activeOpacity={0.85}>
+                      <Text style={styles.btnPrimaryText}>↺ Rebooker</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity testID={`btn-receipt-${i}`} style={[styles.btnOutline, { flex: 1 }]} onPress={() => handleReceipt(h, i)} activeOpacity={0.85}>
+                      <Text style={styles.btnOutlineText}>↓ Reçu</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })()}
+          </View>
+        ) : filteredHist.map((h, i) => (
             <View key={i} style={styles.histCard}>
               <View style={styles.histDateBox}>
                 <Text style={styles.histDateNum}>{h.jour}</Text>
@@ -790,6 +872,28 @@ const styles = StyleSheet.create({
   favMeta:    { fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 10 },
   favDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: 8 },
   favCount:   { fontSize: 12, color: 'rgba(255,255,255,0.45)' },
+  favGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
+  favCardTablet: { width: '48%' },
+
+  // ── Historique — vue iPad master/detail ─────────────────────────────────────
+  histSplit:       { flexDirection: 'row', gap: 16, marginBottom: 20 },
+  histSplitList:   { width: '40%', gap: 8 },
+  histSplitDetail: { flex: 1, backgroundColor: '#1A1814', borderRadius: 16, padding: 20 },
+  histListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#1A1814',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  histListRowActive: { borderColor: '#C9A84C' },
+  histDetailHeader:  { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
+  histDetailService: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff' },
+  histDetailRef:     { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 16, fontFamily: 'monospace' },
 
   // ── Historique réservations ───────────────────────────────────────────────────
   filterChip:           { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 100, backgroundColor: '#1A1814', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
@@ -937,6 +1041,7 @@ const styles = StyleSheet.create({
 
   // Cancel modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalOverlayTablet: { justifyContent: 'center', alignItems: 'center' },
   modalBox: {
     backgroundColor: '#1A1814',
     borderTopLeftRadius: 24,
@@ -945,6 +1050,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+  },
+  modalBoxTablet: {
+    borderRadius: 24,
+    width: '90%',
+    maxWidth: 480,
+    paddingBottom: 24,
   },
   modalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 8 },
   modalSub:   { fontSize: 13.5, color: 'rgba(255,255,255,0.5)', marginBottom: 18, lineHeight: 19 },
