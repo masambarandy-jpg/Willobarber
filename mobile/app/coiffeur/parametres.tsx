@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal } from 'react-native';
+import Slider from '@react-native-community/slider';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
-import { CameraIcon, LockIcon, LogOutIcon } from '@/components/coiffeur/Icons';
+import { CameraIcon, LockIcon, LogOutIcon, TrashIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 
 const TABS = ['Profil', 'Établissement', 'Notifications', 'Paiement', 'Sécurité'] as const;
@@ -25,12 +26,20 @@ function Field({
   onChangeText,
   half,
   multiline,
+  placeholder,
+  keyboardType,
+  maxLength,
+  secureTextEntry,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
   half?: boolean;
   multiline?: boolean;
+  placeholder?: string;
+  keyboardType?: 'default' | 'numeric';
+  maxLength?: number;
+  secureTextEntry?: boolean;
 }) {
   return (
     <View style={[styles.field, half && styles.fieldHalf]}>
@@ -39,8 +48,12 @@ function Field({
         value={value}
         onChangeText={onChangeText}
         style={[styles.input, multiline && styles.inputMultiline]}
+        placeholder={placeholder}
         placeholderTextColor={CC.textSecondary}
         multiline={multiline}
+        keyboardType={keyboardType}
+        maxLength={maxLength}
+        secureTextEntry={secureTextEntry}
       />
     </View>
   );
@@ -261,53 +274,209 @@ function NotificationsTab() {
   );
 }
 
+type Carte = { id: string; brand: string; prefix: string; num: string; actif: boolean };
+
+const DEFAULT_CARTES: Carte[] = [
+  { id: '1', brand: 'Visa', prefix: 'Vi', num: '4582', actif: true },
+  { id: '2', brand: 'Mastercard', prefix: 'Ma', num: '1190', actif: false },
+];
+
+const detecterBrand = (num: string) => {
+  if (num.startsWith('4')) return { brand: 'Visa', prefix: 'Vi' };
+  if (num.startsWith('5')) return { brand: 'Mastercard', prefix: 'Ma' };
+  if (num.startsWith('3')) return { brand: 'Amex', prefix: 'Am' };
+  return { brand: 'Carte', prefix: '??' };
+};
+
+const formatNumeroCarte = (text: string) => {
+  const digits = text.replace(/\D/g, '').slice(0, 16);
+  return digits.match(/.{1,4}/g)?.join(' ') ?? digits;
+};
+
+const formatExpiration = (text: string) => {
+  const digits = text.replace(/\D/g, '').slice(0, 4);
+  return digits.length <= 2 ? digits : `${digits.slice(0, 2)}/${digits.slice(2)}`;
+};
+
 function PaiementTab() {
+  const [commission, setCommission] = useState(4);
+  const [cartes, setCartes] = useState<Carte[]>(DEFAULT_CARTES);
+
+  const [ajouterCarteVisible, setAjouterCarteVisible] = useState(false);
+  const [supprimerCarteId, setSupprimerCarteId] = useState<string | null>(null);
+
+  const [titulaire, setTitulaire] = useState('');
+  const [numeroCarte, setNumeroCarte] = useState('');
+  const [expiration, setExpiration] = useState('');
+  const [cvv, setCvv] = useState('');
+
+  const definirPrincipale = (id: string) => {
+    setCartes((prev) => prev.map((c) => ({ ...c, actif: c.id === id })));
+  };
+
+  const fermerAjoutCarte = () => {
+    setAjouterCarteVisible(false);
+    setTitulaire('');
+    setNumeroCarte('');
+    setExpiration('');
+    setCvv('');
+  };
+
+  const ajouterCarte = () => {
+    const digits = numeroCarte.replace(/\D/g, '');
+    if (!titulaire || digits.length < 4) return;
+    const { brand, prefix } = detecterBrand(digits);
+    setCartes((prev) => [...prev, { id: Date.now().toString(), brand, prefix, num: digits.slice(-4), actif: false }]);
+    fermerAjoutCarte();
+  };
+
+  const carteASupprimer = cartes.find((c) => c.id === supprimerCarteId);
+
+  const confirmerSuppressionCarte = () => {
+    setCartes((prev) => prev.filter((c) => c.id !== supprimerCarteId));
+    setSupprimerCarteId(null);
+  };
+
+  const brandApercu = detecterBrand(numeroCarte.replace(/\D/g, ''));
+
   return (
     <>
-      <View style={styles.cardCompact}>
-        <View style={styles.cardRow}>
-          <View style={styles.cardLogo}>
-            <Text style={styles.cardLogoText}>Vi</Text>
+      {cartes.map((carte) => (
+        <View key={carte.id} style={styles.cardCompact}>
+          <View style={styles.cardRow}>
+            <View style={styles.cardLogo}>
+              <Text style={styles.cardLogoText}>{carte.prefix}</Text>
+            </View>
+            <View style={styles.cardDetails}>
+              <Text style={styles.cardName}>{carte.brand}</Text>
+              <Text style={styles.cardNumber}>•••• {carte.num}</Text>
+            </View>
+            <View style={[styles.badge, carte.actif ? styles.badgeActif : styles.badgeSecondaire]}>
+              <Text style={[styles.badgeText, carte.actif ? styles.badgeActifText : styles.badgeSecondaireText]}>
+                {carte.actif ? 'Actif' : 'Secondaire'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.cardDetails}>
-            <Text style={styles.cardName}>Visa</Text>
-            <Text style={styles.cardNumber}>•••• 4582</Text>
-          </View>
-          <View style={[styles.badge, styles.badgeActif]}>
-            <Text style={[styles.badgeText, styles.badgeActifText]}>Actif</Text>
+          <View style={[styles.cardActionsRow, carte.actif && styles.cardActionsRowEnd]}>
+            {!carte.actif && (
+              <TouchableOpacity onPress={() => definirPrincipale(carte.id)}>
+                <Text style={styles.cardSetPrimaryText}>Définir comme principale</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.cardDeleteBtn} onPress={() => setSupprimerCarteId(carte.id)}>
+              <TrashIcon size={15} color={CC.errorText} />
+            </TouchableOpacity>
           </View>
         </View>
-      </View>
+      ))}
 
-      <View style={styles.cardCompact}>
-        <View style={styles.cardRow}>
-          <View style={styles.cardLogo}>
-            <Text style={styles.cardLogoText}>Ma</Text>
-          </View>
-          <View style={styles.cardDetails}>
-            <Text style={styles.cardName}>Mastercard</Text>
-            <Text style={styles.cardNumber}>•••• 1190</Text>
-          </View>
-          <View style={[styles.badge, styles.badgeSecondaire]}>
-            <Text style={[styles.badgeText, styles.badgeSecondaireText]}>Secondaire</Text>
-          </View>
-        </View>
-      </View>
+      <TouchableOpacity style={styles.addCardBtn} onPress={() => setAjouterCarteVisible(true)}>
+        <Text style={styles.addCardPlus}>+</Text>
+        <Text style={styles.addCardText}>Ajouter une carte</Text>
+      </TouchableOpacity>
 
       <View style={styles.card}>
         <View style={styles.commissionRow}>
           <Text style={styles.commissionLabel}>Commission plateforme</Text>
-          <Text style={styles.commissionValue}>4%</Text>
+          <Text style={styles.commissionValue}>{commission}%</Text>
         </View>
-        <View style={styles.sliderTrack}>
-          <View style={styles.sliderFill} />
-          <View style={styles.sliderThumb} />
-        </View>
+        <Slider
+          minimumValue={0}
+          maximumValue={10}
+          step={0.5}
+          value={commission}
+          onValueChange={setCommission}
+          minimumTrackTintColor={CC.gold}
+          maximumTrackTintColor={CC.trackBg}
+          thumbTintColor={CC.gold}
+          style={styles.sliderControl}
+        />
         <View style={styles.sliderLabelsRow}>
           <Text style={styles.sliderLabel}>0%</Text>
           <Text style={styles.sliderLabel}>10%</Text>
         </View>
       </View>
+
+      <Modal visible={ajouterCarteVisible} transparent animationType="slide" onRequestClose={fermerAjoutCarte}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Ajouter une carte</Text>
+              <TouchableOpacity onPress={fermerAjoutCarte}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.brandPreviewRow}>
+                <View style={styles.cardLogo}>
+                  <Text style={styles.cardLogoText}>{brandApercu.prefix}</Text>
+                </View>
+                <Text style={styles.brandPreviewText}>{brandApercu.brand}</Text>
+              </View>
+
+              <Field label="TITULAIRE DE LA CARTE" value={titulaire} onChangeText={setTitulaire} />
+              <Field
+                label="NUMÉRO DE CARTE"
+                value={numeroCarte}
+                onChangeText={(t) => setNumeroCarte(formatNumeroCarte(t))}
+                keyboardType="numeric"
+                maxLength={19}
+              />
+              <View style={styles.row2}>
+                <Field
+                  label="DATE D'EXPIRATION"
+                  value={expiration}
+                  onChangeText={(t) => setExpiration(formatExpiration(t))}
+                  placeholder="MM/AA"
+                  maxLength={5}
+                  half
+                />
+                <Field
+                  label="CVV"
+                  value={cvv}
+                  onChangeText={(t) => setCvv(t.replace(/\D/g, '').slice(0, 3))}
+                  keyboardType="numeric"
+                  maxLength={3}
+                  secureTextEntry
+                  half
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={fermerAjoutCarte}>
+                <Text style={styles.cancelBtnText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmAddBtn} onPress={ajouterCarte}>
+                <Text style={styles.confirmAddBtnText}>Ajouter la carte</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!supprimerCarteId} transparent animationType="fade" onRequestClose={() => setSupprimerCarteId(null)}>
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteCard}>
+            <View style={styles.deleteIconWrap}>
+              <TrashIcon size={22} color={CC.errorText} />
+            </View>
+            <Text style={styles.deleteTitle}>Supprimer cette carte ?</Text>
+            <Text style={styles.deleteText}>
+              {carteASupprimer?.brand} •••• {carteASupprimer?.num} sera retirée de votre compte.
+            </Text>
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setSupprimerCarteId(null)}>
+                <Text style={styles.cancelBtnText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteConfirmBtn} onPress={confirmerSuppressionCarte}>
+                <Text style={styles.deleteConfirmBtnText}>Supprimer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -749,6 +918,137 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontWeight: '700',
   },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0eadf',
+  },
+  cardActionsRowEnd: {
+    justifyContent: 'flex-end',
+  },
+  cardSetPrimaryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: CC.gold,
+  },
+  cardDeleteBtn: {
+    padding: 4,
+  },
+  addCardBtn: {
+    borderWidth: 1.5,
+    borderColor: CC.gold,
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  addCardPlus: {
+    fontSize: 20,
+    color: CC.gold,
+  },
+  addCardText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: CC.gold,
+  },
+  brandPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 18,
+  },
+  brandPreviewText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: CC.black,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: CC.border,
+    alignItems: 'center',
+    backgroundColor: CC.white,
+  },
+  cancelBtnText: {
+    fontWeight: '600',
+    color: CC.black,
+  },
+  confirmAddBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 100,
+    backgroundColor: CC.gold,
+    alignItems: 'center',
+  },
+  confirmAddBtnText: {
+    fontWeight: '700',
+    color: CC.black,
+  },
+  deleteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  deleteCard: {
+    backgroundColor: CC.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+  },
+  deleteIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: CC.errorBg,
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deleteTitle: {
+    fontFamily: SERIF,
+    fontWeight: '600',
+    fontSize: 20,
+    color: CC.black,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  deleteText: {
+    fontSize: 14,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 100,
+    backgroundColor: CC.errorText,
+    alignItems: 'center',
+  },
+  deleteConfirmBtnText: {
+    fontWeight: '600',
+    color: CC.white,
+  },
   commissionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -763,31 +1063,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: CC.goldDark,
   },
-  sliderTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: CC.trackBg,
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  sliderFill: {
-    position: 'absolute',
-    left: 0,
-    width: '40%',
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: CC.gold,
-  },
-  sliderThumb: {
-    position: 'absolute',
-    left: '40%',
-    marginLeft: -9,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: CC.gold,
-    borderWidth: 3,
-    borderColor: CC.white,
+  sliderControl: {
+    width: '100%',
+    height: 40,
   },
   sliderLabelsRow: {
     flexDirection: 'row',
