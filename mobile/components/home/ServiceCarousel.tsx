@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -75,6 +76,8 @@ export type ServiceId = (typeof SERVICES)[number]['id'];
 
 export function ServiceCarousel() {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 768;
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -143,6 +146,64 @@ export function ServiceCarousel() {
   const progressFillStyle = useAnimatedStyle(() => ({
     width: progress.value * trackWidth.value,
   }));
+
+  if (isTablet) {
+    return (
+      <View style={tabletStyles.grid}>
+        {SERVICES.map((svc) => (
+          <View key={svc.id} style={tabletStyles.card}>
+
+            {/* ── Photo zone ── */}
+            <View style={styles.photoZone}>
+              <Image
+                source={{ uri: svc.photo }}
+                style={styles.photo}
+                resizeMode="cover"
+              />
+              <LinearGradient
+                colors={['transparent', 'rgba(26,20,8,0.85)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.photoGradient}
+              />
+              <View style={styles.badgesRow}>
+                <View style={styles.badgeCat}>
+                  <Text style={styles.badgeCatText}>{svc.cat}</Text>
+                </View>
+                {svc.popular && (
+                  <View style={styles.badgePopular}>
+                    <Text style={styles.badgePopularText}>POPULAIRE</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* ── Text zone ── */}
+            <View style={styles.cardContent}>
+              <Text style={styles.serviceName} numberOfLines={2}>{svc.name}</Text>
+              <Text style={styles.serviceDesc} numberOfLines={2}>{svc.short}</Text>
+              <View style={styles.sep} />
+              <View style={styles.metaRow}>
+                <View style={styles.durationRow}>
+                  <Feather name="clock" size={13} color="#6B6560" />
+                  <Text style={styles.duration}>{svc.dur}</Text>
+                </View>
+                <Text style={styles.price}>{svc.price} €</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.selectBtn}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } })}
+              >
+                <Text style={styles.selectBtnText}>Sélectionner  →</Text>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        ))}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrapper}>
@@ -393,4 +454,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#C9A84C',
   },
   pauseBtn: {},
+});
+
+const tabletStyles = StyleSheet.create({
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: PADDING_H,
+  },
+  card: {
+    width: '48%',
+    backgroundColor: '#1A1814',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: GAP,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
 });
