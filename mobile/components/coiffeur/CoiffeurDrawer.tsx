@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import Avatar from './Avatar';
 import { CC, SERIF } from './theme';
+import SupportModal from './SupportModal';
 import {
   CloseIcon,
   GridIcon,
@@ -44,6 +46,8 @@ const NAV_ITEMS: { key: CoiffeurRoute; label: string; icon: (color: string) => R
 ];
 
 export default function CoiffeurDrawer({ visible, onClose, active }: Props) {
+  const [supportVisible, setSupportVisible] = useState(false);
+
   if (!visible) return null;
 
   const go = (route: CoiffeurRoute) => {
@@ -105,13 +109,15 @@ export default function CoiffeurDrawer({ visible, onClose, active }: Props) {
             </View>
             <Text style={styles.helpTitle}>Besoin d'aide ?</Text>
             <Text style={styles.helpText}>Notre équipe répond en moins de 2h, du mardi au samedi.</Text>
-            <TouchableOpacity style={styles.helpBtn}>
+            <TouchableOpacity style={styles.helpBtn} onPress={() => setSupportVisible(true)}>
               <Text style={styles.helpBtnText}>Contacter le support</Text>
             </TouchableOpacity>
           </LinearGradient>
         </ScrollView>
       </View>
       <Pressable style={styles.backdrop} onPress={onClose} />
+
+      <SupportModal visible={supportVisible} onClose={() => setSupportVisible(false)} />
     </View>
   );
 }
