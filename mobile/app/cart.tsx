@@ -17,9 +17,11 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { Fonts } from '@/constants';
+import { useIsTablet } from '@/components/client/useIsTablet';
 
 export default function CartScreen() {
   const router = useRouter();
+  const isTablet = useIsTablet();
   const { items, removeItem, updateQte, total, nbArticles, isLoading, checkout, lastOrder, clearLastOrder } = useCart();
   const { isAuthenticated } = useAuth();
   const { showLoginModal } = useAuthModal();
@@ -179,7 +181,7 @@ export default function CartScreen() {
         <View style={{ width: 70 }} />
       </View>
 
-      <View style={styles.titleSection}>
+      <View style={[styles.titleSection, isTablet && { maxWidth: 1200, width: '100%', alignSelf: 'center' }]}>
         <Text style={styles.titleKicker}>— BOUTIQUE</Text>
         <Text style={styles.pageTitle}>Mon Panier</Text>
         <Text style={styles.pageSubtitle}>
@@ -200,6 +202,149 @@ export default function CartScreen() {
           <TouchableOpacity style={styles.continueBtn} activeOpacity={0.85} onPress={() => router.push('/(tabs)' as any)}>
             <Text style={styles.continueBtnText}>Découvrir nos produits →</Text>
           </TouchableOpacity>
+        </View>
+      ) : isTablet ? (
+        <View style={styles.tabletRow}>
+          <ScrollView style={styles.tabletLeftCol} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 12, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            {items.map(item => (
+              <View key={item.id} style={styles.itemCard}>
+                <Image source={{ uri: item.photo }} style={styles.itemPhoto} resizeMode="cover" />
+                <View style={styles.itemBody}>
+                  <View style={styles.itemBadgeRow}>
+                    <View style={styles.itemBadge}>
+                      <Text style={styles.itemBadgeText}>{item.cat}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.itemNom}>{item.nom}</Text>
+                  <Text style={styles.itemPrix}>{item.prix.toFixed(0)} €</Text>
+                  <View style={styles.itemQteRow}>
+                    <TouchableOpacity style={styles.qteBtn} onPress={() => updateQte(item.id, item.qte - 1)}>
+                      <Text style={styles.qteBtnTextMinus}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.qteVal}>{item.qte}</Text>
+                    <TouchableOpacity style={styles.qteBtnPlus} onPress={() => updateQte(item.id, item.qte + 1)}>
+                      <Text style={styles.qteBtnTextPlus}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => removeItem(item.id)}>
+                  <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF5350" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <Rect x="3" y="6" width="18" height="2"/>
+                    <Path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <Path d="M10 11v6M14 11v6"/>
+                    <Path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                  </Svg>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {/* Livraison */}
+            <View style={styles.deliverySection}>
+              <Text style={styles.recapKicker}>LIVRAISON</Text>
+
+              <View style={styles.deliveryRowTablet}>
+                <TouchableOpacity
+                  style={[styles.deliveryOptionCard, styles.deliveryOptionCardTablet, deliveryMode === 'salon' && styles.deliveryOptionCardActive]}
+                  activeOpacity={0.85}
+                  onPress={() => setDeliveryMode('salon')}
+                >
+                  <View style={styles.deliveryIconCircle}>
+                    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <Path d="M3 21h18"/>
+                      <Path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/>
+                      <Path d="M10 21v-6h4v6"/>
+                      <Path d="M9 9h1M14 9h1"/>
+                    </Svg>
+                  </View>
+                  <View style={styles.deliveryOptionBody}>
+                    <Text style={styles.deliveryOptionTitle}>Retrait en salon</Text>
+                    <Text style={styles.deliveryOptionSub}>Rue Auguste Van Zande 78 · Bruxelles</Text>
+                    <Text style={styles.deliveryOptionSub}>Disponible sous 24h</Text>
+                  </View>
+                  <Text style={styles.deliveryOptionPriceFree}>Gratuit</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.deliveryOptionCard, styles.deliveryOptionCardTablet, deliveryMode === 'domicile' && styles.deliveryOptionCardActive]}
+                  activeOpacity={0.85}
+                  onPress={() => setDeliveryMode('domicile')}
+                >
+                  <View style={styles.deliveryIconCircle}>
+                    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <Rect x="1" y="9" width="14" height="9"/>
+                      <Path d="M15 12h4l3 3v3h-7z"/>
+                      <Circle cx="6" cy="20" r="2"/>
+                      <Circle cx="17" cy="20" r="2"/>
+                    </Svg>
+                  </View>
+                  <View style={styles.deliveryOptionBody}>
+                    <Text style={styles.deliveryOptionTitle}>Livraison à domicile</Text>
+                    <Text style={styles.deliveryOptionSub}>Livré chez vous en 3-5 jours ouvrés</Text>
+                  </View>
+                  <Text style={styles.deliveryOptionPrice}>+4,95 €</Text>
+                </TouchableOpacity>
+              </View>
+
+              {deliveryMode === 'domicile' && (
+                <View style={styles.addressInputWrap}>
+                  <Text style={styles.addressLabel}>ADRESSE DE LIVRAISON</Text>
+                  <TextInput
+                    style={styles.addressInput}
+                    value={deliveryAddress}
+                    onChangeText={setDeliveryAddress}
+                    placeholder="Votre adresse complète"
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    multiline
+                  />
+                </View>
+              )}
+            </View>
+          </ScrollView>
+
+          <View style={styles.tabletRightCol}>
+            <View style={styles.recapCard}>
+              <Text style={styles.recapKicker}>RÉCAPITULATIF</Text>
+              <View style={styles.recapRow}>
+                <Text style={styles.recapLabel}>Sous-total</Text>
+                <Text style={styles.recapValue}>{total.toFixed(2)} €</Text>
+              </View>
+              <View style={styles.recapRow}>
+                <Text style={styles.recapLabel}>
+                  {deliveryMode === 'domicile' ? 'Livraison à domicile' : 'Retrait en salon'}
+                </Text>
+                {deliveryMode === 'domicile'
+                  ? <Text style={styles.recapValue}>+{deliveryFee.toFixed(2)} €</Text>
+                  : <Text style={styles.recapFree}>Gratuit</Text>}
+              </View>
+              <View style={styles.recapSep} />
+              <View style={styles.recapRow}>
+                <Text style={styles.recapTotalLabel}>Total</Text>
+                <Text style={styles.recapTotalAmount}>{finalTotal.toFixed(2)} €</Text>
+              </View>
+            </View>
+
+            {!!checkoutError && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{checkoutError}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.ctaBtn, isLoading && { opacity: 0.7 }]}
+              activeOpacity={0.85}
+              onPress={handleCheckout}
+              disabled={isLoading}
+            >
+              {isLoading
+                ? <ActivityIndicator color="#1A1208" size="small" />
+                : (
+                  <Text style={styles.ctaBtnText}>
+                    Commander — {deliveryFee > 0 ? finalTotal.toFixed(2) : total.toFixed(0)} € →
+                  </Text>
+                )
+              }
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         <>
@@ -371,6 +516,30 @@ const styles = StyleSheet.create({
   headerLogoBrand: { fontFamily: Fonts.semiBold, fontSize: 16, fontWeight: '600', color: '#fff' },
 
   scroll: { flex: 1 },
+
+  // iPad — 2 colonnes (produits 60% / récap 40% sticky)
+  tabletRow: {
+    flex: 1,
+    flexDirection: 'row',
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+    gap: 24,
+    paddingHorizontal: 18,
+  },
+  tabletLeftCol: { flex: 1.5 },
+  tabletRightCol: {
+    flex: 1,
+    paddingTop: 24,
+  },
+  deliveryRowTablet: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  deliveryOptionCardTablet: {
+    flex: 1,
+    marginBottom: 0,
+  },
 
   // Title section
   titleSection: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 6 },
