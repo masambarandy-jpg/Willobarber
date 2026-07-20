@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
-import { ChevronLeftIcon, ChevronRightIcon } from '@/components/coiffeur/Icons';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  PersonIcon,
+  CalendarIcon,
+  ClockIcon,
+  ScissorsIcon,
+  UsersIcon,
+} from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 
@@ -161,6 +170,13 @@ export default function CoiffeurPlanningScreen() {
   const [selectedBarbers, setSelectedBarbers] = useState<Barber[]>(['Willo', 'Malik', 'Idris']);
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [nowPosition, setNowPosition] = useState(getNowPosition());
+  const [selectedRdv, setSelectedRdv] = useState<Event | null>(null);
+  const [rdvDetailVisible, setRdvDetailVisible] = useState(false);
+
+  const ouvrirDetailRdv = (event: Event) => {
+    setSelectedRdv(event);
+    setRdvDetailVisible(true);
+  };
 
   useEffect(() => {
     const interval = setInterval(() => setNowPosition(getNowPosition()), 60000);
@@ -218,6 +234,7 @@ export default function CoiffeurPlanningScreen() {
   }, [monthDays]);
 
   return (
+    <>
     <CoiffeurScreen active="planning">
       <Text style={styles.title}>Planning</Text>
 
@@ -350,8 +367,10 @@ export default function CoiffeurPlanningScreen() {
           {dayEvents.map((e) => {
             const style = BARBER_STYLE[e.barber];
             return (
-              <View
+              <TouchableOpacity
                 key={e.time + e.client}
+                activeOpacity={0.8}
+                onPress={() => ouvrirDetailRdv(e)}
                 style={[
                   styles.event,
                   {
@@ -365,7 +384,7 @@ export default function CoiffeurPlanningScreen() {
                   {e.time} · {e.service}
                 </Text>
                 <Text style={styles.eventClient}>{e.client}</Text>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -388,8 +407,10 @@ export default function CoiffeurPlanningScreen() {
                 {events.map((e) => {
                   const style = BARBER_STYLE[e.barber];
                   return (
-                    <View
+                    <TouchableOpacity
                       key={e.time + e.client}
+                      activeOpacity={0.8}
+                      onPress={() => ouvrirDetailRdv(e)}
                       style={[styles.weekEventCard, { backgroundColor: style.bg, borderLeftColor: style.border }]}
                     >
                       <Text style={[styles.weekEventText, { color: style.border }]} numberOfLines={1}>
@@ -398,7 +419,7 @@ export default function CoiffeurPlanningScreen() {
                       <Text style={styles.weekEventClient} numberOfLines={1}>
                         {e.client}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </TouchableOpacity>
@@ -440,6 +461,82 @@ export default function CoiffeurPlanningScreen() {
         </View>
       )}
     </CoiffeurScreen>
+
+    <Modal
+      visible={rdvDetailVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setRdvDetailVisible(false)}
+    >
+      <Pressable style={styles.rdvOverlay} onPress={() => setRdvDetailVisible(false)}>
+        <Pressable style={styles.rdvCard} onPress={(e) => e.stopPropagation()}>
+          <TouchableOpacity style={styles.rdvCloseBtn} onPress={() => setRdvDetailVisible(false)}>
+            <CloseIcon size={13} />
+          </TouchableOpacity>
+
+          {selectedRdv && (
+            <>
+              <View style={[styles.rdvBarberCircle, { backgroundColor: BARBER_STYLE[selectedRdv.barber].border }]}>
+                <Text style={styles.rdvBarberInitial}>{selectedRdv.barber.charAt(0).toUpperCase()}</Text>
+              </View>
+
+              <Text style={styles.rdvTitle}>{selectedRdv.service}</Text>
+              <Text style={styles.rdvSubtitle}>avec {selectedRdv.barber}</Text>
+
+              <View style={styles.rdvDetailsBlock}>
+                <View style={styles.rdvDetailRow}>
+                  <PersonIcon size={16} color={CC.textSecondary} />
+                  <View>
+                    <Text style={styles.rdvDetailLabel}>CLIENT</Text>
+                    <Text style={styles.rdvDetailValue}>{selectedRdv.client}</Text>
+                  </View>
+                </View>
+                <View style={styles.rdvDetailRow}>
+                  <CalendarIcon size={16} color={CC.textSecondary} />
+                  <View>
+                    <Text style={styles.rdvDetailLabel}>HEURE</Text>
+                    <Text style={styles.rdvDetailValue}>{selectedRdv.time}</Text>
+                  </View>
+                </View>
+                <View style={styles.rdvDetailRow}>
+                  <ClockIcon size={16} color={CC.textSecondary} />
+                  <View>
+                    <Text style={styles.rdvDetailLabel}>DURÉE</Text>
+                    <Text style={styles.rdvDetailValue}>45 min</Text>
+                  </View>
+                </View>
+                <View style={styles.rdvDetailRow}>
+                  <ScissorsIcon size={16} color={CC.textSecondary} />
+                  <View>
+                    <Text style={styles.rdvDetailLabel}>PRESTATION</Text>
+                    <Text style={styles.rdvDetailValue}>{selectedRdv.service}</Text>
+                  </View>
+                </View>
+                <View style={styles.rdvDetailRow}>
+                  <UsersIcon size={16} color={CC.textSecondary} />
+                  <View>
+                    <Text style={styles.rdvDetailLabel}>BARBIER</Text>
+                    <Text style={styles.rdvDetailValue}>{selectedRdv.barber}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.rdvDivider} />
+
+              <View style={styles.rdvActionsRow}>
+                <TouchableOpacity style={styles.rdvCancelBtn} onPress={() => setRdvDetailVisible(false)}>
+                  <Text style={styles.rdvCancelBtnText}>Fermer</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.rdvCallBtn}>
+                  <Text style={styles.rdvCallBtnText}>Appeler</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -730,5 +827,112 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
     backgroundColor: CC.gold,
     marginTop: 2,
+  },
+  rdvOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  rdvCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: CC.white,
+    borderRadius: 20,
+    padding: 24,
+  },
+  rdvCloseBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: CC.trackBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  rdvBarberCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  rdvBarberInitial: {
+    color: CC.white,
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  rdvTitle: {
+    fontFamily: SERIF,
+    fontWeight: '700',
+    fontSize: 22,
+    color: CC.black,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  rdvSubtitle: {
+    fontSize: 13,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  rdvDetailsBlock: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  rdvDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rdvDetailLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: CC.textSecondary,
+    letterSpacing: 0.5,
+  },
+  rdvDetailValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: CC.black,
+    marginTop: 1,
+  },
+  rdvDivider: {
+    height: 1,
+    backgroundColor: CC.trackBg,
+    marginBottom: 16,
+  },
+  rdvActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  rdvCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: CC.border,
+    alignItems: 'center',
+  },
+  rdvCancelBtnText: {
+    fontWeight: '600',
+    color: CC.black,
+  },
+  rdvCallBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 100,
+    backgroundColor: CC.gold,
+    alignItems: 'center',
+  },
+  rdvCallBtnText: {
+    fontWeight: '700',
+    color: CC.black,
   },
 });
