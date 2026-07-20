@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -5,6 +6,7 @@ import Avatar from './Avatar';
 import { CC, SERIF } from './theme';
 import { useSidebarWidth } from './useIsTablet';
 import { CoiffeurRoute } from './CoiffeurDrawer';
+import SupportModal from './SupportModal';
 import {
   GridIcon,
   CalendarIcon,
@@ -35,6 +37,7 @@ const NAV_ITEMS: { key: CoiffeurRoute; label: string; icon: (color: string) => R
 
 export default function CoiffeurIPadLayout({ active, children }: Props) {
   const sidebarWidth = useSidebarWidth();
+  const [supportVisible, setSupportVisible] = useState(false);
 
   const go = (route: CoiffeurRoute) => router.push(`/coiffeur/${route}` as never);
 
@@ -87,7 +90,7 @@ export default function CoiffeurIPadLayout({ active, children }: Props) {
             </View>
             <Text style={styles.helpTitle}>Besoin d'aide ?</Text>
             <Text style={styles.helpText}>Notre équipe répond en moins de 2h, du mardi au samedi.</Text>
-            <TouchableOpacity style={styles.helpBtn}>
+            <TouchableOpacity style={styles.helpBtn} onPress={() => setSupportVisible(true)}>
               <Text style={styles.helpBtnText}>Contacter le support</Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -95,6 +98,8 @@ export default function CoiffeurIPadLayout({ active, children }: Props) {
       </View>
 
       <View style={styles.content}>{children}</View>
+
+      <SupportModal visible={supportVisible} onClose={() => setSupportVisible(false)} />
     </View>
   );
 }
