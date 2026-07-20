@@ -52,18 +52,16 @@ function DotLine({ label, value }: { label: string; value: string }) {
 function RecapLine({
   label,
   value,
-  green,
-  noBorder,
+  negative,
 }: {
   label: string;
   value: string;
-  green?: boolean;
-  noBorder?: boolean;
+  negative?: boolean;
 }) {
   return (
-    <View style={[styles.recapRow, noBorder && { borderBottomWidth: 0 }]}>
+    <View style={styles.recapRow}>
       <Text style={styles.recapLabel}>{label}</Text>
-      <Text style={[styles.recapValue, green && { color: GREEN_TEXT }]}>{value}</Text>
+      <Text style={[styles.recapValue, negative && { color: '#E57373' }]}>{value}</Text>
     </View>
   );
 }
@@ -218,10 +216,13 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
 
         {/* ── Récapitulatif de paiement ─────────────────────────────────── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Récapitulatif de paiement</Text>
+          <View style={styles.cardHeader}>
+            <Text style={styles.calIcon}>🧾</Text>
+            <Text style={styles.cardTitle}>Récapitulatif de paiement</Text>
+          </View>
 
           <RecapLine label={service?.name ?? '—'} value={fmtPrice(price)} />
-          <RecapLine label="Acompte réglé"      value={`-${fmtPrice(deposit)}`}          green noBorder />
+          <RecapLine label="Acompte réglé"      value={`-${fmtPrice(deposit)}`} negative />
 
           <View style={styles.recapSep} />
 
@@ -229,6 +230,8 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
             <Text style={styles.soldeLabel}>SOLDE À RÉGLER AU SALON</Text>
             <Text style={styles.soldeValue}>{fmtPrice(solde)}</Text>
           </View>
+
+          <Text style={styles.paymentNote}>💳 Règlement au salon le jour du RDV</Text>
         </View>
 
         {/* ── Et maintenant ? ───────────────────────────────────────────── */}
@@ -329,6 +332,9 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 20,
     paddingBottom: 48,
+    maxWidth: 600,
+    alignSelf: 'center',
+    width: '100%',
   },
 
   // Halo zone
@@ -496,10 +502,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 9,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER_THIN,
-    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 10,
+    backgroundColor: '#242018',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER_THIN,
   },
   recapLabel: {
     fontSize: 14,
@@ -513,7 +522,7 @@ const styles = StyleSheet.create({
   },
   recapSep: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(201,168,76,0.4)',
     marginVertical: 12,
   },
   soldeRow: {
@@ -524,15 +533,22 @@ const styles = StyleSheet.create({
   soldeLabel: {
     fontSize: 10,
     fontWeight: '600',
-    letterSpacing: 1,
-    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 1.5,
+    color: GOLD,
     textTransform: 'uppercase',
     flex: 1,
   },
   soldeValue: {
     fontFamily: Fonts.bold,
-    fontSize: 26,
+    fontSize: 32,
     color: GOLD,
+    fontWeight: '700',
+  },
+  paymentNote: {
+    fontSize: 12,
+    color: GREY,
+    textAlign: 'center',
+    marginTop: 14,
   },
 
   // "Et maintenant" rows
