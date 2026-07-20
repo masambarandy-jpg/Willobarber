@@ -1,70 +1,82 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, Alert, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
-import { ChatIcon, EditIcon } from '@/components/coiffeur/Icons';
-import { CC, SERIF, AvatarKey } from '@/components/coiffeur/theme';
+import { ChatIcon, EditIcon, TrashIcon } from '@/components/coiffeur/Icons';
+import { CC, SERIF } from '@/components/coiffeur/theme';
 
 type SlotState = 'ferme' | 'reserve' | 'dispo';
 type Status = 'Actif' | 'Absent';
 
-type Member = {
-  letter: AvatarKey;
+type TeamMember = {
+  id: string;
+  initial: string;
   name: string;
   role: string;
   status: Status;
   tags: string[];
-  stats: { value: string; label: string }[];
+  rdv: number;
+  rating: string;
+  exp: string;
+  email: string;
+  phone: string;
   am: SlotState[];
   pm: SlotState[];
 };
 
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
-const MEMBERS: Member[] = [
+const INITIAL_TEAM: TeamMember[] = [
   {
-    letter: 'W',
+    id: 'willo',
+    initial: 'W',
     name: 'Willo Diallo',
-    role: 'Gérant · Barbier',
+    role: 'Fondateur & Master Barber',
     status: 'Actif',
     tags: ['Fade', 'Texturé', 'Rasoir'],
-    stats: [
-      { value: '148', label: 'RDV/mois' },
-      { value: '4,9', label: 'Note' },
-      { value: '30 ans', label: 'Expérience' },
-    ],
+    rdv: 148,
+    rating: '4,9',
+    exp: '30 ans',
+    email: 'willo@willobarber.fr',
+    phone: '06 45 78 29 70',
     am: ['ferme', 'reserve', 'reserve', 'dispo', 'reserve', 'reserve', 'dispo'],
     pm: ['ferme', 'dispo', 'ferme', 'reserve', 'dispo', 'ferme', 'reserve'],
   },
   {
-    letter: 'M',
+    id: 'malik',
+    initial: 'M',
     name: 'Malik Haddad',
-    role: 'Barbier',
+    role: 'Barbier Senior',
     status: 'Actif',
     tags: ['Barbe', 'Rasage', 'Classique'],
-    stats: [
-      { value: '96', label: 'RDV/mois' },
-      { value: '4,9', label: 'Note' },
-      { value: '12 ans', label: 'Expérience' },
-    ],
+    rdv: 96,
+    rating: '4,9',
+    exp: '12 ans',
+    email: 'malik@willobarber.fr',
+    phone: '06 32 11 45 67',
     am: ['ferme', 'dispo', 'reserve', 'reserve', 'dispo', 'reserve', 'reserve'],
     pm: ['ferme', 'reserve', 'dispo', 'ferme', 'reserve', 'dispo', 'ferme'],
   },
   {
-    letter: 'I',
+    id: 'idris',
+    initial: 'I',
     name: 'Idris Camara',
-    role: 'Barbier',
+    role: 'Barbier & Coloriste',
     status: 'Absent',
     tags: ['Color', 'Crop', 'Soin'],
-    stats: [
-      { value: '64', label: 'RDV/mois' },
-      { value: '4,8', label: 'Note' },
-      { value: '8 ans', label: 'Expérience' },
-    ],
+    rdv: 64,
+    rating: '4,8',
+    exp: '8 ans',
+    email: 'idris@willobarber.fr',
+    phone: '06 78 90 12 34',
     am: ['ferme', 'reserve', 'dispo', 'reserve', 'reserve', 'dispo', 'ferme'],
     pm: ['dispo', 'ferme', 'reserve', 'dispo', 'ferme', 'reserve', 'dispo'],
   },
 ];
+
+const EMPTY_EDIT_FORM = { name: '', role: '', email: '', phone: '', status: 'Actif' as Status };
+const EMPTY_ADD_FORM = { name: '', role: '', email: '', phone: '', tag1: '', tag2: '', tag3: '', status: 'Actif' as Status };
 
 function slotColor(state: SlotState) {
   if (state === 'reserve') return { backgroundColor: CC.gold, borderWidth: 0 };
@@ -73,94 +85,491 @@ function slotColor(state: SlotState) {
 }
 
 export default function CoiffeurEquipeScreen() {
+  const [team, setTeam] = useState<TeamMember[]>(INITIAL_TEAM);
+
+  const [chatModalVisible, setChatModalVisible] = useState(false);
+  const [memberPourMessage, setMemberPourMessage] = useState<TeamMember | null>(null);
+  const [message, setMessage] = useState('');
+
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [memberEnEdition, setMemberEnEdition] = useState<TeamMember | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
+
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [memberASupprimer, setMemberASupprimer] = useState<TeamMember | null>(null);
+
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
+
+  const ouvrirChat = (member: TeamMember) => {
+    setMemberPourMessage(member);
+    setMessage('');
+    setChatModalVisible(true);
+  };
+
+  const fermerChat = () => {
+    setChatModalVisible(false);
+    setMemberPourMessage(null);
+    setMessage('');
+  };
+
+  const envoyerMessage = () => {
+    if (!memberPourMessage) return;
+    Alert.alert(`Message envoyé à ${memberPourMessage.name} !`);
+    fermerChat();
+  };
+
+  const ouvrirEdition = (member: TeamMember) => {
+    setMemberEnEdition(member);
+    setEditForm({ name: member.name, role: member.role, email: member.email, phone: member.phone, status: member.status });
+    setEditModalVisible(true);
+  };
+
+  const updateEditField = (key: 'name' | 'role' | 'email' | 'phone', value: string) => {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const fermerEdition = () => {
+    setEditModalVisible(false);
+    setMemberEnEdition(null);
+  };
+
+  const sauvegarderMembre = () => {
+    if (!memberEnEdition) return;
+    const name = editForm.name.trim();
+
+    setTeam((prev) =>
+      prev.map((m) =>
+        m.id === memberEnEdition.id
+          ? {
+              ...m,
+              name,
+              initial: name.charAt(0).toUpperCase() || m.initial,
+              role: editForm.role.trim(),
+              email: editForm.email.trim(),
+              phone: editForm.phone.trim(),
+              status: editForm.status,
+            }
+          : m
+      )
+    );
+    fermerEdition();
+  };
+
+  const demanderSuppression = (member: TeamMember) => {
+    setMemberASupprimer(member);
+    setDeleteModalVisible(true);
+  };
+
+  const confirmerSuppression = () => {
+    if (memberASupprimer) {
+      setTeam((prev) => prev.filter((m) => m.id !== memberASupprimer.id));
+    }
+    setDeleteModalVisible(false);
+    setMemberASupprimer(null);
+  };
+
+  const updateAddField = (key: keyof typeof EMPTY_ADD_FORM, value: string) => {
+    setAddForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const fermerAjout = () => {
+    setAddModalVisible(false);
+    setAddForm(EMPTY_ADD_FORM);
+  };
+
+  const ajouterMembre = () => {
+    const name = addForm.name.trim();
+    if (!name || !addForm.role.trim()) return;
+
+    const tags = [addForm.tag1, addForm.tag2, addForm.tag3].map((t) => t.trim()).filter(Boolean);
+
+    const newMember: TeamMember = {
+      id: `member-${team.length}-${name.toLowerCase()}`,
+      initial: name.charAt(0).toUpperCase(),
+      name,
+      role: addForm.role.trim(),
+      status: addForm.status,
+      tags,
+      rdv: 0,
+      rating: '—',
+      exp: '—',
+      email: addForm.email.trim(),
+      phone: addForm.phone.trim(),
+      am: Array(7).fill('dispo'),
+      pm: Array(7).fill('dispo'),
+    };
+
+    setTeam((prev) => [...prev, newMember]);
+    fermerAjout();
+  };
+
   return (
-    <CoiffeurScreen active="equipe">
-      <Text style={styles.title}>Équipe</Text>
+    <>
+      <CoiffeurScreen active="equipe">
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>Équipe</Text>
+          <TouchableOpacity onPress={() => setAddModalVisible(true)} style={styles.addBtn}>
+            <Text style={styles.addBtnText}>+ Ajouter un équipier</Text>
+          </TouchableOpacity>
+        </View>
 
-      {MEMBERS.map((m) => (
-        <View key={m.name} style={styles.card}>
-          <View style={styles.topRow}>
-            <Avatar letter={m.letter} size={56} />
-            <View style={styles.identity}>
-              <Text style={styles.name}>{m.name}</Text>
-              <Text style={styles.role}>{m.role}</Text>
+        {team.map((m) => {
+          const stats = [
+            { value: String(m.rdv), label: 'RDV/mois' },
+            { value: m.rating, label: 'Note' },
+            { value: m.exp, label: 'Expérience' },
+          ];
+          return (
+            <View key={m.id} style={styles.card}>
+              <View style={styles.topRow}>
+                <Avatar letter={m.initial} size={56} />
+                <View style={styles.identity}>
+                  <Text style={styles.name}>{m.name}</Text>
+                  <Text style={styles.role}>{m.role}</Text>
+                </View>
+                <View style={[styles.statusBadge, m.status === 'Actif' ? styles.statusActif : styles.statusAbsent]}>
+                  <Text style={[styles.statusText, m.status === 'Actif' ? styles.statusActifText : styles.statusAbsentText]}>
+                    {m.status}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.tagsRow}>
+                {m.tags.map((tag) => (
+                  <View key={tag} style={styles.tag}>
+                    <Text style={styles.tagText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.statsRow}>
+                {stats.map((s) => (
+                  <View key={s.label} style={styles.statColumn}>
+                    <Text style={styles.statValue}>{s.value}</Text>
+                    <Text style={styles.statLabel}>{s.label}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <Text style={styles.availLabel}>DISPONIBILITÉ — SEMAINE</Text>
+              <View style={styles.availGrid}>
+                {DAYS.map((day, i) => (
+                  <View key={i} style={styles.availCol}>
+                    <Text style={styles.availDayLabel}>{day}</Text>
+                    <View style={[styles.slot, slotColor(m.am[i])]} />
+                    <View style={[styles.slot, slotColor(m.pm[i])]} />
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.actionsRow}>
+                <TouchableOpacity style={styles.planningBtn} onPress={() => router.push('/coiffeur/planning')}>
+                  <Text style={styles.planningBtnText}>Planning</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.circleBtn} onPress={() => ouvrirChat(m)}>
+                  <ChatIcon size={16} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.circleBtn} onPress={() => ouvrirEdition(m)}>
+                  <EditIcon size={15} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.circleBtn, styles.circleBtnDanger]} onPress={() => demanderSuppression(m)}>
+                  <TrashIcon size={15} />
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={[styles.statusBadge, m.status === 'Actif' ? styles.statusActif : styles.statusAbsent]}>
-              <Text style={[styles.statusText, m.status === 'Actif' ? styles.statusActifText : styles.statusAbsentText]}>
-                {m.status}
-              </Text>
+          );
+        })}
+
+        <View style={styles.legendCard}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendSwatch, { backgroundColor: CC.white, borderWidth: 1, borderColor: CC.inputBorder }]} />
+            <Text style={styles.legendText}>Disponible</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendSwatch, { backgroundColor: CC.gold }]} />
+            <Text style={styles.legendText}>Réservé</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendSwatch, { backgroundColor: '#e5ddd0' }]} />
+            <Text style={styles.legendText}>Fermé</Text>
+          </View>
+        </View>
+      </CoiffeurScreen>
+
+      <Modal visible={chatModalVisible} transparent animationType="fade" onRequestClose={fermerChat}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.chatTitleWrap}>
+              <Text style={styles.modalTitle}>Envoyer un message</Text>
+              <Text style={styles.chatSubName}>{memberPourMessage?.name}</Text>
+            </View>
+
+            {memberPourMessage && (
+              <View style={styles.chatAvatarWrap}>
+                <Avatar letter={memberPourMessage.initial} size={64} />
+              </View>
+            )}
+
+            <TextInput
+              value={message}
+              onChangeText={setMessage}
+              style={styles.messageInput}
+              placeholder="Écrivez votre message..."
+              placeholderTextColor={CC.textSecondary}
+              multiline
+            />
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={fermerChat}>
+                <Text style={styles.cancelBtnText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={envoyerMessage}>
+                <Text style={styles.confirmBtnText}>Envoyer</Text>
+              </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
 
-          <View style={styles.tagsRow}>
-            {m.tags.map((tag) => (
-              <View key={tag} style={styles.tag}>
-                <Text style={styles.tagText}>{tag}</Text>
+      <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={fermerEdition}>
+        <View style={styles.editOverlay}>
+          <View style={styles.editCard}>
+            <Text style={styles.editTitle}>Modifier le membre</Text>
+
+            {memberEnEdition && (
+              <View style={styles.editAvatarWrap}>
+                <Avatar letter={memberEnEdition.initial} size={56} />
               </View>
-            ))}
+            )}
+
+            <Text style={styles.fieldLabel}>NOM COMPLET</Text>
+            <TextInput
+              value={editForm.name}
+              onChangeText={(v) => updateEditField('name', v)}
+              style={styles.input}
+              placeholder="Nom complet"
+              placeholderTextColor={CC.textSecondary}
+            />
+
+            <Text style={styles.fieldLabel}>RÔLE</Text>
+            <TextInput
+              value={editForm.role}
+              onChangeText={(v) => updateEditField('role', v)}
+              style={styles.input}
+              placeholder="Barbier"
+              placeholderTextColor={CC.textSecondary}
+            />
+
+            <Text style={styles.fieldLabel}>EMAIL</Text>
+            <TextInput
+              value={editForm.email}
+              onChangeText={(v) => updateEditField('email', v)}
+              style={styles.input}
+              placeholder="email@exemple.com"
+              placeholderTextColor={CC.textSecondary}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+
+            <Text style={styles.fieldLabel}>TÉLÉPHONE</Text>
+            <TextInput
+              value={editForm.phone}
+              onChangeText={(v) => updateEditField('phone', v)}
+              style={styles.input}
+              placeholder="06 00 00 00 00"
+              placeholderTextColor={CC.textSecondary}
+              keyboardType="phone-pad"
+            />
+
+            <Text style={styles.fieldLabel}>STATUT</Text>
+            <View style={styles.statusToggleRow}>
+              {(['Actif', 'Absent'] as Status[]).map((status) => {
+                const active = editForm.status === status;
+                return (
+                  <TouchableOpacity
+                    key={status}
+                    style={[styles.statusToggleItem, active && statusToggleActiveStyle(status)]}
+                    onPress={() => setEditForm((prev) => ({ ...prev, status }))}
+                  >
+                    <Text style={[styles.statusToggleText, active && statusToggleActiveTextStyle(status)]}>{status}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={fermerEdition}>
+                <Text style={styles.cancelBtnText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={sauvegarderMembre}>
+                <Text style={styles.confirmBtnText}>Enregistrer</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+        </View>
+      </Modal>
 
-          <View style={styles.divider} />
+      <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteCard}>
+            <View style={styles.deleteIconWrap}>
+              <TrashIcon size={22} color={CC.errorText} />
+            </View>
 
-          <View style={styles.statsRow}>
-            {m.stats.map((s) => (
-              <View key={s.label} style={styles.statColumn}>
-                <Text style={styles.statValue}>{s.value}</Text>
-                <Text style={styles.statLabel}>{s.label}</Text>
+            <Text style={styles.deleteTitle}>Retirer {memberASupprimer?.name} de l’équipe ?</Text>
+            <Text style={styles.deleteText}>Cette action est irréversible.</Text>
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setDeleteModalVisible(false)}>
+                <Text style={styles.cancelBtnText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteConfirmBtn} onPress={confirmerSuppression}>
+                <Text style={styles.deleteConfirmBtnText}>Retirer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={addModalVisible} transparent animationType="fade" onRequestClose={fermerAjout}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, styles.addModalCard]}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>Nouvel équipier</Text>
+
+              <Text style={styles.fieldLabel}>NOM COMPLET</Text>
+              <TextInput
+                value={addForm.name}
+                onChangeText={(v) => updateAddField('name', v)}
+                style={styles.input}
+                placeholder="Nom complet"
+                placeholderTextColor={CC.textSecondary}
+              />
+
+              <Text style={styles.fieldLabel}>RÔLE</Text>
+              <TextInput
+                value={addForm.role}
+                onChangeText={(v) => updateAddField('role', v)}
+                style={styles.input}
+                placeholder="Barbier"
+                placeholderTextColor={CC.textSecondary}
+              />
+
+              <Text style={styles.fieldLabel}>EMAIL</Text>
+              <TextInput
+                value={addForm.email}
+                onChangeText={(v) => updateAddField('email', v)}
+                style={styles.input}
+                placeholder="email@exemple.com"
+                placeholderTextColor={CC.textSecondary}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+
+              <Text style={styles.fieldLabel}>TÉLÉPHONE</Text>
+              <TextInput
+                value={addForm.phone}
+                onChangeText={(v) => updateAddField('phone', v)}
+                style={styles.input}
+                placeholder="06 00 00 00 00"
+                placeholderTextColor={CC.textSecondary}
+                keyboardType="phone-pad"
+              />
+
+              <Text style={styles.fieldLabel}>SPÉCIALITÉS</Text>
+              <TextInput
+                value={addForm.tag1}
+                onChangeText={(v) => updateAddField('tag1', v)}
+                style={styles.input}
+                placeholder="Spécialité 1"
+                placeholderTextColor={CC.textSecondary}
+              />
+              <TextInput
+                value={addForm.tag2}
+                onChangeText={(v) => updateAddField('tag2', v)}
+                style={styles.input}
+                placeholder="Spécialité 2"
+                placeholderTextColor={CC.textSecondary}
+              />
+              <TextInput
+                value={addForm.tag3}
+                onChangeText={(v) => updateAddField('tag3', v)}
+                style={styles.input}
+                placeholder="Spécialité 3"
+                placeholderTextColor={CC.textSecondary}
+              />
+
+              <Text style={styles.fieldLabel}>STATUT</Text>
+              <View style={styles.statusToggleRow}>
+                {(['Actif', 'Absent'] as Status[]).map((status) => {
+                  const active = addForm.status === status;
+                  return (
+                    <TouchableOpacity
+                      key={status}
+                      style={[styles.statusToggleItem, active && statusToggleActiveStyle(status)]}
+                      onPress={() => setAddForm((prev) => ({ ...prev, status }))}
+                    >
+                      <Text style={[styles.statusToggleText, active && statusToggleActiveTextStyle(status)]}>{status}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            ))}
-          </View>
 
-          <Text style={styles.availLabel}>DISPONIBILITÉ — SEMAINE</Text>
-          <View style={styles.availGrid}>
-            {DAYS.map((day, i) => (
-              <View key={i} style={styles.availCol}>
-                <Text style={styles.availDayLabel}>{day}</Text>
-                <View style={[styles.slot, slotColor(m.am[i])]} />
-                <View style={[styles.slot, slotColor(m.pm[i])]} />
+              <View style={styles.modalActionsRow}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={fermerAjout}>
+                  <Text style={styles.cancelBtnText}>Annuler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.confirmBtn} onPress={ajouterMembre}>
+                  <Text style={styles.confirmBtnText}>Ajouter</Text>
+                </TouchableOpacity>
               </View>
-            ))}
-          </View>
-
-          <View style={styles.actionsRow}>
-            <TouchableOpacity style={styles.planningBtn} onPress={() => router.push('/coiffeur/planning')}>
-              <Text style={styles.planningBtnText}>Planning</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.circleBtn}>
-              <ChatIcon size={16} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.circleBtn}>
-              <EditIcon size={15} />
-            </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
-      ))}
-
-      <View style={styles.legendCard}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: CC.white, borderWidth: 1, borderColor: CC.inputBorder }]} />
-          <Text style={styles.legendText}>Disponible</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: CC.gold }]} />
-          <Text style={styles.legendText}>Réservé</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: '#e5ddd0' }]} />
-          <Text style={styles.legendText}>Fermé</Text>
-        </View>
-      </View>
-    </CoiffeurScreen>
+      </Modal>
+    </>
   );
 }
 
+function statusToggleActiveStyle(status: Status) {
+  if (status === 'Actif') return { backgroundColor: CC.successBg, borderColor: CC.successBg };
+  return { backgroundColor: CC.errorBg, borderColor: CC.errorBg };
+}
+
+function statusToggleActiveTextStyle(status: Status) {
+  if (status === 'Actif') return { color: CC.successText };
+  return { color: CC.errorText };
+}
+
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
   title: {
     fontFamily: SERIF,
     fontWeight: '600',
     fontSize: 30,
     color: CC.black,
-    marginBottom: 18,
+  },
+  addBtn: {
+    backgroundColor: CC.gold,
+    borderRadius: 100,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  addBtnText: {
+    color: CC.white,
+    fontWeight: '600',
+    fontSize: 14,
   },
   card: {
     backgroundColor: CC.white,
@@ -308,6 +717,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  circleBtnDanger: {
+    borderColor: 'rgba(192,57,43,0.3)',
+  },
   legendCard: {
     backgroundColor: CC.white,
     borderRadius: 14,
@@ -328,5 +740,195 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 12.5,
     color: CC.black,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: CC.cream,
+    borderRadius: 20,
+    padding: 22,
+  },
+  addModalCard: {
+    maxHeight: '85%',
+  },
+  modalTitle: {
+    fontFamily: SERIF,
+    fontWeight: '700',
+    fontSize: 20,
+    color: CC.black,
+    marginBottom: 18,
+  },
+  chatTitleWrap: {
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  chatSubName: {
+    fontSize: 13.5,
+    color: CC.textSecondary,
+    marginTop: -12,
+    marginBottom: 14,
+  },
+  chatAvatarWrap: {
+    alignSelf: 'center',
+    marginBottom: 18,
+  },
+  messageInput: {
+    backgroundColor: CC.white,
+    borderWidth: 1,
+    borderColor: CC.inputBorder,
+    borderRadius: 12,
+    minHeight: 120,
+    padding: 13,
+    fontSize: 14,
+    color: CC.black,
+    textAlignVertical: 'top',
+    marginBottom: 6,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: CC.textSecondary,
+    letterSpacing: 0.5,
+    marginBottom: 7,
+  },
+  input: {
+    backgroundColor: CC.white,
+    borderWidth: 1,
+    borderColor: CC.inputBorder,
+    borderRadius: 10,
+    padding: 13,
+    fontSize: 14,
+    color: CC.black,
+    marginBottom: 14,
+  },
+  statusToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+  },
+  statusToggleItem: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: CC.border,
+    alignItems: 'center',
+    backgroundColor: CC.white,
+  },
+  statusToggleText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: CC.textSecondary,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  cancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: CC.border,
+    borderRadius: 100,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: CC.white,
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: CC.black,
+  },
+  confirmBtn: {
+    flex: 1,
+    backgroundColor: CC.gold,
+    borderRadius: 100,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  confirmBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: CC.black,
+  },
+  editOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  editCard: {
+    backgroundColor: CC.cream,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+  },
+  editTitle: {
+    fontFamily: SERIF,
+    fontWeight: '600',
+    fontSize: 22,
+    color: CC.black,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  editAvatarWrap: {
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  deleteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  deleteCard: {
+    backgroundColor: CC.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+  },
+  deleteIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: CC.errorBg,
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deleteTitle: {
+    fontFamily: SERIF,
+    fontWeight: '600',
+    fontSize: 20,
+    color: CC.black,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  deleteText: {
+    fontSize: 14,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 100,
+    backgroundColor: CC.errorText,
+    alignItems: 'center',
+  },
+  deleteConfirmBtnText: {
+    fontWeight: '600',
+    color: CC.white,
   },
 });

@@ -9,10 +9,12 @@ type Props = {
 const FALLBACK_PALETTE = Object.values(AVATAR_COLORS);
 
 function colorFor(letter: string) {
-  const known = AVATAR_COLORS[letter as AvatarKey];
+  const key = (letter || '').charAt(0).toUpperCase();
+  const known = AVATAR_COLORS[key as AvatarKey];
   if (known) return known;
-  const idx = letter.charCodeAt(0) % FALLBACK_PALETTE.length;
-  return FALLBACK_PALETTE[idx];
+  if (!key) return AVATAR_COLORS.W;
+  const idx = key.charCodeAt(0) % FALLBACK_PALETTE.length;
+  return FALLBACK_PALETTE[idx] ?? AVATAR_COLORS.W;
 }
 
 export default function Avatar({ letter, size = 42 }: Props) {
