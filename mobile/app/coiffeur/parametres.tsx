@@ -52,6 +52,12 @@ function ProfilTab() {
   const [email, setEmail] = useState('willo@willobarber.fr');
   const [phone, setPhone] = useState('06 45 78 29 70');
   const [role, setRole] = useState('Gérant');
+  const [profilEnregistre, setProfilEnregistre] = useState(false);
+
+  const enregistrerProfil = () => {
+    setProfilEnregistre(true);
+    setTimeout(() => setProfilEnregistre(false), 3000);
+  };
 
   return (
     <View style={styles.card}>
@@ -78,8 +84,13 @@ function ProfilTab() {
         <Field label="RÔLE" value={role} onChangeText={setRole} half />
       </View>
 
-      <TouchableOpacity style={styles.saveBtn}>
-        <Text style={styles.saveBtnText}>Enregistrer</Text>
+      <TouchableOpacity
+        onPress={enregistrerProfil}
+        style={[styles.saveBtn, profilEnregistre && styles.saveBtnDone]}
+      >
+        <Text style={[styles.saveBtnText, profilEnregistre && styles.saveBtnTextDone]}>
+          {profilEnregistre ? '✓ Profil enregistré !' : 'Enregistrer'}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -167,9 +178,9 @@ function EtablissementTab() {
 
         <TouchableOpacity
           onPress={enregistrerHoraires}
-          style={[styles.saveHorairesBtn, horairesEnregistres && styles.saveHorairesBtnDone]}
+          style={[styles.saveBtn, styles.saveHorairesBtn, horairesEnregistres && styles.saveBtnDone]}
         >
-          <Text style={[styles.saveBtnText, horairesEnregistres && styles.saveHorairesTextDone]}>
+          <Text style={[styles.saveBtnText, horairesEnregistres && styles.saveBtnTextDone]}>
             {horairesEnregistres ? '✓ Horaires enregistrés !' : 'Enregistrer les horaires'}
           </Text>
         </TouchableOpacity>
@@ -305,14 +316,25 @@ function SecuriteTab() {
   const [currentPassword, setCurrentPassword] = useState('••••••••');
   const [newPassword, setNewPassword] = useState('');
   const [twoFactor, setTwoFactor] = useState(true);
+  const [motDePasseMisAJour, setMotDePasseMisAJour] = useState(false);
+
+  const mettreAJourMotDePasse = () => {
+    setMotDePasseMisAJour(true);
+    setTimeout(() => setMotDePasseMisAJour(false), 3000);
+  };
 
   return (
     <>
       <View style={styles.card}>
         <Field label="MOT DE PASSE ACTUEL" value={currentPassword} onChangeText={setCurrentPassword} />
         <Field label="NOUVEAU MOT DE PASSE" value={newPassword} onChangeText={setNewPassword} />
-        <TouchableOpacity style={styles.saveBtn}>
-          <Text style={styles.saveBtnText}>Mettre à jour</Text>
+        <TouchableOpacity
+          onPress={mettreAJourMotDePasse}
+          style={[styles.saveBtn, motDePasseMisAJour && styles.saveBtnDone]}
+        >
+          <Text style={[styles.saveBtnText, motDePasseMisAJour && styles.saveBtnTextDone]}>
+            {motDePasseMisAJour ? '✓ Mot de passe mis à jour !' : 'Mettre à jour'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -501,12 +523,21 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     paddingVertical: 15,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
     marginTop: 4,
+  },
+  saveBtnDone: {
+    backgroundColor: '#2D6A4F',
   },
   saveBtnText: {
     fontSize: 14.5,
     fontWeight: '700',
     color: CC.black,
+  },
+  saveBtnTextDone: {
+    color: '#fff',
   },
   hoursLabel: {
     fontSize: 11,
@@ -562,20 +593,7 @@ const styles = StyleSheet.create({
     color: CC.textSecondary,
   },
   saveHorairesBtn: {
-    backgroundColor: CC.gold,
-    borderRadius: 100,
-    paddingVertical: 14,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
     marginTop: 16,
-  },
-  saveHorairesBtnDone: {
-    backgroundColor: '#2D6A4F',
-  },
-  saveHorairesTextDone: {
-    color: '#fff',
   },
   modalOverlay: {
     flex: 1,
