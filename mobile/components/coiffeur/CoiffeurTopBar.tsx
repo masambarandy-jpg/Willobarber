@@ -3,26 +3,31 @@ import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, useWindowDi
 import { router } from 'expo-router';
 import { HamburgerIcon, BellIcon, GearIcon, PersonIcon, HelpIcon, LogOutIcon } from './Icons';
 import Avatar from './Avatar';
+import SupportModal from './SupportModal';
 import { CC, SERIF } from './theme';
 import { useIsTablet } from './useIsTablet';
+import { useCoiffeurProfile } from '@/contexts/CoiffeurProfileContext';
 
 type Props = {
   onMenuPress: () => void;
 };
 
-const MENU_ITEMS: { label: string; icon: (color: string) => React.ReactNode; action: () => void }[] = [
-  { label: 'Paramètres', icon: (c) => <GearIcon color={c} size={16} />, action: () => router.push('/coiffeur/parametres') },
-  { label: 'Mon profil', icon: (c) => <PersonIcon color={c} size={16} />, action: () => router.push('/coiffeur/parametres') },
-  { label: 'Notifications', icon: (c) => <BellIcon color={c} size={16} />, action: () => router.push('/coiffeur/notifications') },
-  { label: 'Aide & support', icon: (c) => <HelpIcon color={c} size={16} />, action: () => {} },
-];
-
 export default function CoiffeurTopBar({ onMenuPress }: Props) {
   const isTablet = useIsTablet();
+  const { profile } = useCoiffeurProfile();
+  const avatarLetter = profile.firstName.charAt(0).toUpperCase() || 'W';
   const { width: windowWidth } = useWindowDimensions();
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const [supportVisible, setSupportVisible] = useState(false);
   const avatarRef = useRef<View>(null);
+
+  const MENU_ITEMS: { label: string; icon: (color: string) => React.ReactNode; action: () => void }[] = [
+    { label: 'Paramètres', icon: (c) => <GearIcon color={c} size={16} />, action: () => router.push('/coiffeur/parametres') },
+    { label: 'Mon profil', icon: (c) => <PersonIcon color={c} size={16} />, action: () => router.push('/coiffeur/parametres') },
+    { label: 'Notifications', icon: (c) => <BellIcon color={c} size={16} />, action: () => router.push('/coiffeur/notifications') },
+    { label: 'Aide & support', icon: (c) => <HelpIcon color={c} size={16} />, action: () => setSupportVisible(true) },
+  ];
 
   const toggleProfileMenu = () => {
     avatarRef.current?.measureInWindow((x, y, width, height) => {
@@ -72,7 +77,7 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
         </TouchableOpacity>
         <View ref={avatarRef} collapsable={false}>
           <TouchableOpacity onPress={toggleProfileMenu} hitSlop={6}>
-            <Avatar letter="W" size={36} />
+            <Avatar letter={avatarLetter} size={36} />
           </TouchableOpacity>
         </View>
       </View>
@@ -86,10 +91,10 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
         <Pressable style={styles.menuBackdrop} onPress={() => setProfileMenuVisible(false)} />
         <View style={[styles.profileMenu, { top: menuPos.top, right: menuPos.right }]}>
           <View style={styles.profileMenuHeader}>
-            <Avatar letter="W" size={36} />
+            <Avatar letter={avatarLetter} size={36} />
             <View>
-              <Text style={styles.profileMenuName}>Willo Diallo</Text>
-              <Text style={styles.profileMenuRole}>Gérant</Text>
+              <Text style={styles.profileMenuName}>{profile.firstName} {profile.lastName}</Text>
+              <Text style={styles.profileMenuRole}>{profile.role}</Text>
             </View>
           </View>
 
@@ -112,6 +117,8 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
           </TouchableOpacity>
         </View>
       </Modal>
+
+      <SupportModal visible={supportVisible} onClose={() => setSupportVisible(false)} />
     </View>
   );
 }

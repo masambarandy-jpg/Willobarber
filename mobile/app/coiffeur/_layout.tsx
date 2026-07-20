@@ -3,6 +3,7 @@ import { CC } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 import CoiffeurIPadLayout from '@/components/coiffeur/CoiffeurIPadLayout';
 import { CoiffeurRoute } from '@/components/coiffeur/CoiffeurDrawer';
+import { CoiffeurProfileProvider } from '@/contexts/CoiffeurProfileContext';
 
 const NAV_ROUTES: CoiffeurRoute[] = [
   'dashboard',
@@ -41,7 +42,13 @@ export default function CoiffeurLayout() {
     </Stack>
   );
 
-  if (!isTablet || !active) return stack;
+  if (!isTablet || !active) {
+    return <CoiffeurProfileProvider>{stack}</CoiffeurProfileProvider>;
+  }
 
-  return <CoiffeurIPadLayout active={active}>{stack}</CoiffeurIPadLayout>;
+  return (
+    <CoiffeurProfileProvider>
+      <CoiffeurIPadLayout active={active}>{stack}</CoiffeurIPadLayout>
+    </CoiffeurProfileProvider>
+  );
 }

@@ -6,6 +6,7 @@ import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { CameraIcon, LockIcon, LogOutIcon, TrashIcon, ArrowRightIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
+import { useCoiffeurProfile } from '@/contexts/CoiffeurProfileContext';
 
 const TABS = ['Profil', 'Établissement', 'Notifications', 'Paiement', 'Sécurité'] as const;
 type Tab = (typeof TABS)[number];
@@ -61,14 +62,16 @@ function Field({
 }
 
 function ProfilTab() {
-  const [firstName, setFirstName] = useState('Willo');
-  const [lastName, setLastName] = useState('Diallo');
-  const [email, setEmail] = useState('willo@willobarber.fr');
-  const [phone, setPhone] = useState('06 45 78 29 70');
-  const [role, setRole] = useState('Gérant');
+  const { profile, updateProfile } = useCoiffeurProfile();
+  const [firstName, setFirstName] = useState(profile.firstName);
+  const [lastName, setLastName] = useState(profile.lastName);
+  const [email, setEmail] = useState(profile.email);
+  const [phone, setPhone] = useState(profile.phone);
+  const [role, setRole] = useState(profile.role);
   const [profilEnregistre, setProfilEnregistre] = useState(false);
 
   const enregistrerProfil = () => {
+    updateProfile({ firstName, lastName, email, phone, role });
     setProfilEnregistre(true);
     setTimeout(() => setProfilEnregistre(false), 3000);
   };
@@ -77,13 +80,13 @@ function ProfilTab() {
     <View style={styles.card}>
       <View style={styles.avatarRow}>
         <View>
-          <Avatar letter="W" size={64} />
+          <Avatar letter={firstName.charAt(0).toUpperCase() || 'W'} size={64} />
           <TouchableOpacity style={styles.cameraBtn}>
             <CameraIcon />
           </TouchableOpacity>
         </View>
         <View>
-          <Text style={styles.avatarName}>Willo Diallo</Text>
+          <Text style={styles.avatarName}>{firstName} {lastName}</Text>
           <Text style={styles.avatarSub}>Photo de profil</Text>
         </View>
       </View>
