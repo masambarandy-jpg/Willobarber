@@ -223,6 +223,14 @@ export function PhoneIcon({ color = '#1a1208', size = 16 }: IconProps) {
   );
 }
 
+export function ZapIcon({ color = '#1a1208', size = 16 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
+      <Path d="M13 2L3 14h7l-1 8 11-13h-8l1-7z" />
+    </Svg>
+  );
+}
+
 export function LockIcon({ color = '#2D6A4F', size = 18 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...base}>
