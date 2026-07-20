@@ -21,6 +21,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { authApi, recommendationsApi, TokenStorage } from '@/services/api';
 import { Fonts } from '@/constants';
+import { useIsTablet } from '@/components/client/useIsTablet';
 
 
 function LoadingDots() {
@@ -151,6 +152,7 @@ export default function ProfileScreen() {
   const { user, isAuthenticated, logout, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
   const router = useRouter();
+  const isTablet = useIsTablet();
   const [editModal, setEditModal] = useState(false);
   const [pwModal, setPwModal] = useState(false);
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
@@ -336,117 +338,149 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const aiBlock = (
+    <>
+      {aiRec && aiLoading && (
+        <View style={styles.aiCard}>
+          <LoadingDots />
+        </View>
+      )}
+
+      {aiRec && showAiCard && aiText && (
+        <Animated.View style={[styles.aiCard, { opacity: aiCardOpacity }]}>
+          <Text style={styles.aiCardBadge}>✨ Généré par Claude IA</Text>
+          <Text style={styles.aiCardText}>{aiText}</Text>
+          <TouchableOpacity
+            style={styles.aiCardButton}
+            onPress={() => router.push('/(tabs)/book')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.aiCardButtonText}>Réserver maintenant</Text>
+          </TouchableOpacity>
+          {aiGeneratedAt && <Text style={styles.aiCardTimestamp}>{aiGeneratedAt}</Text>}
+        </Animated.View>
+      )}
+    </>
+  );
+
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, isTablet && styles.contentTablet]} showsVerticalScrollIndicator={false}>
 
-        {/* Hero section */}
-        <View style={styles.hero}>
-          {/* Dark bg with subtle gradient */}
-          <View style={styles.heroBg} />
-          <Avatar initial={initial} size={80} />
-          <View style={styles.rolePill}>
-            <Text style={styles.roleText}>{(user.role ?? 'client').toUpperCase()}</Text>
-          </View>
-          <Text style={styles.heroName}>{fullName}</Text>
-          <Text style={styles.heroEmail}>{user.email}</Text>
-          {user.phone && <Text style={styles.heroPhone}>{user.phone}</Text>}
-        </View>
-
-        {/* Stats row */}
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{loyaltyPoints}</Text>
-            <Text style={styles.statLabel}>Points{'\n'}fidélité</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statNum, lateCancellations > 0 && { color: '#C0392B' }]}>{lateCancellations}</Text>
-            <Text style={styles.statLabel}>Annulations{'\n'}tardives</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{memberSince}</Text>
-            <Text style={styles.statLabel}>Membre{'\n'}depuis</Text>
-          </View>
-        </View>
-
-        {/* Account settings */}
-        <View style={styles.settingCard}>
-          <SectionTitle label="Mon compte" />
-          <View style={styles.settingDivider} />
-          <SettingRow icon="✏️" label="Modifier le profil" onPress={() => { setFirstName(user.first_name); setLastName(user.last_name); setPhone(user.phone ?? ''); setAiRec(user.ai_recommendations); setEditModal(true); }} />
-          <View style={styles.settingDivider} />
-          <SettingRow icon="🔑" label="Changer le mot de passe" onPress={() => setPwModal(true)} />
-          <View style={styles.settingDivider} />
-          <SettingRow
-            icon="🤖"
-            label="Recommandations IA"
-            rightElement={
-              <Switch
-                value={aiRec}
-                onValueChange={async v => {
-                  console.log('[IA] token (TokenStorage.getAccess):', await TokenStorage.getAccess());
-                  console.log('[IA] aiRec avant toggle:', aiRec, '-> nouvelle valeur:', v);
-                  console.log('[IA] PATCH payload:', { ai_recommendations: v });
-
-                  // Le PATCH démarre et sa promesse est enregistrée AVANT setAiRec(v),
-                  // pour que l'effet déclenché par le changement de aiRec puisse l'attendre
-                  // et ne fetch /recommendations/ qu'une fois le backend à jour.
-                  const patchPromise = (async () => {
-                    try {
-                      const res = await authApi.updateProfile({ ai_recommendations: v });
-                      console.log('[IA] PATCH response:', res);
-                      await refreshUser();
-                    } catch (e) {
-                      console.log('[IA] PATCH erreur (sauvegarde locale suffisante):', e);
-                    }
-                  })();
-                  aiPatchRef.current = patchPromise;
-
-                  setAiRec(v);
-                  await AsyncStorage.setItem('ai_recommendations', JSON.stringify(v));
-                  await patchPromise;
-
-                  if (!v) {
-                    Alert.alert('Recommandations IA désactivées', 'Vous pouvez les réactiver à tout moment.');
-                  }
-                }}
-                trackColor={{ false: 'rgba(255,255,255,0.12)', true: 'rgba(201,168,76,0.4)' }}
-                thumbColor={aiRec ? '#C9A84C' : 'rgba(255,255,255,0.5)'}
-              />
-            }
-          />
-
-          {aiRec && aiLoading && (
-            <View style={styles.aiCard}>
-              <LoadingDots />
+        <View style={isTablet ? styles.profileRowTablet : undefined}>
+          {/* Hero section */}
+          <View style={[styles.hero, isTablet && styles.heroTablet]}>
+            {/* Dark bg with subtle gradient */}
+            <View style={styles.heroBg} />
+            <Avatar initial={initial} size={80} />
+            <View style={styles.rolePill}>
+              <Text style={styles.roleText}>{(user.role ?? 'client').toUpperCase()}</Text>
             </View>
-          )}
+            <Text style={styles.heroName}>{fullName}</Text>
+            <Text style={styles.heroEmail}>{user.email}</Text>
+            {user.phone && <Text style={styles.heroPhone}>{user.phone}</Text>}
+          </View>
 
-          {aiRec && showAiCard && aiText && (
-            <Animated.View style={[styles.aiCard, { opacity: aiCardOpacity }]}>
-              <Text style={styles.aiCardBadge}>✨ Généré par Claude IA</Text>
-              <Text style={styles.aiCardText}>{aiText}</Text>
-              <TouchableOpacity
-                style={styles.aiCardButton}
-                onPress={() => router.push('/(tabs)/book')}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.aiCardButtonText}>Réserver maintenant</Text>
-              </TouchableOpacity>
-              {aiGeneratedAt && <Text style={styles.aiCardTimestamp}>{aiGeneratedAt}</Text>}
-            </Animated.View>
-          )}
+          <View style={isTablet ? styles.profileColRight : undefined}>
+            {/* Stats row */}
+            <View style={[styles.statsRow, isTablet && styles.statsRowTablet]}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNum}>{loyaltyPoints}</Text>
+                <Text style={styles.statLabel}>Points{'\n'}fidélité</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={[styles.statNum, lateCancellations > 0 && { color: '#C0392B' }]}>{lateCancellations}</Text>
+                <Text style={styles.statLabel}>Annulations{'\n'}tardives</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statNum}>{memberSince}</Text>
+                <Text style={styles.statLabel}>Membre{'\n'}depuis</Text>
+              </View>
+            </View>
+
+            {/* Account settings */}
+            <View style={[styles.settingCard, isTablet && styles.settingCardTablet]}>
+              <SectionTitle label="Mon compte" />
+              <View style={styles.settingDivider} />
+              <SettingRow icon="✏️" label="Modifier le profil" onPress={() => { setFirstName(user.first_name); setLastName(user.last_name); setPhone(user.phone ?? ''); setAiRec(user.ai_recommendations); setEditModal(true); }} />
+              <View style={styles.settingDivider} />
+              <SettingRow icon="🔑" label="Changer le mot de passe" onPress={() => setPwModal(true)} />
+              <View style={styles.settingDivider} />
+              <SettingRow
+                icon="🤖"
+                label="Recommandations IA"
+                rightElement={
+                  <Switch
+                    value={aiRec}
+                    onValueChange={async v => {
+                      console.log('[IA] token (TokenStorage.getAccess):', await TokenStorage.getAccess());
+                      console.log('[IA] aiRec avant toggle:', aiRec, '-> nouvelle valeur:', v);
+                      console.log('[IA] PATCH payload:', { ai_recommendations: v });
+
+                      // Le PATCH démarre et sa promesse est enregistrée AVANT setAiRec(v),
+                      // pour que l'effet déclenché par le changement de aiRec puisse l'attendre
+                      // et ne fetch /recommendations/ qu'une fois le backend à jour.
+                      const patchPromise = (async () => {
+                        try {
+                          const res = await authApi.updateProfile({ ai_recommendations: v });
+                          console.log('[IA] PATCH response:', res);
+                          await refreshUser();
+                        } catch (e) {
+                          console.log('[IA] PATCH erreur (sauvegarde locale suffisante):', e);
+                        }
+                      })();
+                      aiPatchRef.current = patchPromise;
+
+                      setAiRec(v);
+                      await AsyncStorage.setItem('ai_recommendations', JSON.stringify(v));
+                      await patchPromise;
+
+                      if (!v) {
+                        Alert.alert('Recommandations IA désactivées', 'Vous pouvez les réactiver à tout moment.');
+                      }
+                    }}
+                    trackColor={{ false: 'rgba(255,255,255,0.12)', true: 'rgba(201,168,76,0.4)' }}
+                    thumbColor={aiRec ? '#C9A84C' : 'rgba(255,255,255,0.5)'}
+                  />
+                }
+              />
+
+              {!isTablet && aiBlock}
+            </View>
+          </View>
         </View>
+
+        {/* Recommandations IA — pleine largeur sur iPad */}
+        {isTablet && !!(aiRec && (aiLoading || (showAiCard && aiText))) && (
+          <View style={styles.settingCard}>
+            <SectionTitle label="Recommandations IA" />
+            <View style={styles.settingDivider} />
+            {aiBlock}
+          </View>
+        )}
 
         {/* Info */}
         <View style={styles.settingCard}>
           <SectionTitle label="Informations" />
           <View style={styles.settingDivider} />
-          <SettingRow icon="📄" label="Conditions d'utilisation" onPress={() => setLegalModal('terms')} />
-          <View style={styles.settingDivider} />
-          <SettingRow icon="🔒" label="Politique de confidentialité" onPress={() => setLegalModal('privacy')} />
+          {isTablet ? (
+            <View style={styles.legalRowTablet}>
+              <View style={{ flex: 1 }}>
+                <SettingRow icon="📄" label="Conditions d'utilisation" onPress={() => setLegalModal('terms')} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <SettingRow icon="🔒" label="Politique de confidentialité" onPress={() => setLegalModal('privacy')} />
+              </View>
+            </View>
+          ) : (
+            <>
+              <SettingRow icon="📄" label="Conditions d'utilisation" onPress={() => setLegalModal('terms')} />
+              <View style={styles.settingDivider} />
+              <SettingRow icon="🔒" label="Politique de confidentialité" onPress={() => setLegalModal('privacy')} />
+            </>
+          )}
           <View style={styles.settingDivider} />
           <SettingRow icon="📍" label="WilloBarber" value="Rue Auguste Van Zande 78, Bruxelles" />
         </View>
@@ -480,8 +514,8 @@ export default function ProfileScreen() {
 
       {/* Edit profile modal */}
       <Modal visible={editModal} transparent animationType="slide" onRequestClose={() => setEditModal(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
+        <View style={[styles.overlay, isTablet && styles.overlayTablet]}>
+          <View style={[styles.modal, isTablet && styles.modalTablet]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Modifier le profil</Text>
               <Pressable onPress={() => setEditModal(false)}><Text style={styles.modalClose}>✕</Text></Pressable>
@@ -514,8 +548,8 @@ export default function ProfileScreen() {
 
       {/* Change password modal */}
       <Modal visible={pwModal} transparent animationType="slide" onRequestClose={() => setPwModal(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
+        <View style={[styles.overlay, isTablet && styles.overlayTablet]}>
+          <View style={[styles.modal, isTablet && styles.modalTablet]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Changer le mot de passe</Text>
               <Pressable onPress={() => setPwModal(false)}><Text style={styles.modalClose}>✕</Text></Pressable>
@@ -542,8 +576,8 @@ export default function ProfileScreen() {
 
       {/* Legal texts modal (terms / privacy) */}
       <Modal visible={legalModal !== null} transparent animationType="slide" onRequestClose={() => setLegalModal(null)}>
-        <View style={styles.legalOverlay}>
-          <View style={styles.legalModalBox}>
+        <View style={[styles.legalOverlay, isTablet && styles.overlayTablet]}>
+          <View style={[styles.legalModalBox, isTablet && styles.legalModalBoxTablet]}>
             <View style={styles.modalHeader}>
               <Text style={styles.legalTitle}>
                 {legalModal === 'terms' ? "Conditions d'utilisation" : 'Politique de confidentialité'}
@@ -568,6 +602,16 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0D0C0A' },
   content: { paddingBottom: 40 },
+  contentTablet: { maxWidth: 1100, alignSelf: 'center', width: '100%', paddingTop: 24 },
+
+  profileRowTablet: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 20,
+    paddingHorizontal: 22,
+    marginBottom: 4,
+  },
+  profileColRight: { flex: 1.3 },
 
   // Hero
   hero: {
@@ -579,6 +623,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.07)',
     gap: 4,
+  },
+  heroTablet: {
+    flex: 1,
+    justifyContent: 'center',
+    borderRadius: 20,
+    borderBottomWidth: 0,
+    paddingVertical: 40,
+    overflow: 'hidden',
   },
   heroBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#1A1814' },
   avatar: {
@@ -624,6 +676,11 @@ const styles = StyleSheet.create({
   statNum: { fontFamily: Fonts.bold, fontSize: 18, fontWeight: '700', color: '#fff', lineHeight: 22 },
   statLabel: { fontSize: 9.5, color: 'rgba(255,255,255,0.45)', textAlign: 'center', marginTop: 3, lineHeight: 13 },
   statDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.08)' },
+  statsRowTablet: {
+    borderRadius: 16,
+    borderBottomWidth: 0,
+    marginHorizontal: 0,
+  },
 
   // Settings card
   settingCard: {
@@ -635,6 +692,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
+  settingCardTablet: { marginHorizontal: 0 },
+  legalRowTablet: { flexDirection: 'row', gap: 16 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 12 },
   settingDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 0 },
   settingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, gap: 12 },
@@ -695,6 +754,7 @@ const styles = StyleSheet.create({
 
   // Modal
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  overlayTablet: { justifyContent: 'center', alignItems: 'center' },
   modal: {
     backgroundColor: '#1A1814',
     borderTopLeftRadius: 24,
@@ -704,6 +764,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+  },
+  modalTablet: {
+    borderRadius: 24,
+    width: '90%',
+    maxWidth: 480,
+    paddingBottom: 24,
   },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   modalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff' },
@@ -735,6 +801,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+  },
+  legalModalBoxTablet: {
+    borderRadius: 24,
+    width: '90%',
+    maxWidth: 620,
+    maxHeight: '80%',
+    paddingBottom: 24,
   },
   legalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#FFFFFF', flex: 1, paddingRight: 12 },
   legalClose: { fontSize: 18, color: 'rgba(255,255,255,0.45)', padding: 4 },

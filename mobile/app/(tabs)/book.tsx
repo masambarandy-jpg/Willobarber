@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { Fonts } from '@/constants';
 import { reservationsApi, servicesApi } from '@/services/api';
+import { useIsTablet } from '@/components/client/useIsTablet';
 
 import { BookingHeader }      from '@/components/booking/BookingHeader';
 import { BookingStepper }     from '@/components/booking/BookingStepper';
@@ -25,6 +26,8 @@ import {
   ACOMPTE_FIXE,
   BARBERS,
   fmtPrice,
+  formatDateShortFr,
+  formatSlot,
   type AmountChoice,
   type BookingState,
   type CardForm,
@@ -35,6 +38,96 @@ import {
 } from '@/components/booking/data';
 
 const GOLD = '#C9A84C';
+
+function RecapSidebar({
+  step,
+  booking,
+  totalPrice,
+  amountChoice,
+}: {
+  step: number;
+  booking: BookingState;
+  totalPrice: number;
+  amountChoice: AmountChoice;
+}) {
+  const { service, barber, date, time } = booking;
+  const rows: { label: string; value: string }[] = [];
+  if (service) rows.push({ label: 'Prestation', value: service.name });
+  if (barber) rows.push({ label: 'Barbier', value: barber.name });
+  if (date) rows.push({ label: 'Date', value: formatDateShortFr(date) });
+  if (time) rows.push({ label: 'Heure', value: formatSlot(time) });
+
+  const amountDue = step === 4
+    ? (amountChoice === 'full' ? (service?.price ?? 0) : ACOMPTE_FIXE)
+    : null;
+
+  return (
+    <View style={recapStyles.card}>
+      <Text style={recapStyles.title}>Récapitulatif</Text>
+      {rows.length === 0 ? (
+        <Text style={recapStyles.empty}>Vos sélections apparaîtront ici au fil des étapes.</Text>
+      ) : (
+        <View style={recapStyles.rows}>
+          {rows.map((r) => (
+            <View key={r.label} style={recapStyles.row}>
+              <View style={recapStyles.dot} />
+              <Text style={recapStyles.rowLabel}>{r.label}</Text>
+              <Text style={recapStyles.rowValue}>{r.value}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {totalPrice > 0 && (
+        <>
+          <View style={recapStyles.sep} />
+          <View style={recapStyles.totalRow}>
+            <Text style={recapStyles.totalLabel}>Total</Text>
+            <Text style={recapStyles.totalValue}>{fmtPrice(totalPrice)}</Text>
+          </View>
+          {amountDue !== null && (
+            <View style={recapStyles.totalRow}>
+              <Text style={recapStyles.dueLabel}>À payer maintenant</Text>
+              <Text style={recapStyles.dueValue}>{fmtPrice(amountDue)}</Text>
+            </View>
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
+const recapStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#1A1814',
+    borderRadius: 18,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  title: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 16,
+  },
+  empty: {
+    fontSize: 13,
+    color: '#6B6560',
+    lineHeight: 19,
+  },
+  rows: { gap: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: GOLD },
+  rowLabel: { fontSize: 12.5, color: '#6B6560', width: 78, flexShrink: 0 },
+  rowValue: { flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.9)', fontFamily: Fonts.semiBold },
+  sep: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 16 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  totalLabel: { fontSize: 14, color: 'rgba(255,255,255,0.6)' },
+  totalValue: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
+  dueLabel: { fontSize: 13, color: GOLD, fontWeight: '600' },
+  dueValue: { fontFamily: Fonts.bold, fontSize: 16, fontWeight: '700', color: GOLD },
+});
 
 const CTA_LABELS: Record<number, string> = {
   1: 'Continuer  →',
@@ -66,6 +159,7 @@ const EMPTY_CARD: CardForm = {
 
 export default function BookScreen() {
   const router  = useRouter();
+  const isTablet = useIsTablet();
   const insets  = useSafeAreaInsets();
   const {
     serviceId,
@@ -235,6 +329,8 @@ export default function BookScreen() {
 
   return (
     <View style={styles.root}>
+      <View style={isTablet ? styles.tabletShell : styles.mobileShell}>
+      <View style={isTablet ? styles.tabletLeftCol : styles.mobileLeftCol}>
       {/* Fixed header */}
       <BookingHeader
         paddingTop={paddingTop}
@@ -320,7 +416,19 @@ export default function BookScreen() {
           </View>
         </View>
       )}
+      </View>
 
+      {isTablet && (
+        <View style={[styles.tabletRightCol, { paddingTop: paddingTop + 24 }]}>
+          <RecapSidebar
+            step={step}
+            booking={booking}
+            totalPrice={totalPrice}
+            amountChoice={amountChoice}
+          />
+        </View>
+      )}
+      </View>
     </View>
   );
 }
@@ -329,6 +437,25 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#0D0C0A',
+  },
+
+  mobileShell: { flex: 1 },
+  mobileLeftCol: { flex: 1 },
+
+  tabletShell: {
+    flex: 1,
+    flexDirection: 'row',
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  tabletLeftCol: {
+    flex: 1.4,
+    position: 'relative',
+  },
+  tabletRightCol: {
+    flex: 1,
+    paddingHorizontal: 28,
   },
 
   footerContainer: {

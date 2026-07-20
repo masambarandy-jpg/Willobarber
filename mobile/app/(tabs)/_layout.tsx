@@ -1,16 +1,30 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useSegments } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
+import { useIsTablet } from '@/components/client/useIsTablet';
+import ClientIPadLayout, { ClientRoute } from '@/components/client/ClientIPadLayout';
 
 const GOLD     = '#C9A84C';
 const INACTIVE = '#9A9490';
 
+const SEGMENT_TO_ROUTE: Record<string, ClientRoute> = {
+  catalogue: 'catalogue',
+  book: 'book',
+  reservations: 'space',
+  profile: 'profile',
+};
+
 export default function TabsLayout() {
-  return (
+  const isTablet = useIsTablet();
+  const segments = useSegments();
+  const lastSegment = segments[segments.length - 1];
+  const active: ClientRoute = SEGMENT_TO_ROUTE[lastSegment as string] ?? 'home';
+
+  const tabs = (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.bar,
+        tabBarStyle: isTablet ? { display: 'none' } : styles.bar,
         tabBarShowLabel: true,
         tabBarActiveTintColor: GOLD,
         tabBarInactiveTintColor: INACTIVE,
@@ -115,6 +129,10 @@ export default function TabsLayout() {
       />
     </Tabs>
   );
+
+  if (!isTablet) return tabs;
+
+  return <ClientIPadLayout active={active}>{tabs}</ClientIPadLayout>;
 }
 
 const styles = StyleSheet.create({

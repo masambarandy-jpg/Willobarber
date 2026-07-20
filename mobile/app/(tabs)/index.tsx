@@ -19,7 +19,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCart } from '@/contexts/CartContext';
 import { ServiceCarousel } from '@/components/home/ServiceCarousel';
 import { HamburgerMenu } from '@/components/HamburgerMenu';
+import { useIsTablet } from '@/components/client/useIsTablet';
 import { Fonts } from '@/constants';
+
+const CONTENT_MAX_W = 1100;
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -133,6 +136,7 @@ function Avatar({ initial, color, ring, size = 44 }: { initial: string; color: s
 
 export default function HomeScreen() {
   const router = useRouter();
+  const isTablet = useIsTablet();
   const { user, isAuthenticated } = useAuth();
   const { addItem, nbArticles } = useCart();
   const firstName = user?.first_name || user?.username || 'vous';
@@ -190,9 +194,11 @@ export default function HomeScreen() {
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon} onPress={() => setMenuOpen(true)}>
-            <Text style={styles.headerIconText}>☰</Text>
-          </TouchableOpacity>
+          {!isTablet && (
+            <TouchableOpacity style={styles.headerIcon} onPress={() => setMenuOpen(true)}>
+              <Text style={styles.headerIconText}>☰</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -204,46 +210,66 @@ export default function HomeScreen() {
           end={{ x: 0, y: 1 }}
           style={styles.hero}
         >
-          <Text style={styles.heroKicker}>BARBER PRIVÉ · RUE AUGUSTE VAN ZANDE 78</Text>
-          <Text style={styles.heroTitle}>
-            L'art de la{'\n'}
-            <Text style={styles.heroTitleGold}>coupe,{'\n'}</Text>
-            l'esprit du{'\n'}
-            <Text style={styles.heroTitleGold}>détail.</Text>
-          </Text>
-          <Text style={styles.heroSub}>
-            WilloBarber élève la coupe masculine au rang de rituel. Une heure suspendue, un geste précis, un résultat sur mesure.
-          </Text>
-          <View style={styles.heroBtns}>
-            <PrimaryBookButton label="Réserver maintenant" onPress={() => router.push('/(tabs)/book')} />
-            <TouchableOpacity style={styles.btnOutline} onPress={() => scrollRef.current?.scrollTo({ y: servicesY, animated: true })} activeOpacity={0.85}>
-              <Text style={styles.btnOutlineText}>↓  Nos prestations</Text>
-            </TouchableOpacity>
-          </View>
+          <View style={[styles.heroInner, isTablet && styles.heroInnerTablet]}>
+            <View style={isTablet ? styles.heroColLeft : undefined}>
+              <Text style={styles.heroKicker}>BARBER PRIVÉ · RUE AUGUSTE VAN ZANDE 78</Text>
+              <Text style={[styles.heroTitle, isTablet && styles.heroTitleTablet]}>
+                L'art de la{'\n'}
+                <Text style={styles.heroTitleGold}>coupe,{'\n'}</Text>
+                l'esprit du{'\n'}
+                <Text style={styles.heroTitleGold}>détail.</Text>
+              </Text>
+              <Text style={styles.heroSub}>
+                WilloBarber élève la coupe masculine au rang de rituel. Une heure suspendue, un geste précis, un résultat sur mesure.
+              </Text>
+              <View style={styles.heroBtns}>
+                <PrimaryBookButton label="Réserver maintenant" onPress={() => router.push('/(tabs)/book')} />
+                <TouchableOpacity style={styles.btnOutline} onPress={() => scrollRef.current?.scrollTo({ y: servicesY, animated: true })} activeOpacity={0.85}>
+                  <Text style={styles.btnOutlineText}>↓  Nos prestations</Text>
+                </TouchableOpacity>
+              </View>
 
-          {/* Social proof card */}
-          <View style={styles.proofCard}>
-            <View style={styles.proofAvatars}>
-              {['#C9A84C', '#8a5a35', '#2D6A4F'].map((c, i) => (
-                <View key={i} style={[styles.proofAvatar, { backgroundColor: c + '33', borderColor: c, marginLeft: i ? -8 : 0 }]}>
-                  <Text style={{ fontSize: 10, color: c }}>W</Text>
+              {/* Social proof card */}
+              <View style={styles.proofCard}>
+                <View style={styles.proofAvatars}>
+                  {['#C9A84C', '#8a5a35', '#2D6A4F'].map((c, i) => (
+                    <View key={i} style={[styles.proofAvatar, { backgroundColor: c + '33', borderColor: c, marginLeft: i ? -8 : 0 }]}>
+                      <Text style={{ fontSize: 10, color: c }}>W</Text>
+                    </View>
+                  ))}
+                  <Text style={styles.proofCount}>2.4k+</Text>
                 </View>
-              ))}
-              <Text style={styles.proofCount}>2.4k+</Text>
+                <Text style={styles.proofText}>
+                  Plus de 2 400 clients fidèles nous confient leur image chaque année  ·  4.9★ sur Google.
+                </Text>
+              </View>
             </View>
-            <Text style={styles.proofText}>
-              Plus de 2 400 clients fidèles nous confient leur image chaque année  ·  4.9★ sur Google.
-            </Text>
+
+            {isTablet && (
+              <View style={styles.heroColRight}>
+                <View style={styles.heroFeatureCard}>
+                  <Avatar initial="W" color="#C9A84C" ring="#C9A84C" size={72} />
+                  <Stars n={5} />
+                  <Text style={styles.heroFeatureQuote}>
+                    « Le meilleur barbier de Bruxelles, sans hésiter. On ressort avec dix ans de moins. »
+                  </Text>
+                  <Text style={styles.heroFeatureName}>Willo</Text>
+                  <Text style={styles.heroFeatureRole}>FONDATEUR & MASTER BARBER</Text>
+                </View>
+              </View>
+            )}
           </View>
         </LinearGradient>
 
         {/* ── Services section (cream) ── */}
         <View style={styles.creamSection} onLayout={e => setServicesY(e.nativeEvent.layout.y)}>
-          <Text style={styles.sectionKicker}>NOS PRESTATIONS</Text>
-          <Text style={styles.sectionTitleDark}>
-            Une carte courte, <Text style={styles.sectionTitleGold}>une exigence longue.</Text>
-          </Text>
-          <Text style={styles.sectionSub}>Six prestations choisies, exécutées avec la même rigueur.</Text>
+          <View style={styles.sectionInner}>
+            <Text style={styles.sectionKicker}>NOS PRESTATIONS</Text>
+            <Text style={styles.sectionTitleDark}>
+              Une carte courte, <Text style={styles.sectionTitleGold}>une exigence longue.</Text>
+            </Text>
+            <Text style={styles.sectionSub}>Six prestations choisies, exécutées avec la même rigueur.</Text>
+          </View>
           <View style={{ marginHorizontal: -22, marginTop: 6 }}>
             <ServiceCarousel />
           </View>
@@ -251,13 +277,15 @@ export default function HomeScreen() {
 
         {/* ── Nos Produits section (cream) ── */}
         <View style={styles.produitsSection}>
-          <Text style={styles.produitsKicker}>NOS PRODUITS</Text>
-          <Text style={styles.produitsTitle}>
-            L'entretien, <Text style={styles.produitsTitleGold}>prolongé chez vous.</Text>
-          </Text>
-          <Text style={styles.produitsSub}>
-            Les soins que nous utilisons au salon, sélectionnés pour durer.
-          </Text>
+          <View style={styles.sectionInner}>
+            <Text style={styles.produitsKicker}>NOS PRODUITS</Text>
+            <Text style={styles.produitsTitle}>
+              L'entretien, <Text style={styles.produitsTitleGold}>prolongé chez vous.</Text>
+            </Text>
+            <Text style={styles.produitsSub}>
+              Les soins que nous utilisons au salon, sélectionnés pour durer.
+            </Text>
+          </View>
 
           <ScrollView
             horizontal
@@ -326,10 +354,12 @@ export default function HomeScreen() {
 
         {/* ── Team section (dark) ── */}
         <View style={styles.darkSection}>
-          <Text style={styles.sectionKicker}>L'ÉQUIPE</Text>
-          <Text style={styles.sectionTitleLight}>
-            Trois mains, <Text style={styles.sectionTitleGold}>une même école.</Text>
-          </Text>
+          <View style={styles.sectionInner}>
+            <Text style={styles.sectionKicker}>L'ÉQUIPE</Text>
+            <Text style={styles.sectionTitleLight}>
+              Trois mains, <Text style={styles.sectionTitleGold}>une même école.</Text>
+            </Text>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
             {BARBERS.map(b => (
               <View key={b.id} style={styles.barberCard}>
@@ -351,10 +381,12 @@ export default function HomeScreen() {
 
         {/* ── Reviews section (cream) ── */}
         <View style={styles.creamSection}>
-          <Text style={styles.sectionKicker}>ILS EN PARLENT</Text>
-          <Text style={[styles.sectionTitleGold, { fontFamily: Fonts.italic, fontSize: 26, marginBottom: 20, textAlign: 'center' }]}>
-            4,9 / 5 sur 720 avis vérifiés.
-          </Text>
+          <View style={styles.sectionInner}>
+            <Text style={styles.sectionKicker}>ILS EN PARLENT</Text>
+            <Text style={[styles.sectionTitleGold, { fontFamily: Fonts.italic, fontSize: 26, marginBottom: 20, textAlign: 'center' }]}>
+              4,9 / 5 sur 720 avis vérifiés.
+            </Text>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
             {REVIEWS.map((r, i) => (
               <View key={i} style={styles.reviewCard}>
@@ -423,6 +455,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 30,
     paddingBottom: 34,
+  },
+  heroInner: {
+    width: '100%',
+    maxWidth: CONTENT_MAX_W,
+    alignSelf: 'center',
+  },
+  heroInnerTablet: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 40,
+  },
+  heroColLeft: {
+    flex: 1,
+  },
+  heroColRight: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  heroFeatureCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#1A1814',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.25)',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    gap: 10,
+  },
+  heroFeatureQuote: {
+    fontFamily: Fonts.italic,
+    fontStyle: 'italic',
+    fontSize: 18,
+    color: '#fff',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  heroFeatureName: { fontFamily: Fonts.semiBold, fontSize: 18, fontWeight: '600', color: '#fff', marginTop: 4 },
+  heroFeatureRole: { fontSize: 10, fontWeight: '600', letterSpacing: 2, color: '#C9A84C', textTransform: 'uppercase' },
+  heroTitleTablet: {
+    fontSize: 58,
+    lineHeight: 62,
   },
   heroKicker: {
     fontSize: 11,
@@ -508,6 +584,7 @@ const styles = StyleSheet.create({
   // Sections
   creamSection: { backgroundColor: '#F5F0E8', paddingHorizontal: 22, paddingTop: 34, paddingBottom: 30 },
   darkSection: { backgroundColor: '#0D0C0A', paddingHorizontal: 22, paddingTop: 34, paddingBottom: 30 },
+  sectionInner: { width: '100%', maxWidth: CONTENT_MAX_W, alignSelf: 'center' },
 
   sectionKicker: { fontSize: 11, fontWeight: '600', letterSpacing: 3, color: '#C9A84C', textTransform: 'uppercase', textAlign: 'center', marginBottom: 12 },
   sectionTitleDark: { fontFamily: Fonts.semiBold, fontSize: 28, fontWeight: '600', color: '#1A1208', textAlign: 'center', marginBottom: 8, lineHeight: 34 },
