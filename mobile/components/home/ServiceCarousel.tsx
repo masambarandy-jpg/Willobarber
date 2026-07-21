@@ -23,6 +23,8 @@ import Animated, {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { Fonts } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
+import type { TranslationKey } from '@/i18n/translations';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PADDING_H = 22;
@@ -76,6 +78,10 @@ export type ServiceId = (typeof SERVICES)[number]['id'];
 
 export function ServiceCarousel() {
   const router = useRouter();
+  const { t } = useLanguage();
+  const svcCat = (cat: string) => t(`services.cat.${cat}` as TranslationKey);
+  const svcName = (id: string) => t(`services.svc.${id}.name` as TranslationKey);
+  const svcShort = (id: string) => t(`services.svc.${id}.short` as TranslationKey);
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 768;
 
@@ -173,11 +179,11 @@ export function ServiceCarousel() {
               />
               <View style={styles.badgesRow}>
                 <View style={styles.badgeCat}>
-                  <Text style={styles.badgeCatText}>{svc.cat}</Text>
+                  <Text style={styles.badgeCatText}>{svcCat(svc.cat)}</Text>
                 </View>
                 {svc.popular && (
                   <View style={styles.badgePopular}>
-                    <Text style={styles.badgePopularText}>POPULAIRE</Text>
+                    <Text style={styles.badgePopularText}>{t('common.popular')}</Text>
                   </View>
                 )}
               </View>
@@ -185,8 +191,8 @@ export function ServiceCarousel() {
 
             {/* ── Text zone ── */}
             <View style={styles.cardContent}>
-              <Text style={styles.serviceName} numberOfLines={2}>{svc.name}</Text>
-              <Text style={styles.serviceDesc} numberOfLines={2}>{svc.short}</Text>
+              <Text style={styles.serviceName} numberOfLines={2}>{svcName(svc.id)}</Text>
+              <Text style={styles.serviceDesc} numberOfLines={2}>{svcShort(svc.id)}</Text>
               <View style={styles.sep} />
               <View style={styles.metaRow}>
                 <View style={styles.durationRow}>
@@ -200,7 +206,7 @@ export function ServiceCarousel() {
                 activeOpacity={0.85}
                 onPress={() => router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } })}
               >
-                <Text style={styles.selectBtnText}>Sélectionner  →</Text>
+                <Text style={styles.selectBtnText}>{t('common.select')}  →</Text>
               </TouchableOpacity>
             </View>
 
@@ -243,11 +249,11 @@ export function ServiceCarousel() {
               />
               <View style={styles.badgesRow}>
                 <View style={styles.badgeCat}>
-                  <Text style={styles.badgeCatText}>{svc.cat}</Text>
+                  <Text style={styles.badgeCatText}>{svcCat(svc.cat)}</Text>
                 </View>
                 {svc.popular && (
                   <View style={styles.badgePopular}>
-                    <Text style={styles.badgePopularText}>POPULAIRE</Text>
+                    <Text style={styles.badgePopularText}>{t('common.popular')}</Text>
                   </View>
                 )}
               </View>
@@ -255,8 +261,8 @@ export function ServiceCarousel() {
 
             {/* ── Text zone ── */}
             <View style={styles.cardContent}>
-              <Text style={styles.serviceName} numberOfLines={2}>{svc.name}</Text>
-              <Text style={styles.serviceDesc} numberOfLines={2}>{svc.short}</Text>
+              <Text style={styles.serviceName} numberOfLines={2}>{svcName(svc.id)}</Text>
+              <Text style={styles.serviceDesc} numberOfLines={2}>{svcShort(svc.id)}</Text>
               <View style={styles.sep} />
               <View style={styles.metaRow}>
                 <View style={styles.durationRow}>
@@ -270,7 +276,7 @@ export function ServiceCarousel() {
                 activeOpacity={0.85}
                 onPress={() => router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } })}
               >
-                <Text style={styles.selectBtnText}>Sélectionner  →</Text>
+                <Text style={styles.selectBtnText}>{t('common.select')}  →</Text>
               </TouchableOpacity>
 
               {/* ── Dots + pause/play ── */}
