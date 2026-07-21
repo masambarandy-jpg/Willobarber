@@ -10,8 +10,14 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { EyeIcon, EyeOffIcon, CheckIcon, GoogleIcon, ArrowRightIcon } from '@/components/coiffeur/Icons';
+import {
+  EyeIcon,
+  EyeOffIcon,
+  CheckIcon,
+  PersonIcon,
+  LockIcon,
+  MailIcon,
+} from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 
 export default function CoiffeurLoginScreen() {
@@ -51,68 +57,71 @@ export default function CoiffeurLoginScreen() {
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={['#2a2010', '#1a140a', '#0D0C0A']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={styles.topSection}
-      >
-        <Text style={styles.logo}>
-          {'{w}'} <Text style={styles.logoBrand}>willobarber</Text>
-        </Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>ESPACE GÉRANT</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.card}>
+        <Text style={styles.kicker}>— ESPACE GÉRANT</Text>
+        <Text style={styles.title}>Connexion</Text>
+        <Text style={styles.subtitle}>Connectez-vous pour gérer votre salon.</Text>
+
+        <View style={styles.socialRow}>
+          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.75}>
+            <Text style={styles.socialGmailIcon}>G</Text>
+            <Text style={styles.socialBtnText}>Gmail</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.75}>
+            <MailIcon color="#4A9EFF" size={16} />
+            <Text style={styles.socialBtnText}>Outlook</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.75}>
+            <PersonIcon color="rgba(255,255,255,0.7)" size={16} />
+            <Text style={styles.socialBtnText}>Autre</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.heroTitle}>Votre salon, maîtrisé au rasoir près.</Text>
 
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>2 412</Text>
-            <Text style={styles.statLabel}>clients fidèles</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>4,8 ★</Text>
-            <Text style={styles.statLabel}>note moyenne</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>386</Text>
-            <Text style={styles.statLabel}>RDV ce mois</Text>
-          </View>
+        <View style={styles.separatorRow}>
+          <View style={styles.separatorLine} />
+          <Text style={styles.separatorText}>— ou —</Text>
+          <View style={styles.separatorLine} />
         </View>
-      </LinearGradient>
 
-      <ScrollView style={styles.bottomSection} contentContainerStyle={styles.bottomContent}>
-        <Text style={styles.welcomeTitle}>Bon retour, Willo.</Text>
-        <Text style={styles.welcomeSubtitle}>Connectez-vous pour gérer votre salon.</Text>
-
-        <Text style={styles.label}>ADRESSE EMAIL</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          style={styles.input}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholderTextColor={CC.textSecondary}
-        />
+        <Text style={styles.label}>EMAIL</Text>
+        <View style={styles.inputWrap}>
+          <PersonIcon color="rgba(255,255,255,0.4)" size={16} />
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            style={styles.input}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholderTextColor="rgba(255,255,255,0.35)"
+          />
+        </View>
 
         <Text style={styles.label}>MOT DE PASSE</Text>
         <View style={styles.passwordWrap}>
+          <LockIcon color="rgba(255,255,255,0.4)" size={16} />
           <TextInput
             value={password}
             onChangeText={setPassword}
             style={styles.passwordInput}
             secureTextEntry={!showPassword}
-            placeholderTextColor={CC.textSecondary}
+            placeholderTextColor="rgba(255,255,255,0.35)"
           />
-          <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={10} style={styles.eyeBtn}>
-            {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+          <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={10}>
+            {showPassword ? <EyeOffIcon color="rgba(255,255,255,0.4)" /> : <EyeIcon color="rgba(255,255,255,0.4)" />}
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity style={[styles.loginBtn, loading && { opacity: 0.7 }]} onPress={handleLogin} disabled={loading}>
+          <Text style={styles.loginBtnText}>{loading ? 'Connexion...' : 'Se connecter →'}</Text>
+        </TouchableOpacity>
+
+        {error !== '' && <Text style={styles.errorText}>{error}</Text>}
 
         <View style={styles.row}>
           <TouchableOpacity style={styles.rememberRow} onPress={() => setRemember((v) => !v)}>
             <View style={[styles.checkbox, remember && styles.checkboxChecked]}>
-              {remember && <CheckIcon color={CC.white} size={11} />}
+              {remember && <CheckIcon color={CC.black} size={11} />}
             </View>
             <Text style={styles.rememberText}>Se souvenir de moi</Text>
           </TouchableOpacity>
@@ -121,27 +130,10 @@ export default function CoiffeurLoginScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading}>
-          <Text style={styles.loginBtnText}>{loading ? 'Connexion...' : 'Se connecter'}</Text>
-          <ArrowRightIcon color={CC.black} size={16} />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backLink} activeOpacity={0.7}>
+          <Text style={styles.backLinkText}>← Retour espace client</Text>
         </TouchableOpacity>
-
-        {error !== '' && <Text style={styles.errorText}>{error}</Text>}
-
-        <View style={styles.separatorRow}>
-          <View style={styles.separatorLine} />
-          <Text style={styles.separatorText}>— ou —</Text>
-          <View style={styles.separatorLine} />
-        </View>
-
-        <TouchableOpacity style={styles.googleBtn}>
-          <GoogleIcon size={18} />
-          <Text style={styles.googleBtnText}>Continuer avec Google</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.footerLink}>
-          <Text style={styles.footerLinkText}>Pas encore de salon ? Créer un compte</Text>
-        </TouchableOpacity>
+      </View>
       </ScrollView>
     </View>
   );
@@ -150,123 +142,158 @@ export default function CoiffeurLoginScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: CC.cream,
+    backgroundColor: '#0D0C0A',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  topSection: {
-    height: '42%',
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'web' ? 40 : 60,
-    paddingBottom: 20,
-    justifyContent: 'flex-start',
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: Platform.OS === 'web' ? 40 : 70,
+    paddingHorizontal: 16,
   },
-  logo: {
-    fontFamily: SERIF,
-    fontWeight: '700',
-    fontSize: 20,
-    color: CC.gold,
-    marginBottom: 22,
+  card: {
+    backgroundColor: '#222016',
+    borderRadius: 20,
+    padding: 24,
+    maxWidth: 480,
+    width: '92%',
+    alignSelf: 'center',
   },
-  logoBrand: {
-    fontFamily: SERIF,
-    fontWeight: '700',
-    color: CC.white,
-  },
-  badge: {
-    alignSelf: 'flex-start',
-    marginBottom: 14,
-  },
-  badgeText: {
-    color: CC.gold,
+  kicker: {
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 2,
+    letterSpacing: 3,
+    color: '#C9A84C',
+    textTransform: 'uppercase',
+    marginBottom: 10,
   },
-  heroTitle: {
-    fontFamily: SERIF,
-    fontWeight: '600',
-    fontSize: 30,
-    color: CC.white,
-    lineHeight: 36,
-    marginBottom: 22,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statItem: {
-    alignItems: 'flex-start',
-  },
-  statValue: {
+  title: {
     fontFamily: SERIF,
     fontWeight: '700',
-    fontSize: 22,
-    color: CC.gold,
+    fontSize: 34,
+    color: '#FFFFFF',
+    marginBottom: 8,
   },
-  statLabel: {
-    fontSize: 11.5,
-    color: 'rgba(255,255,255,0.55)',
-    marginTop: 2,
-  },
-  bottomSection: {
-    flex: 1,
-  },
-  bottomContent: {
-    padding: 24,
-    paddingBottom: 48,
-  },
-  welcomeTitle: {
-    fontFamily: SERIF,
-    fontWeight: '600',
-    fontSize: 32,
-    color: CC.black,
-    marginBottom: 6,
-  },
-  welcomeSubtitle: {
+  subtitle: {
     fontSize: 14,
-    color: CC.textSecondary,
+    color: 'rgba(255,255,255,0.5)',
     marginBottom: 26,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 22,
+  },
+  socialBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#1A1814',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  socialGmailIcon: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#EA4335',
+  },
+  socialBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
+  },
+  separatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 22,
+  },
+  separatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  separatorText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
   },
   label: {
     fontSize: 11,
-    fontWeight: '600',
-    color: CC.textSecondary,
+    fontWeight: '700',
     letterSpacing: 1.5,
+    color: '#C9A84C',
+    textTransform: 'uppercase',
     marginBottom: 8,
     marginTop: 4,
   },
-  input: {
-    backgroundColor: CC.white,
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#1A1814',
     borderWidth: 1,
-    borderColor: CC.inputBorder,
+    borderColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
-    padding: 15,
-    fontSize: 14,
-    color: CC.black,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     marginBottom: 18,
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    color: '#FFFFFF',
+    padding: 0,
   },
   passwordWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: CC.white,
+    gap: 10,
+    backgroundColor: '#1A1814',
     borderWidth: 1,
-    borderColor: CC.inputBorder,
+    borderColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     marginBottom: 18,
   },
   passwordInput: {
     flex: 1,
-    padding: 15,
     fontSize: 14,
-    color: CC.black,
+    color: '#FFFFFF',
+    padding: 0,
+    backgroundColor: 'transparent',
   },
-  eyeBtn: {
-    paddingHorizontal: 14,
+  loginBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingVertical: 16,
+    marginBottom: 12,
+  },
+  loginBtnText: {
+    color: '#1a1208',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  errorText: {
+    color: '#E53935',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginTop: 10,
   },
   rememberRow: {
     flexDirection: 'row',
@@ -278,84 +305,30 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 5,
     borderWidth: 1.5,
-    borderColor: CC.inputBorder,
+    borderColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: CC.white,
+    backgroundColor: '#1A1814',
   },
   checkboxChecked: {
-    backgroundColor: CC.gold,
-    borderColor: CC.gold,
+    backgroundColor: '#C9A84C',
+    borderColor: '#C9A84C',
   },
   rememberText: {
     fontSize: 13,
-    color: CC.black,
+    color: 'rgba(255,255,255,0.7)',
   },
   forgotText: {
     fontSize: 13,
-    color: CC.goldDark,
+    color: '#C9A84C',
     fontWeight: '600',
   },
-  loginBtn: {
-    flexDirection: 'row',
+  backLink: {
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: CC.gold,
-    borderRadius: 100,
-    paddingVertical: 16,
-    marginBottom: 22,
+    marginTop: 20,
   },
-  loginBtnText: {
-    color: CC.black,
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  errorText: {
-    color: '#E53935',
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: -12,
-    marginBottom: 12,
-  },
-  separatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 22,
-  },
-  separatorLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: CC.border,
-  },
-  separatorText: {
+  backLinkText: {
     fontSize: 12,
-    color: CC.textSecondary,
-  },
-  googleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: CC.white,
-    borderWidth: 1,
-    borderColor: CC.inputBorder,
-    borderRadius: 100,
-    paddingVertical: 15,
-    marginBottom: 26,
-  },
-  googleBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: CC.black,
-  },
-  footerLink: {
-    alignItems: 'center',
-  },
-  footerLinkText: {
-    fontSize: 13,
-    color: CC.goldDark,
-    fontWeight: '600',
+    color: 'rgba(255,255,255,0.4)',
   },
 });

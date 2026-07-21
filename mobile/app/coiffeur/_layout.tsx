@@ -30,7 +30,14 @@ export default function CoiffeurLayout() {
         animation: 'fade',
       }}
     >
-      <Stack.Screen name="index" />
+      <Stack.Screen
+        name="index"
+        options={{
+          presentation: 'transparentModal',
+          headerShown: false,
+          animation: 'fade',
+        }}
+      />
       <Stack.Screen name="dashboard" />
       <Stack.Screen name="planning" />
       <Stack.Screen name="prestations" />

@@ -39,6 +39,14 @@ function RootNavigation() {
         <Stack.Screen name="(tabs)" options={{ title: 'WilloBarber' }} />
         <Stack.Screen name="(booking)" />
         <Stack.Screen name="cart" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="coiffeur"
+          options={{
+            presentation: 'transparentModal',
+            headerShown: false,
+            animation: 'fade',
+          }}
+        />
       </Stack>
     </>
   );
