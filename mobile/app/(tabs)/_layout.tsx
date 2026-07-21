@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import ClientIPadLayout, { ClientRoute } from '@/components/client/ClientIPadLayout';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const GOLD     = '#C9A84C';
 const INACTIVE = '#9A9490';
@@ -16,6 +17,7 @@ const SEGMENT_TO_ROUTE: Record<string, ClientRoute> = {
 
 export default function TabsLayout() {
   const isTablet = useIsTablet();
+  const { t } = useLanguage();
   const segments = useSegments();
   const lastSegment = segments[segments.length - 1];
   const active: ClientRoute = SEGMENT_TO_ROUTE[lastSegment as string] ?? 'home';
@@ -35,7 +37,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Accueil',
+          title: t('nav.home'),
           tabBarIcon: ({ color }) => (
             <View style={{ width: 24, height: 24 }}>
               <Svg width="22" height="22" viewBox="0 0 24 24"
@@ -51,7 +53,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="catalogue"
         options={{
-          title: 'Services',
+          title: t('nav.services'),
           tabBarIcon: ({ color }) => (
             <View style={{ width: 24, height: 24 }}>
               <Svg width="22" height="22" viewBox="0 0 24 24"
@@ -70,7 +72,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="book"
         options={{
-          title: 'Réserver',
+          title: t('nav.book'),
           tabBarIcon: ({ color }) => (
             <View style={{ width: 24, height: 24 }}>
               <Svg width="22" height="22" viewBox="0 0 24 24"
@@ -90,7 +92,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="reservations"
         options={{
-          title: 'Mon espace',
+          title: t('nav.mySpace'),
           tabBarIcon: ({ color }) => (
             <View style={{ width: 24, height: 24 }}>
               <Svg width="22" height="22" viewBox="0 0 24 24"
@@ -114,7 +116,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profil',
+          title: t('nav.profile'),
           tabBarIcon: ({ color }) => (
             <View style={{ width: 24, height: 24 }}>
               <Svg width="22" height="22" viewBox="0 0 24 24"

@@ -15,7 +15,9 @@ import {
 import { useRouter, usePathname } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
+import type { TranslationKey } from '@/i18n/translations';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const MENU_W = Math.min(SCREEN_W * 0.82, 340);
@@ -26,18 +28,20 @@ interface HamburgerMenuProps {
   onClose: () => void;
 }
 
-const NAV_ITEMS = [
-  { num: '01', label: 'Accueil',         sub: 'Votre espace client',  route: '/(tabs)/index'    },
-  { num: '02', label: 'Nos Prestations', sub: 'Coupes, soins & plus', route: '/(tabs)/catalogue' },
-  { num: '03', label: "L'Équipe",        sub: 'Nos barbiers',          route: '/(tabs)/equipe'    },
-  { num: '04', label: 'Réserver',        sub: 'Prendre rendez-vous',  route: '/(tabs)/book'     },
-] as const;
+const NAV_ITEM_KEYS = [
+  { num: '01', labelKey: 'hamburgerMenu.nav.home.label',     subKey: 'hamburgerMenu.nav.home.sub',     route: '/(tabs)/index'    },
+  { num: '02', labelKey: 'hamburgerMenu.nav.services.label', subKey: 'hamburgerMenu.nav.services.sub', route: '/(tabs)/catalogue' },
+  { num: '03', labelKey: 'hamburgerMenu.nav.team.label',     subKey: 'hamburgerMenu.nav.team.sub',     route: '/(tabs)/equipe'    },
+  { num: '04', labelKey: 'hamburgerMenu.nav.book.label',     subKey: 'hamburgerMenu.nav.book.sub',     route: '/(tabs)/book'     },
+] as const satisfies { num: string; labelKey: TranslationKey; subKey: TranslationKey; route: string }[];
 
 export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
   const router   = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated } = useAuth();
   const { showLoginModal } = useAuthModal();
+  const { t } = useLanguage();
+  const NAV_ITEMS = NAV_ITEM_KEYS.map(item => ({ ...item, label: t(item.labelKey), sub: t(item.subKey) }));
 
   const displayName = user?.first_name || user?.username || '';
   const initial     = (displayName[0] ?? 'U').toUpperCase();
@@ -101,7 +105,7 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
         </View>
 
         {/* ── MENU label ── */}
-        <Text style={styles.menuLabel}>MENU</Text>
+        <Text style={styles.menuLabel}>{t('hamburgerMenu.menuLabel')}</Text>
 
         {/* ── Nav items ── */}
         <View style={styles.navList}>
@@ -146,7 +150,7 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
             activeOpacity={0.8}
           >
             <View style={styles.accountLeft}>
-              <Text style={styles.accountKicker}>MON COMPTE</Text>
+              <Text style={styles.accountKicker}>{t('hamburgerMenu.accountKicker')}</Text>
               <View style={styles.accountRow}>
                 <View style={styles.avatar}>
                   <Text style={styles.avatarInitial}>{initial}</Text>
@@ -162,7 +166,7 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
             onPress={openLogin}
             activeOpacity={0.8}
           >
-            <Text style={styles.loginBadgeText}>Se connecter  →</Text>
+            <Text style={styles.loginBadgeText}>{t('hamburgerMenu.loginBtn')}</Text>
           </TouchableOpacity>
         )}
 
