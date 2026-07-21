@@ -7,6 +7,8 @@ from datetime import datetime
 
 import anthropic
 import sendgrid
+import stripe
+from django.conf import settings
 from sendgrid.helpers.mail import Mail, Email, To, Content
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -470,3 +472,30 @@ def generate_invoice(request):
     response = HttpResponse(buffer.read(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="Facture_WilloBarber_{invoice_number}.pdf"'
     return response
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_payment_intent(request):
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    amount = request.data.get('amount')
+    currency = request.data.get('currency', 'eur')
+
+    try:
+        amount = int(round(float(amount) * 100))
+    except (TypeError, ValueError):
+        return Response({'error': 'Montant invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if amount <= 0:
+        return Response({'error': 'Montant invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=amount,
+            currency=currency,
+            metadata={'user_id': request.user.id, 'username': request.user.username},
+        )
+    except stripe.error.StripeError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({'clientSecret': intent.client_secret})

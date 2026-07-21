@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,8 +11,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
+import { CardField, useConfirmPayment, type CardFieldInput } from '@stripe/stripe-react-native';
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { paymentsApi } from '@/services/api';
 import type { TranslationKey } from '@/i18n/translations';
 import {
   ACOMPTE_FIXE,
@@ -31,6 +33,16 @@ const GREEN_TEXT = '#6fc191';
 const INPUT_BG     = 'rgba(255,255,255,0.05)';
 const INPUT_BORDER = 'rgba(255,255,255,0.08)';
 
+const cardFieldStyle: CardFieldInput.Styles = {
+  backgroundColor: INPUT_BG,
+  borderColor: INPUT_BORDER,
+  borderWidth: 1,
+  borderRadius: 10,
+  textColor: '#FFFFFF',
+  placeholderColor: 'rgba(255,255,255,0.22)',
+  fontSize: 14,
+};
+
 const PAYMENT_TAB_KEYS: { id: PaymentMethod; labelKey: TranslationKey }[] = [
   { id: 'card',   labelKey: 'step4.tabCard'   },
   { id: 'apple',  labelKey: 'step4.tabApple'  },
@@ -47,11 +59,9 @@ interface Props {
   onAmountChoiceChange: (a: AmountChoice) => void;
 }
 
-function BankCard({ cardForm }: { cardForm: CardForm }) {
+function BankCard({ cardForm, cardDetails }: { cardForm: CardForm; cardDetails?: CardFieldInput.Details }) {
   const { t } = useLanguage();
-  const rawNumber = cardForm.cardNumber.replace(/\D/g, '');
-  const last4 = rawNumber.length >= 4 ? rawNumber.slice(-4) : rawNumber.padEnd(4, '').trimEnd();
-  const displayLast = last4 || '4582';
+  const displayLast = cardDetails?.last4 || '••••';
 
   const holderFirst = cardForm.prenom.trim();
   const holderLast  = cardForm.nom.trim();
@@ -59,7 +69,9 @@ function BankCard({ cardForm }: { cardForm: CardForm }) {
     ? `${holderFirst} ${holderLast}`.trim()
     : null;
 
-  const expiry = cardForm.expiry.trim() || null;
+  const expiry = cardDetails?.expiryMonth && cardDetails?.expiryYear
+    ? `${String(cardDetails.expiryMonth).padStart(2, '0')} / ${String(cardDetails.expiryYear).slice(-2)}`
+    : null;
 
   return (
     <LinearGradient
@@ -217,7 +229,11 @@ const fStyles = StyleSheet.create({
   },
 });
 
-export function Step4Payment({
+export interface Step4PaymentHandle {
+  pay: () => Promise<string>;
+}
+
+export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4Payment({
   booking,
   paymentMethod,
   cardForm,
@@ -225,9 +241,11 @@ export function Step4Payment({
   onPaymentMethodChange,
   onCardFormChange,
   onAmountChoiceChange,
-}: Props) {
+}, ref) {
   const { service } = booking;
   const { t } = useLanguage();
+  const { confirmPayment } = useConfirmPayment();
+  const [cardDetails, setCardDetails] = useState<CardFieldInput.Details>();
 
   const price   = service ? service.price : 0;
   const deposit = ACOMPTE_FIXE;
@@ -238,6 +256,36 @@ export function Step4Payment({
 
   const set = (key: keyof CardForm) => (v: string) =>
     onCardFormChange({ ...cardForm, [key]: v });
+
+  useImperativeHandle(ref, () => ({
+    pay: async () => {
+      if (!cardDetails?.complete) {
+        throw new Error(t('step4.cardIncomplete'));
+      }
+
+      const { clientSecret } = await paymentsApi.createPaymentIntent(payNow, 'eur');
+
+      const { paymentIntent, error } = await confirmPayment(clientSecret, {
+        paymentMethodType: 'Card',
+        paymentMethodData: {
+          billingDetails: {
+            email: cardForm.email || undefined,
+            phone: cardForm.phone || undefined,
+            name: `${cardForm.prenom} ${cardForm.nom}`.trim() || undefined,
+          },
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+      if (!paymentIntent || paymentIntent.status !== 'Succeeded') {
+        throw new Error(t('step4.cardIncomplete'));
+      }
+
+      return paymentIntent.id;
+    },
+  }));
 
   return (
     <KeyboardAvoidingView
@@ -315,34 +363,15 @@ export function Step4Payment({
 
           {paymentMethod === 'card' && (
             <View>
-              <BankCard cardForm={cardForm} />
-              <FieldInput
-                label={t('step4.cardNumberLabel')}
-                value={cardForm.cardNumber}
-                onChange={set('cardNumber')}
-                keyboard="numeric"
-                placeholder="•••• •••• •••• ••••"
+              <BankCard cardForm={cardForm} cardDetails={cardDetails} />
+              <FieldLabel text={t('step4.cardNumberLabel')} />
+              <CardField
+                postalCodeEnabled={false}
+                placeholders={{ number: '4242 4242 4242 4242' }}
+                cardStyle={cardFieldStyle}
+                style={styles.cardField}
+                onCardChange={setCardDetails}
               />
-              <View style={styles.cardRow}>
-                <View style={{ flex: 1 }}>
-                  <FieldInput
-                    label={t('step4.cardExpiryLabel')}
-                    value={cardForm.expiry}
-                    onChange={set('expiry')}
-                    keyboard="numeric"
-                    placeholder="MM / AA"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <FieldInput
-                    label={t('step4.cvcLabel')}
-                    value={cardForm.cvc}
-                    onChange={set('cvc')}
-                    keyboard="numeric"
-                    placeholder="•••"
-                  />
-                </View>
-              </View>
             </View>
           )}
 
@@ -446,7 +475,7 @@ export function Step4Payment({
       </ScrollView>
     </KeyboardAvoidingView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
@@ -518,9 +547,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  cardRow: {
-    flexDirection: 'row',
-    gap: 12,
+  cardField: {
+    width: '100%',
+    height: 50,
+    marginBottom: 4,
   },
 
   altPay: {

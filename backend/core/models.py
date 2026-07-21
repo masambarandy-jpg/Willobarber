@@ -49,6 +49,7 @@ class Reservation(models.Model):
     date = models.DateField()
     time = models.TimeField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    payment_intent_id = models.CharField(max_length=255, blank=True, default='')
 
     def __str__(self):
         return f"{self.user} - {self.date} {self.time}"

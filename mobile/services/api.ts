@@ -193,6 +193,15 @@ export const reservationsApi = {
     http.post(`/reservations/${id}/cancel/`, { reason: reason ?? '' }).then((r) => r.data),
 };
 
+// ─── Payments API ────────────────────────────────────────────────────────────
+
+export const paymentsApi = {
+  createPaymentIntent: (amount: number, currency: string = 'eur') =>
+    http
+      .post<{ clientSecret: string }>('/payments/create-payment-intent/', { amount, currency })
+      .then((r) => r.data),
+};
+
 // ─── Reviews API ─────────────────────────────────────────────────────────────
 
 export const reviewsApi = {

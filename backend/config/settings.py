@@ -150,3 +150,5 @@ SIMPLE_JWT = {
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'core.User'
+
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
