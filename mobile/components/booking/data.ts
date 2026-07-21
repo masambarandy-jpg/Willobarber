@@ -211,7 +211,7 @@ export function formatDateShortFr(date: Date): string {
   const j = JOURS_SHORT[date.getDay()];
   const d = date.getDate();
   const m = MOIS_FR[date.getMonth()];
-  return `${j.charAt(0).toUpperCase() + j.slice(1, 3)}. ${d} ${m}`;
+  return `${(j ?? '').charAt(0).toUpperCase() + (j ?? '').slice(1, 3)}. ${d} ${m}`;
 }
 
 export function dayBeforeLabel(date: Date): string {

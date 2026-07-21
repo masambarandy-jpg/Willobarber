@@ -26,10 +26,10 @@ type Props = {
 };
 
 const NAV_ITEMS: { key: CoiffeurRoute; label: string; icon: (color: string) => React.ReactNode; badge?: number }[] = [
-  { key: 'dashboard', label: 'Tableau de bord', icon: (c) => <GridIcon color={c} /> },
-  { key: 'planning', label: 'Planning', icon: (c) => <CalendarIcon color={c} /> },
-  { key: 'prestations', label: 'Prestations', icon: (c) => <ScissorsIcon color={c} /> },
-  { key: 'clients', label: 'Clients', icon: (c) => <UsersIcon color={c} /> },
+  { key: 'dashboard', label: 'Tableau de bord', icon: (c) => <GridIcon color={c ?? '#000000'} /> },
+  { key: 'planning', label: 'Planning', icon: (c) => <CalendarIcon color={c ?? '#000000'} /> },
+  { key: 'prestations', label: 'Prestations', icon: (c) => <ScissorsIcon color={c ?? '#000000'} /> },
+  { key: 'clients', label: 'Clients', icon: (c) => <UsersIcon color={c ?? '#000000'} /> },
   { key: 'equipe', label: 'Équipe', icon: (c) => <PersonIcon color={c} /> },
   { key: 'avis', label: 'Avis clients', icon: (c) => <StarIcon color={c} filled={false} /> },
   { key: 'notifications', label: 'Notifications', icon: (c) => <BellIcon color={c} />, badge: 5 },
@@ -56,7 +56,7 @@ export default function CoiffeurIPadLayout({ active, children }: Props) {
           <View style={styles.profile}>
             <Avatar letter={avatarLetter} size={38} />
             <View>
-              <Text style={styles.profileName}>{profile.firstName} {profile.lastName.charAt(0)}.</Text>
+              <Text style={styles.profileName}>{profile.firstName} {(profile.lastName ?? '').charAt(0)}.</Text>
               <Text style={styles.profileRole}>{profile.role}</Text>
             </View>
           </View>

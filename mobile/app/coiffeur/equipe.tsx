@@ -146,7 +146,7 @@ export default function CoiffeurEquipeScreen() {
           ? {
               ...m,
               name,
-              initial: name.charAt(0).toUpperCase() || m.initial,
+              initial: (name ?? '').charAt(0).toUpperCase() || m.initial,
               role: editForm.role.trim(),
               email: editForm.email.trim(),
               phone: editForm.phone.trim(),
@@ -188,7 +188,7 @@ export default function CoiffeurEquipeScreen() {
 
     const newMember: TeamMember = {
       id: `member-${team.length}-${name.toLowerCase()}`,
-      initial: name.charAt(0).toUpperCase(),
+      initial: (name ?? '').charAt(0).toUpperCase(),
       name,
       role: addForm.role.trim(),
       status: addForm.status,

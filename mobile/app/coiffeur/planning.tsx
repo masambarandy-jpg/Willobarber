@@ -103,7 +103,7 @@ function timeOffset(time: string) {
 }
 
 function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return (s ?? '').charAt(0).toUpperCase() + (s ?? '').slice(1);
 }
 
 function getWeekStart(date: Date) {
@@ -477,7 +477,7 @@ export default function CoiffeurPlanningScreen() {
           {selectedRdv && (
             <>
               <View style={[styles.rdvBarberCircle, { backgroundColor: BARBER_STYLE[selectedRdv.barber].border }]}>
-                <Text style={styles.rdvBarberInitial}>{selectedRdv.barber.charAt(0).toUpperCase()}</Text>
+                <Text style={styles.rdvBarberInitial}>{(selectedRdv.barber ?? '').charAt(0).toUpperCase()}</Text>
               </View>
 
               <Text style={styles.rdvTitle}>{selectedRdv.service}</Text>

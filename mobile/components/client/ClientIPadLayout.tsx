@@ -97,7 +97,7 @@ export default function ClientIPadLayout({ active, children }: Props) {
 
   const firstName = user?.first_name || user?.username || 'Client';
   const lastName = user?.last_name || '';
-  const avatarLetter = firstName.charAt(0).toUpperCase() || 'W';
+  const avatarLetter = (firstName ?? '').charAt(0).toUpperCase() || 'W';
 
   const go = (route: ClientRoute) => router.push(ROUTES[route] as never);
 
