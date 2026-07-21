@@ -39,7 +39,7 @@ const NAV_ITEMS: { key: CoiffeurRoute; label: string; icon: (color: string) => R
 export default function CoiffeurIPadLayout({ active, children }: Props) {
   const sidebarWidth = useSidebarWidth();
   const { profile } = useCoiffeurProfile();
-  const avatarLetter = profile.firstName.charAt(0).toUpperCase() || 'W';
+  const avatarLetter = (profile.firstName ?? 'W').charAt(0).toUpperCase();
   const [supportVisible, setSupportVisible] = useState(false);
 
   const go = (route: CoiffeurRoute) => router.push(`/coiffeur/${route}` as never);
