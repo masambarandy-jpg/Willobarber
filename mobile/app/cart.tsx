@@ -55,10 +55,10 @@ export default function CartScreen() {
           <TouchableOpacity onPress={() => { clearLastOrder(); router.push('/(tabs)' as any); }} style={styles.backBtn}>
             <Text style={styles.backText}>{t('common.back')}</Text>
           </TouchableOpacity>
-          <View style={styles.headerCenter}>
+          <TouchableOpacity style={styles.headerCenter} onPress={() => router.push('/(tabs)' as any)} activeOpacity={0.7}>
             <Text style={styles.headerLogoMark}>{'{w}'}</Text>
             <Text style={styles.headerLogoBrand}>willobarber</Text>
-          </View>
+          </TouchableOpacity>
           <View style={{ width: 70 }} />
         </View>
 
@@ -174,12 +174,12 @@ export default function CartScreen() {
     <View style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Retour</Text>
+          <Text style={styles.backText}>{t('common.back')}</Text>
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
+        <TouchableOpacity style={styles.headerCenter} onPress={() => router.push('/(tabs)' as any)} activeOpacity={0.7}>
           <Text style={styles.headerLogoMark}>{'{w}'}</Text>
           <Text style={styles.headerLogoBrand}>willobarber</Text>
-        </View>
+        </TouchableOpacity>
         <View style={{ width: 70 }} />
       </View>
 
