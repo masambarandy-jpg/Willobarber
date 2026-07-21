@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Fonts } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const GOLD = '#C9A84C';
 const GREY = '#6B6560';
@@ -49,18 +50,19 @@ const BARBERS = [
 
 export default function EquipeScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   return (
     <View style={styles.root}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Retour</Text>
+          <Text style={styles.backText}>{t('common.back')}</Text>
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
+        <TouchableOpacity style={styles.headerCenter} onPress={() => router.push('/(tabs)' as any)} activeOpacity={0.7}>
           <Text style={styles.headerLogoMark}>{'{w}'}</Text>
           <Text style={styles.headerLogoBrand}>willobarber</Text>
-        </View>
+        </TouchableOpacity>
         <View style={{ width: 70 }} />
       </View>
 
