@@ -16,6 +16,7 @@ import Svg, { Path, Circle, Rect, Line } from 'react-native-svg';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
 
@@ -25,6 +26,7 @@ export default function CartScreen() {
   const { items, removeItem, updateQte, total, nbArticles, isLoading, checkout, lastOrder, clearLastOrder } = useCart();
   const { isAuthenticated } = useAuth();
   const { showLoginModal } = useAuthModal();
+  const { t } = useLanguage();
   const [checkoutError, setCheckoutError] = useState('');
   const [deliveryMode, setDeliveryMode] = useState<'salon' | 'domicile'>('salon');
   const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -34,14 +36,14 @@ export default function CartScreen() {
 
   const handleCheckout = async () => {
     if (!isAuthenticated) {
-      showLoginModal(handleCheckout, 'Connectez-vous pour finaliser votre commande.');
+      showLoginModal(handleCheckout, t('cart.loginPrompt'));
       return;
     }
     setCheckoutError('');
     try {
       await checkout();
     } catch {
-      setCheckoutError('Une erreur est survenue. Veuillez réessayer.');
+      setCheckoutError(t('cart.checkoutError'));
     }
   };
 
@@ -51,7 +53,7 @@ export default function CartScreen() {
       <View style={styles.root}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => { clearLastOrder(); router.push('/(tabs)' as any); }} style={styles.backBtn}>
-            <Text style={styles.backText}>← Retour</Text>
+            <Text style={styles.backText}>{t('common.back')}</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerLogoMark}>{'{w}'}</Text>
@@ -75,21 +77,21 @@ export default function CartScreen() {
             </View>
           </View>
 
-          <Text style={styles.confirmKicker}>— BOUTIQUE</Text>
+          <Text style={styles.confirmKicker}>{t('cart.kicker')}</Text>
           <Text style={styles.confirmTitle}>
-            Commande{' '}
-            <Text style={styles.confirmTitleGold}>confirmée !</Text>
+            {t('cart.confirm.title1')}{' '}
+            <Text style={styles.confirmTitleGold}>{t('cart.confirm.titleGold')}</Text>
           </Text>
           <Text style={styles.confirmSubtitle}>
-            Merci pour votre confiance. Un email de suivi vient de vous être envoyé.
+            {t('cart.confirm.subtitle')}
           </Text>
 
           {/* Numéro de commande */}
           <View style={styles.orderNumCard}>
             <View style={styles.orderNumTop}>
-              <Text style={styles.orderNumKicker}>NUMÉRO DE COMMANDE</Text>
+              <Text style={styles.orderNumKicker}>{t('cart.confirm.orderNumKicker')}</Text>
               <View style={styles.emailBadge}>
-                <Text style={styles.emailBadgeText}>✉ Email envoyé</Text>
+                <Text style={styles.emailBadgeText}>{t('cart.confirm.emailSent')}</Text>
               </View>
             </View>
             <Text style={styles.orderNumText}>{lastOrder.numero}</Text>
@@ -97,7 +99,7 @@ export default function CartScreen() {
 
           {/* Carte commande */}
           <View style={styles.orderCard}>
-            <Text style={styles.orderCardTitle}>Votre commande</Text>
+            <Text style={styles.orderCardTitle}>{t('cart.confirm.orderCardTitle')}</Text>
             {lastOrder.items.map((item) => (
               <View key={item.id} style={styles.orderItemRow}>
                 {item.product.photo_url ? (
@@ -108,7 +110,7 @@ export default function CartScreen() {
                 <View style={styles.orderItemInfo}>
                   <Text style={styles.orderItemNom}>{item.product.nom}</Text>
                   <Text style={styles.orderItemMeta}>
-                    Qté {item.quantite}{item.product.contenance ? ` · ${item.product.contenance}` : ''}
+                    {t('cart.confirm.qtyPrefix')} {item.quantite}{item.product.contenance ? ` · ${item.product.contenance}` : ''}
                   </Text>
                 </View>
                 <Text style={styles.orderItemPrix}>{parseFloat(item.prix_unitaire).toFixed(0)} €</Text>
@@ -116,7 +118,7 @@ export default function CartScreen() {
             ))}
             <View style={styles.orderCardSep} />
             <View style={styles.orderTotalRow}>
-              <Text style={styles.orderTotalLabel}>TOTAL PAYÉ</Text>
+              <Text style={styles.orderTotalLabel}>{t('cart.confirm.totalPaid')}</Text>
               <Text style={styles.orderTotalAmount}>{parseFloat(lastOrder.total).toFixed(2)} €</Text>
             </View>
           </View>
@@ -133,7 +135,7 @@ export default function CartScreen() {
                 </Svg>
               </View>
               <View>
-                <Text style={styles.retraitTitle}>Livraison à domicile · 3-5 jours ouvrés</Text>
+                <Text style={styles.retraitTitle}>{t('cart.deliveryHomeTitle')} · {t('cart.deliveryHomeSub')}</Text>
                 {!!deliveryAddress && <Text style={styles.retraitAddr}>{deliveryAddress}</Text>}
               </View>
             </View>
@@ -148,9 +150,9 @@ export default function CartScreen() {
                 </Svg>
               </View>
               <View>
-                <Text style={styles.retraitTitle}>Retrait en salon</Text>
+                <Text style={styles.retraitTitle}>{t('cart.deliverySalonTitle')}</Text>
                 <Text style={styles.retraitAddr}>Rue Auguste Van Zande 78 · Bruxelles</Text>
-                <Text style={styles.retraitAddr}>Disponible sous 24h</Text>
+                <Text style={styles.retraitAddr}>{t('cart.deliverySalonAvailable')}</Text>
               </View>
             </View>
           )}
@@ -160,7 +162,7 @@ export default function CartScreen() {
             activeOpacity={0.85}
             onPress={() => { clearLastOrder(); router.push('/(tabs)' as any); }}
           >
-            <Text style={styles.continueBtnText}>Continuer mes achats →</Text>
+            <Text style={styles.continueBtnText}>{t('cart.confirm.continueShopping')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -182,12 +184,12 @@ export default function CartScreen() {
       </View>
 
       <View style={[styles.titleSection, isTablet && { maxWidth: 1200, width: '100%', alignSelf: 'center' }]}>
-        <Text style={styles.titleKicker}>— BOUTIQUE</Text>
-        <Text style={styles.pageTitle}>Mon Panier</Text>
+        <Text style={styles.titleKicker}>{t('cart.kicker')}</Text>
+        <Text style={styles.pageTitle}>{t('cart.title')}</Text>
         <Text style={styles.pageSubtitle}>
           {nbArticles === 0
-            ? 'Votre panier est vide'
-            : `${nbArticles} produit${nbArticles > 1 ? 's' : ''} sélectionné${nbArticles > 1 ? 's' : ''}`}
+            ? t('cart.emptySubtitle')
+            : `${nbArticles} ${nbArticles > 1 ? t('cart.productSelectedPlural') : t('cart.productSelectedSingular')}`}
         </Text>
       </View>
 
@@ -198,9 +200,9 @@ export default function CartScreen() {
             <Line x1="3" y1="6" x2="21" y2="6" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
             <Path d="M16 10a4 4 0 0 1-8 0"/>
           </Svg>
-          <Text style={styles.emptyText}>Aucun produit dans le panier</Text>
+          <Text style={styles.emptyText}>{t('cart.emptyStateText')}</Text>
           <TouchableOpacity style={styles.continueBtn} activeOpacity={0.85} onPress={() => router.push('/(tabs)' as any)}>
-            <Text style={styles.continueBtnText}>Découvrir nos produits →</Text>
+            <Text style={styles.continueBtnText}>{t('cart.discoverProducts')}</Text>
           </TouchableOpacity>
         </View>
       ) : isTablet ? (
@@ -240,7 +242,7 @@ export default function CartScreen() {
 
             {/* Livraison */}
             <View style={styles.deliverySection}>
-              <Text style={styles.recapKicker}>LIVRAISON</Text>
+              <Text style={styles.recapKicker}>{t('cart.deliveryTitle')}</Text>
 
               <View style={styles.deliveryRowTablet}>
                 <TouchableOpacity
@@ -257,11 +259,11 @@ export default function CartScreen() {
                     </Svg>
                   </View>
                   <View style={styles.deliveryOptionBody}>
-                    <Text style={styles.deliveryOptionTitle}>Retrait en salon</Text>
+                    <Text style={styles.deliveryOptionTitle}>{t('cart.deliverySalonTitle')}</Text>
                     <Text style={styles.deliveryOptionSub}>Rue Auguste Van Zande 78 · Bruxelles</Text>
-                    <Text style={styles.deliveryOptionSub}>Disponible sous 24h</Text>
+                    <Text style={styles.deliveryOptionSub}>{t('cart.deliverySalonAvailable')}</Text>
                   </View>
-                  <Text style={styles.deliveryOptionPriceFree}>Gratuit</Text>
+                  <Text style={styles.deliveryOptionPriceFree}>{t('cart.free')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -278,8 +280,8 @@ export default function CartScreen() {
                     </Svg>
                   </View>
                   <View style={styles.deliveryOptionBody}>
-                    <Text style={styles.deliveryOptionTitle}>Livraison à domicile</Text>
-                    <Text style={styles.deliveryOptionSub}>Livré chez vous en 3-5 jours ouvrés</Text>
+                    <Text style={styles.deliveryOptionTitle}>{t('cart.deliveryHomeTitle')}</Text>
+                    <Text style={styles.deliveryOptionSub}>{t('cart.deliveryHomeSub')}</Text>
                   </View>
                   <Text style={styles.deliveryOptionPrice}>+4,95 €</Text>
                 </TouchableOpacity>
@@ -287,12 +289,12 @@ export default function CartScreen() {
 
               {deliveryMode === 'domicile' && (
                 <View style={styles.addressInputWrap}>
-                  <Text style={styles.addressLabel}>ADRESSE DE LIVRAISON</Text>
+                  <Text style={styles.addressLabel}>{t('cart.addressLabel')}</Text>
                   <TextInput
                     style={styles.addressInput}
                     value={deliveryAddress}
                     onChangeText={setDeliveryAddress}
-                    placeholder="Votre adresse complète"
+                    placeholder={t('cart.addressPlaceholder')}
                     placeholderTextColor="rgba(255,255,255,0.3)"
                     multiline
                   />
@@ -303,22 +305,22 @@ export default function CartScreen() {
 
           <View style={styles.tabletRightCol}>
             <View style={styles.recapCard}>
-              <Text style={styles.recapKicker}>RÉCAPITULATIF</Text>
+              <Text style={styles.recapKicker}>{t('cart.recapTitle')}</Text>
               <View style={styles.recapRow}>
-                <Text style={styles.recapLabel}>Sous-total</Text>
+                <Text style={styles.recapLabel}>{t('cart.recapSubtotal')}</Text>
                 <Text style={styles.recapValue}>{total.toFixed(2)} €</Text>
               </View>
               <View style={styles.recapRow}>
                 <Text style={styles.recapLabel}>
-                  {deliveryMode === 'domicile' ? 'Livraison à domicile' : 'Retrait en salon'}
+                  {deliveryMode === 'domicile' ? t('cart.deliveryHomeTitle') : t('cart.deliverySalonTitle')}
                 </Text>
                 {deliveryMode === 'domicile'
                   ? <Text style={styles.recapValue}>+{deliveryFee.toFixed(2)} €</Text>
-                  : <Text style={styles.recapFree}>Gratuit</Text>}
+                  : <Text style={styles.recapFree}>{t('cart.free')}</Text>}
               </View>
               <View style={styles.recapSep} />
               <View style={styles.recapRow}>
-                <Text style={styles.recapTotalLabel}>Total</Text>
+                <Text style={styles.recapTotalLabel}>{t('cart.recapTotal')}</Text>
                 <Text style={styles.recapTotalAmount}>{finalTotal.toFixed(2)} €</Text>
               </View>
             </View>
@@ -339,7 +341,7 @@ export default function CartScreen() {
                 ? <ActivityIndicator color="#1A1208" size="small" />
                 : (
                   <Text style={styles.ctaBtnText}>
-                    Commander — {deliveryFee > 0 ? finalTotal.toFixed(2) : total.toFixed(0)} € →
+                    {t('cart.checkout')} — {deliveryFee > 0 ? finalTotal.toFixed(2) : total.toFixed(0)} € →
                   </Text>
                 )
               }
@@ -383,7 +385,7 @@ export default function CartScreen() {
 
             {/* Livraison */}
             <View style={styles.deliverySection}>
-              <Text style={styles.recapKicker}>LIVRAISON</Text>
+              <Text style={styles.recapKicker}>{t('cart.deliveryTitle')}</Text>
 
               <TouchableOpacity
                 style={[styles.deliveryOptionCard, deliveryMode === 'salon' && styles.deliveryOptionCardActive]}
@@ -399,11 +401,11 @@ export default function CartScreen() {
                   </Svg>
                 </View>
                 <View style={styles.deliveryOptionBody}>
-                  <Text style={styles.deliveryOptionTitle}>Retrait en salon</Text>
+                  <Text style={styles.deliveryOptionTitle}>{t('cart.deliverySalonTitle')}</Text>
                   <Text style={styles.deliveryOptionSub}>Rue Auguste Van Zande 78 · Bruxelles</Text>
-                  <Text style={styles.deliveryOptionSub}>Disponible sous 24h</Text>
+                  <Text style={styles.deliveryOptionSub}>{t('cart.deliverySalonAvailable')}</Text>
                 </View>
-                <Text style={styles.deliveryOptionPriceFree}>Gratuit</Text>
+                <Text style={styles.deliveryOptionPriceFree}>{t('cart.free')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -420,20 +422,20 @@ export default function CartScreen() {
                   </Svg>
                 </View>
                 <View style={styles.deliveryOptionBody}>
-                  <Text style={styles.deliveryOptionTitle}>Livraison à domicile</Text>
-                  <Text style={styles.deliveryOptionSub}>Livré chez vous en 3-5 jours ouvrés</Text>
+                  <Text style={styles.deliveryOptionTitle}>{t('cart.deliveryHomeTitle')}</Text>
+                  <Text style={styles.deliveryOptionSub}>{t('cart.deliveryHomeSub')}</Text>
                 </View>
                 <Text style={styles.deliveryOptionPrice}>+4,95 €</Text>
               </TouchableOpacity>
 
               {deliveryMode === 'domicile' && (
                 <View style={styles.addressInputWrap}>
-                  <Text style={styles.addressLabel}>ADRESSE DE LIVRAISON</Text>
+                  <Text style={styles.addressLabel}>{t('cart.addressLabel')}</Text>
                   <TextInput
                     style={styles.addressInput}
                     value={deliveryAddress}
                     onChangeText={setDeliveryAddress}
-                    placeholder="Votre adresse complète"
+                    placeholder={t('cart.addressPlaceholder')}
                     placeholderTextColor="rgba(255,255,255,0.3)"
                     multiline
                   />
@@ -443,22 +445,22 @@ export default function CartScreen() {
 
             {/* Récapitulatif */}
             <View style={styles.recapCard}>
-              <Text style={styles.recapKicker}>RÉCAPITULATIF</Text>
+              <Text style={styles.recapKicker}>{t('cart.recapTitle')}</Text>
               <View style={styles.recapRow}>
-                <Text style={styles.recapLabel}>Sous-total</Text>
+                <Text style={styles.recapLabel}>{t('cart.recapSubtotal')}</Text>
                 <Text style={styles.recapValue}>{total.toFixed(2)} €</Text>
               </View>
               <View style={styles.recapRow}>
                 <Text style={styles.recapLabel}>
-                  {deliveryMode === 'domicile' ? 'Livraison à domicile' : 'Retrait en salon'}
+                  {deliveryMode === 'domicile' ? t('cart.deliveryHomeTitle') : t('cart.deliverySalonTitle')}
                 </Text>
                 {deliveryMode === 'domicile'
                   ? <Text style={styles.recapValue}>+{deliveryFee.toFixed(2)} €</Text>
-                  : <Text style={styles.recapFree}>Gratuit</Text>}
+                  : <Text style={styles.recapFree}>{t('cart.free')}</Text>}
               </View>
               <View style={styles.recapSep} />
               <View style={styles.recapRow}>
-                <Text style={styles.recapTotalLabel}>Total</Text>
+                <Text style={styles.recapTotalLabel}>{t('cart.recapTotal')}</Text>
                 <Text style={styles.recapTotalAmount}>{finalTotal.toFixed(2)} €</Text>
               </View>
             </View>
@@ -482,7 +484,7 @@ export default function CartScreen() {
                 ? <ActivityIndicator color="#1A1208" size="small" />
                 : (
                   <Text style={styles.ctaBtnText}>
-                    Commander — {deliveryFee > 0 ? finalTotal.toFixed(2) : total.toFixed(0)} € →
+                    {t('cart.checkout')} — {deliveryFee > 0 ? finalTotal.toFixed(2) : total.toFixed(0)} € →
                   </Text>
                 )
               }

@@ -4,7 +4,9 @@ import { router } from 'expo-router';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { useAuth } from '@/hooks/useAuth';
 import { useClientSidebarWidth } from './useIsTablet';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
+import type { TranslationKey } from '@/i18n/translations';
 
 export type ClientRoute = 'home' | 'catalogue' | 'book' | 'space' | 'profile';
 
@@ -79,17 +81,19 @@ function UserIcon({ color }: { color: string }) {
   );
 }
 
-const NAV_ITEMS: { key: ClientRoute; label: string; icon: (color: string) => React.ReactNode }[] = [
-  { key: 'home', label: 'Accueil', icon: (c) => <HomeIcon color={c} /> },
-  { key: 'catalogue', label: 'Services', icon: (c) => <ScissorsIcon color={c} /> },
-  { key: 'book', label: 'Réserver', icon: (c) => <CalendarPlusIcon color={c} /> },
-  { key: 'space', label: 'Mon espace', icon: (c) => <GridIcon color={c} /> },
-  { key: 'profile', label: 'Profil', icon: (c) => <UserIcon color={c} /> },
+const NAV_ITEM_KEYS: { key: ClientRoute; labelKey: TranslationKey; icon: (color: string) => React.ReactNode }[] = [
+  { key: 'home', labelKey: 'nav.home', icon: (c) => <HomeIcon color={c} /> },
+  { key: 'catalogue', labelKey: 'nav.services', icon: (c) => <ScissorsIcon color={c} /> },
+  { key: 'book', labelKey: 'nav.book', icon: (c) => <CalendarPlusIcon color={c} /> },
+  { key: 'space', labelKey: 'nav.mySpace', icon: (c) => <GridIcon color={c} /> },
+  { key: 'profile', labelKey: 'nav.profile', icon: (c) => <UserIcon color={c} /> },
 ];
 
 export default function ClientIPadLayout({ active, children }: Props) {
   const sidebarWidth = useClientSidebarWidth();
   const { user, isAuthenticated } = useAuth();
+  const { t } = useLanguage();
+  const NAV_ITEMS = NAV_ITEM_KEYS.map(item => ({ ...item, label: t(item.labelKey) }));
 
   const firstName = user?.first_name || user?.username || 'Client';
   const lastName = user?.last_name || '';
@@ -115,7 +119,7 @@ export default function ClientIPadLayout({ active, children }: Props) {
                 <Text style={styles.profileName} numberOfLines={1}>
                   {firstName} {lastName ? `${lastName.charAt(0)}.` : ''}
                 </Text>
-                <Text style={styles.profileRole}>Client fidèle</Text>
+                <Text style={styles.profileRole}>{t('clientSidebar.loyalClient')}</Text>
               </View>
             </View>
           )}
@@ -143,10 +147,10 @@ export default function ClientIPadLayout({ active, children }: Props) {
             end={{ x: 1, y: 1 }}
             style={styles.promoBlock}
           >
-            <Text style={styles.promoKicker}>Votre prochain RDV</Text>
+            <Text style={styles.promoKicker}>{t('clientSidebar.nextRdvKicker')}</Text>
             <Text style={styles.promoText}>Sam. 23 mai · 10:30 · Willo</Text>
             <TouchableOpacity style={styles.promoBtn} onPress={() => go('space')} activeOpacity={0.85}>
-              <Text style={styles.promoBtnText}>Voir les détails</Text>
+              <Text style={styles.promoBtnText}>{t('clientSidebar.viewDetails')}</Text>
             </TouchableOpacity>
           </LinearGradient>
         </ScrollView>
