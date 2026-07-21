@@ -27,6 +27,31 @@ import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
+import { fmtPrice } from '@/components/booking/data';
+
+const MOIS_ABBR_FR = ['JANV', 'FÉVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOÛT', 'SEPT', 'OCT', 'NOV', 'DÉC'];
+const MOIS_FR_FULL = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const JOURS_ABBR_FR = ['DIM.', 'LUN.', 'MAR.', 'MER.', 'JEU.', 'VEN.', 'SAM.'];
+
+const PRICE_BY_SERVICE_NAME: Record<string, number> = {
+  'Signature WilloBarber': 45,
+  "Taille & rasage à l'ancienne": 28,
+  'Le Rituel': 75,
+  'Coupe express': 28,
+  'Camouflage gris': 35,
+  'Soin du visage': 32,
+  'Coupe enfant −15 ans': 15,
+  'Coupe enfant +15 ans': 20,
+};
+
+function parseApiDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function formatHmm(timeStr: string): string {
+  return timeStr.slice(0, 5).replace(':', 'h');
+}
 
 const MOCK_LOYALTY = {
   points: 980,
@@ -136,13 +161,59 @@ export default function ReservationsScreen() {
   const isTablet = useIsTablet();
   const { user, isAuthenticated } = useAuth();
   const { showLoginModal } = useAuthModal();
-  const { isLoading, refetch, cancel } = useReservations();
+  const { isLoading, refetch, cancel, upcoming, past, error } = useReservations();
   const { t } = useLanguage();
   const [histFilter, setHistFilter] = useState('Tous');
   const [selectedHistIndex, setSelectedHistIndex] = useState(0);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const barAnim = useRef(new Animated.Value(0)).current;
+
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  useEffect(() => {
+    if (!isLoading) setHasLoadedOnce(true);
+  }, [isLoading]);
+  const showInitialLoader = isLoading && !hasLoadedOnce;
+
+  // L'API /reservations/ retourne un champ 'time', absent du type Reservation partagé
+  // (utilisé ailleurs avec un shape différent) — on type le réel localement ici.
+  const upcomingList = upcoming as (Reservation & { time: string })[];
+  const pastList = past as (Reservation & { time: string })[];
+
+  const nextReservation = [...upcomingList].sort((a, b) =>
+    `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)
+  )[0] ?? null;
+
+  const pastSorted = [...pastList].sort((a, b) =>
+    `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
+  );
+
+  const nextRdvView = nextReservation ? (() => {
+    const d = parseApiDate(nextReservation.date);
+    return {
+      jour: String(d.getDate()).padStart(2, '0'),
+      mois: MOIS_ABBR_FR[d.getMonth()],
+      jourAbbr: JOURS_ABBR_FR[d.getDay()],
+      service: nextReservation.service_name,
+      time: nextReservation.time.slice(0, 5),
+      timeLabel: formatHmm(nextReservation.time),
+      barbier: 'Willo',
+      dateLabel: `${d.getDate()} ${MOIS_FR_FULL[d.getMonth()]} ${d.getFullYear()}`,
+      dateShort: `${d.getDate()} ${MOIS_ABBR_FR[d.getMonth()]}`,
+    };
+  })() : null;
+
+  const rdv = nextRdvView ?? {
+    jour: '23',
+    mois: t('reservations.mockRdv.monthAbbr'),
+    jourAbbr: t('reservations.mockRdv.dayAbbr'),
+    service: null as string | null,
+    time: '10:30',
+    timeLabel: '10:30',
+    barbier: NEXT_RDV.barbier,
+    dateLabel: NEXT_RDV.dateLabel,
+    dateShort: NEXT_RDV.dateShort,
+  };
 
   const TRANSACTIONS = TRANSACTIONS_META.map(tx => ({
     ...tx,
@@ -156,10 +227,21 @@ export default function ReservationsScreen() {
     threshold: `${tier.threshold} ${t('reservations.pointsSuffix')}`,
   }));
 
-  const HISTORIQUE = HISTORIQUE_META.map(h => ({
-    ...h,
-    service: t(h.serviceKey),
-  }));
+  const HISTORIQUE = error
+    ? HISTORIQUE_META.map(h => ({ ...h, service: t(h.serviceKey) }))
+    : pastSorted.map(r => {
+        const d = parseApiDate(r.date);
+        return {
+          jour: String(d.getDate()).padStart(2, '0'),
+          mois: MOIS_ABBR_FR[d.getMonth()],
+          service: r.service_name,
+          barbier: 'W',
+          barbierNom: 'Willo',
+          couleur: '#C9A84C',
+          prix: fmtPrice(PRICE_BY_SERVICE_NAME[r.service_name] ?? 0),
+          annee: r.date.slice(0, 4),
+        };
+      });
 
   const FAVORIS = FAVORIS_META.map(f => ({
     ...f,
@@ -222,9 +304,13 @@ export default function ReservationsScreen() {
   };
 
   const handleAddToCalendar = async () => {
+    const startDate = nextReservation
+      ? `${nextReservation.date.replace(/-/g, '')}T${nextReservation.time.replace(/:/g, '').slice(0, 6)}`
+      : '20260523T103000';
+    const endDate = nextReservation
+      ? `${nextReservation.date.replace(/-/g, '')}T${nextReservation.time.replace(/:/g, '').slice(0, 6)}`
+      : '20260523T110000';
     if (Platform.OS === 'web') {
-      const startDate = '20260523T103000';
-      const endDate = '20260523T110000';
       const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Coupe+%2B+Barbe+%E2%80%94+WilloBarber&dates=${startDate}/${endDate}&details=Barbier+:+Willo%0AAdresse+:+Rue+Auguste+Van+Zande+78%0ASolde+%C3%A0+payer+au+salon+:+42.70%E2%82%AC&location=Rue+Auguste+Van+Zande+78`;
       window.open(url, '_blank');
       return;
@@ -237,7 +323,7 @@ export default function ReservationsScreen() {
     } catch {
       Alert.alert(
         t('reservations.calendarAlert.title'),
-        `${NEXT_RDV_SERVICE_LABEL}\n\n📅  ${NEXT_RDV.dateLabel} ${t('reservations.cancelNextAlert.confirmWebMid')} ${NEXT_RDV.time}\n${t('reservations.calendarAlert.barberLabel')} ${NEXT_RDV.barbier}\n📍  ${NEXT_RDV.adresse}`,
+        `${rdv.service ? rdv.service : NEXT_RDV_SERVICE_LABEL}\n\n📅  ${rdv.dateLabel} ${t('reservations.cancelNextAlert.confirmWebMid')} ${rdv.time}\n${t('reservations.calendarAlert.barberLabel')} ${rdv.barbier}\n📍  ${NEXT_RDV.adresse}`,
         [{ text: t('common.ok') }]
       );
     }
@@ -359,54 +445,64 @@ export default function ReservationsScreen() {
               </View>
 
               {/* Prochain rendez-vous */}
-              <View style={styles.nextRdvBadgeWrap}>
-                <View style={styles.nextRdvBadge}>
-                  <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvBadge')}</Text>
-                </View>
-              </View>
-
-              <View style={styles.mockRdvCard}>
-                <View style={styles.mockRdvInner}>
-                  <View style={styles.mockDateBox}>
-                    <Text style={styles.mockDateNum}>23</Text>
-                    <Text style={styles.mockDateMon}>{t('reservations.mockRdv.monthAbbr')}</Text>
-                    <Text style={styles.mockDateDay}>{t('reservations.mockRdv.dayAbbr')}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.mockRdvService}>
-                      {t('reservations.mockRdv.servicePrefix')} <GoldItalic>{t('reservations.mockRdv.serviceGold')}</GoldItalic>
-                    </Text>
-                    <View style={styles.mockRdvInfoRow}>
-                      <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.time')}</Text>
-                      <Text style={styles.mockRdvVal}>10:30</Text>
-                    </View>
-                    <View style={styles.mockRdvInfoRow}>
-                      <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.barber')}</Text>
-                      <Text style={styles.mockRdvVal}>Willo</Text>
-                    </View>
-                    <View style={styles.mockRdvInfoRow}>
-                      <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.address')}</Text>
-                      <Text style={styles.mockRdvVal}>Rue Auguste Van Zande 78</Text>
+              {showInitialLoader && (
+                <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
+              )}
+              {!showInitialLoader && (error || nextRdvView) && (
+                <>
+                  <View style={styles.nextRdvBadgeWrap}>
+                    <View style={styles.nextRdvBadge}>
+                      <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvBadge')}</Text>
                     </View>
                   </View>
-                </View>
 
-                <View style={styles.soldePill}>
-                  <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
-                </View>
+                  <View style={styles.mockRdvCard}>
+                    <View style={styles.mockRdvInner}>
+                      <View style={styles.mockDateBox}>
+                        <Text style={styles.mockDateNum}>{rdv.jour}</Text>
+                        <Text style={styles.mockDateMon}>{rdv.mois}</Text>
+                        <Text style={styles.mockDateDay}>{rdv.jourAbbr}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.mockRdvService}>
+                          {rdv.service
+                            ? <GoldItalic>{rdv.service}</GoldItalic>
+                            : <>{t('reservations.mockRdv.servicePrefix')} <GoldItalic>{t('reservations.mockRdv.serviceGold')}</GoldItalic></>
+                          }
+                        </Text>
+                        <View style={styles.mockRdvInfoRow}>
+                          <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.time')}</Text>
+                          <Text style={styles.mockRdvVal}>{rdv.time}</Text>
+                        </View>
+                        <View style={styles.mockRdvInfoRow}>
+                          <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.barber')}</Text>
+                          <Text style={styles.mockRdvVal}>{rdv.barbier}</Text>
+                        </View>
+                        <View style={styles.mockRdvInfoRow}>
+                          <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.address')}</Text>
+                          <Text style={styles.mockRdvVal}>Rue Auguste Van Zande 78</Text>
+                        </View>
+                      </View>
+                    </View>
 
-                <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
-                  <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
-                </TouchableOpacity>
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-                  <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
-                    <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={handleCancelNextRdv} activeOpacity={0.85}>
-                    <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+                    <View style={styles.soldePill}>
+                      <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
+                    </View>
+
+                    <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
+                      <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                      <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
+                        <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={() => nextReservation ? setCancelTarget(nextReservation) : handleCancelNextRdv()} activeOpacity={0.85}>
+                        <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
+              )}
 
               {/* Resume card */}
               <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
@@ -493,7 +589,9 @@ export default function ReservationsScreen() {
                 ))}
               </ScrollView>
 
-              {filteredHist.length === 0 ? (
+              {showInitialLoader ? (
+                <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
+              ) : filteredHist.length === 0 ? (
                 <Text style={styles.emptyHist}>{t('reservations.emptyHistory')}</Text>
               ) : (
                 <View style={styles.histSplit}>
@@ -699,54 +797,64 @@ export default function ReservationsScreen() {
         </View>
 
         {/* ── 3. PROCHAIN RENDEZ-VOUS ───────────────────────────────── */}
-        <View style={styles.nextRdvBadgeWrap}>
-          <View style={styles.nextRdvBadge}>
-            <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvBadge')}</Text>
-          </View>
-        </View>
-
-        <View style={styles.mockRdvCard}>
-          <View style={styles.mockRdvInner}>
-            <View style={styles.mockDateBox}>
-              <Text style={styles.mockDateNum}>23</Text>
-              <Text style={styles.mockDateMon}>{t('reservations.mockRdv.monthAbbr')}</Text>
-              <Text style={styles.mockDateDay}>{t('reservations.mockRdv.dayAbbr')}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.mockRdvService}>
-                {t('reservations.mockRdv.servicePrefix')} <GoldItalic>{t('reservations.mockRdv.serviceGold')}</GoldItalic>
-              </Text>
-              <View style={styles.mockRdvInfoRow}>
-                <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.time')}</Text>
-                <Text style={styles.mockRdvVal}>10:30</Text>
-              </View>
-              <View style={styles.mockRdvInfoRow}>
-                <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.barber')}</Text>
-                <Text style={styles.mockRdvVal}>Willo</Text>
-              </View>
-              <View style={styles.mockRdvInfoRow}>
-                <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.address')}</Text>
-                <Text style={styles.mockRdvVal}>Rue Auguste Van Zande 78</Text>
+        {showInitialLoader && (
+          <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
+        )}
+        {!showInitialLoader && (error || nextRdvView) && (
+          <>
+            <View style={styles.nextRdvBadgeWrap}>
+              <View style={styles.nextRdvBadge}>
+                <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvBadge')}</Text>
               </View>
             </View>
-          </View>
 
-          <View style={styles.soldePill}>
-            <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
-          </View>
+            <View style={styles.mockRdvCard}>
+              <View style={styles.mockRdvInner}>
+                <View style={styles.mockDateBox}>
+                  <Text style={styles.mockDateNum}>{rdv.jour}</Text>
+                  <Text style={styles.mockDateMon}>{rdv.mois}</Text>
+                  <Text style={styles.mockDateDay}>{rdv.jourAbbr}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.mockRdvService}>
+                    {rdv.service
+                      ? <GoldItalic>{rdv.service}</GoldItalic>
+                      : <>{t('reservations.mockRdv.servicePrefix')} <GoldItalic>{t('reservations.mockRdv.serviceGold')}</GoldItalic></>
+                    }
+                  </Text>
+                  <View style={styles.mockRdvInfoRow}>
+                    <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.time')}</Text>
+                    <Text style={styles.mockRdvVal}>{rdv.time}</Text>
+                  </View>
+                  <View style={styles.mockRdvInfoRow}>
+                    <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.barber')}</Text>
+                    <Text style={styles.mockRdvVal}>{rdv.barbier}</Text>
+                  </View>
+                  <View style={styles.mockRdvInfoRow}>
+                    <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.address')}</Text>
+                    <Text style={styles.mockRdvVal}>Rue Auguste Van Zande 78</Text>
+                  </View>
+                </View>
+              </View>
 
-          <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
-            <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
-          </TouchableOpacity>
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-            <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
-              <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={handleCancelNextRdv} activeOpacity={0.85}>
-              <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              <View style={styles.soldePill}>
+                <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
+              </View>
+
+              <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
+                <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
+                  <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={() => nextReservation ? setCancelTarget(nextReservation) : handleCancelNextRdv()} activeOpacity={0.85}>
+                  <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
 
         {/* ── 4. REPRENEZ LÀ OÙ VOUS EN ÉTIEZ ────────────────────── */}
         <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
@@ -845,7 +953,9 @@ export default function ReservationsScreen() {
           ))}
         </ScrollView>
 
-        {filteredHist.length === 0 ? (
+        {showInitialLoader ? (
+          <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
+        ) : filteredHist.length === 0 ? (
           <Text style={styles.emptyHist}>{t('reservations.emptyHistory')}</Text>
         ) : isTablet ? (
           <View style={styles.histSplit}>
