@@ -12,6 +12,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { Fonts } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
+import type { TranslationKey } from '@/i18n/translations';
 import {
   ACOMPTE_FIXE,
   fmtPrice,
@@ -29,10 +31,10 @@ const GREEN_TEXT = '#6fc191';
 const INPUT_BG     = 'rgba(255,255,255,0.05)';
 const INPUT_BORDER = 'rgba(255,255,255,0.08)';
 
-const PAYMENT_TABS: { id: PaymentMethod; label: string }[] = [
-  { id: 'card',   label: 'Carte'      },
-  { id: 'apple',  label: 'Apple Pay'  },
-  { id: 'google', label: 'Google Pay' },
+const PAYMENT_TAB_KEYS: { id: PaymentMethod; labelKey: TranslationKey }[] = [
+  { id: 'card',   labelKey: 'step4.tabCard'   },
+  { id: 'apple',  labelKey: 'step4.tabApple'  },
+  { id: 'google', labelKey: 'step4.tabGoogle' },
 ];
 
 interface Props {
@@ -46,6 +48,7 @@ interface Props {
 }
 
 function BankCard({ cardForm }: { cardForm: CardForm }) {
+  const { t } = useLanguage();
   const rawNumber = cardForm.cardNumber.replace(/\D/g, '');
   const last4 = rawNumber.length >= 4 ? rawNumber.slice(-4) : rawNumber.padEnd(4, '').trimEnd();
   const displayLast = last4 || '4582';
@@ -86,13 +89,13 @@ function BankCard({ cardForm }: { cardForm: CardForm }) {
       {/* Bottom row */}
       <View style={card.bottomRow}>
         <View>
-          <Text style={card.metaLabel}>TITULAIRE</Text>
+          <Text style={card.metaLabel}>{t('step4.cardHolderLabel')}</Text>
           <Text style={[card.metaValue, !holderName && card.metaPlaceholder]}>
             {holderName ?? 'Antoine Rivière'}
           </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={card.metaLabel}>EXPIRATION</Text>
+          <Text style={card.metaLabel}>{t('step4.cardExpiryLabel')}</Text>
           <Text style={[card.metaValue, !expiry && card.metaPlaceholder]}>
             {expiry ?? '05 / 28'}
           </Text>
@@ -224,12 +227,14 @@ export function Step4Payment({
   onAmountChoiceChange,
 }: Props) {
   const { service } = booking;
+  const { t } = useLanguage();
 
   const price   = service ? service.price : 0;
   const deposit = ACOMPTE_FIXE;
   const isFull  = amountChoice === 'full';
   const payNow  = isFull ? price : deposit;
   const solde   = isFull ? 0 : price - deposit;
+  const serviceName = service ? t(`services.svc.${service.id}.name` as TranslationKey) : '—';
 
   const set = (key: keyof CardForm) => (v: string) =>
     onCardFormChange({ ...cardForm, [key]: v });
@@ -247,38 +252,38 @@ export function Step4Payment({
         keyboardShouldPersistTaps="handled"
       >
         {/* Title */}
-        <Text style={styles.title}>Acompte & paiement</Text>
+        <Text style={styles.title}>{t('step4.title')}</Text>
         <Text style={styles.subtitle}>
-          Un acompte fixe de 5 € sécurise votre créneau. Le solde se règle au salon.
+          {t('step4.subtitle')}
         </Text>
 
         {/* ── Informations de contact ───────────────────────────────────── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Informations de contact</Text>
+          <Text style={styles.cardTitle}>{t('step4.contactTitle')}</Text>
           <Text style={styles.cardSubtitle}>
-            Pour la confirmation et le rappel SMS la veille.
+            {t('step4.contactSubtitle')}
           </Text>
           <FieldInput
-            label="PRÉNOM"
+            label={t('step4.firstName')}
             value={cardForm.prenom}
             onChange={set('prenom')}
             placeholder="Jean"
           />
           <FieldInput
-            label="NOM"
+            label={t('step4.lastName')}
             value={cardForm.nom}
             onChange={set('nom')}
             placeholder="Dupont"
           />
           <FieldInput
-            label="EMAIL"
+            label={t('step4.email')}
             value={cardForm.email}
             onChange={set('email')}
             keyboard="email-address"
             placeholder="jean@exemple.com"
           />
           <FieldInput
-            label="TÉLÉPHONE"
+            label={t('step4.phone')}
             value={cardForm.phone}
             onChange={set('phone')}
             keyboard="phone-pad"
@@ -288,10 +293,10 @@ export function Step4Payment({
 
         {/* ── Méthode de paiement ───────────────────────────────────────── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Méthode de paiement</Text>
+          <Text style={styles.cardTitle}>{t('step4.paymentMethodTitle')}</Text>
 
           <View style={styles.tabs}>
-            {PAYMENT_TABS.map(({ id, label }) => {
+            {PAYMENT_TAB_KEYS.map(({ id, labelKey }) => {
               const isOn = paymentMethod === id;
               return (
                 <TouchableOpacity
@@ -301,7 +306,7 @@ export function Step4Payment({
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.tabText, isOn && styles.tabTextActive]}>
-                    {label}
+                    {t(labelKey)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -312,7 +317,7 @@ export function Step4Payment({
             <View>
               <BankCard cardForm={cardForm} />
               <FieldInput
-                label="NUMÉRO DE CARTE"
+                label={t('step4.cardNumberLabel')}
                 value={cardForm.cardNumber}
                 onChange={set('cardNumber')}
                 keyboard="numeric"
@@ -321,7 +326,7 @@ export function Step4Payment({
               <View style={styles.cardRow}>
                 <View style={{ flex: 1 }}>
                   <FieldInput
-                    label="EXPIRATION"
+                    label={t('step4.cardExpiryLabel')}
                     value={cardForm.expiry}
                     onChange={set('expiry')}
                     keyboard="numeric"
@@ -330,7 +335,7 @@ export function Step4Payment({
                 </View>
                 <View style={{ flex: 1 }}>
                   <FieldInput
-                    label="CVC"
+                    label={t('step4.cvcLabel')}
                     value={cardForm.cvc}
                     onChange={set('cvc')}
                     keyboard="numeric"
@@ -348,8 +353,8 @@ export function Step4Payment({
               </Text>
               <Text style={styles.altPayText}>
                 {paymentMethod === 'apple'
-                  ? 'Authentification via Touch ID ou Face ID'
-                  : 'Authentification via votre compte Google'}
+                  ? t('step4.altPayApple')
+                  : t('step4.altPayGoogle')}
               </Text>
             </View>
           )}
@@ -357,7 +362,7 @@ export function Step4Payment({
 
         {/* ── Montant à régler maintenant ──────────────────────────────── */}
         <View style={{ marginTop: 16 }}>
-          <Text style={styles.amountNowKicker}>MONTANT À RÉGLER MAINTENANT</Text>
+          <Text style={styles.amountNowKicker}>{t('step4.amountNowKicker')}</Text>
 
           {/* Option 1 — Acompte fixe obligatoire */}
           <TouchableOpacity
@@ -373,10 +378,10 @@ export function Step4Payment({
                 <View style={styles.radioLabelRow}>
                   <Text style={styles.radioAmount}>{fmtPrice(deposit)}</Text>
                   <View style={styles.badgeGreen}>
-                    <Text style={styles.badgeGreenText}>OBLIGATOIRE</Text>
+                    <Text style={styles.badgeGreenText}>{t('step4.depositBadge')}</Text>
                   </View>
                 </View>
-                <Text style={styles.radioSub}>Acompte fixe pour sécuriser votre créneau</Text>
+                <Text style={styles.radioSub}>{t('step4.depositSub')}</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -395,13 +400,13 @@ export function Step4Payment({
                 <View style={styles.radioLabelRow}>
                   <Text style={styles.radioAmount}>{fmtPrice(price)}</Text>
                   <View style={styles.badgeGrey}>
-                    <Text style={styles.badgeGreyText}>OPTIONNEL</Text>
+                    <Text style={styles.badgeGreyText}>{t('step4.fullBadge')}</Text>
                   </View>
                 </View>
-                <Text style={styles.radioSub}>Réglez la totalité maintenant, rien à payer au salon</Text>
+                <Text style={styles.radioSub}>{t('step4.fullSub')}</Text>
                 <View style={styles.economyRow}>
                   <Feather name="check-circle" size={12} color={GREEN_TEXT} />
-                  <Text style={styles.economyText}>Évitez la file d'attente au salon</Text>
+                  <Text style={styles.economyText}>{t('step4.fullEconomy')}</Text>
                 </View>
               </View>
             </View>
@@ -410,15 +415,15 @@ export function Step4Payment({
 
         {/* ── Montant à régler ──────────────────────────────────────────── */}
         <View style={styles.card}>
-          <Text style={styles.amountKicker}>MONTANT À RÉGLER</Text>
+          <Text style={styles.amountKicker}>{t('step4.amountKicker')}</Text>
 
           <View style={styles.amountRow}>
-            <Text style={styles.amountLabel}>{service?.name ?? '—'}</Text>
+            <Text style={styles.amountLabel}>{serviceName}</Text>
             <Text style={styles.amountValue}>{fmtPrice(price)}</Text>
           </View>
           <View style={styles.amountRow}>
             <Text style={styles.amountLabel}>
-              {isFull ? 'Paiement total' : 'Acompte'}
+              {isFull ? t('step4.paymentTotalLabel') : t('step4.depositLabel')}
             </Text>
             <Text style={[styles.amountValue, { color: GREEN_TEXT }]}>
               -{fmtPrice(payNow)}
@@ -428,10 +433,10 @@ export function Step4Payment({
           <View style={styles.amountSep} />
 
           <View style={styles.soldeRow}>
-            <Text style={styles.soldeLabel}>SOLDE À RÉGLER AU SALON</Text>
+            <Text style={styles.soldeLabel}>{t('step4.soldeLabel')}</Text>
             {isFull ? (
               <Text style={[styles.soldeValue, { color: 'rgba(255,255,255,0.35)', fontSize: 15 }]}>
-                Rien à régler au salon ✓
+                {t('step4.soldeNone')}
               </Text>
             ) : (
               <Text style={styles.soldeValue}>{fmtPrice(solde)}</Text>

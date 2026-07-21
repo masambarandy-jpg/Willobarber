@@ -15,23 +15,25 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { Fonts } from '@/constants';
 import { SERVICES, type StaticService } from '@/components/booking/data';
 import { useIsTablet } from '@/components/client/useIsTablet';
+import { useLanguage } from '@/contexts/LanguageContext';
+import type { TranslationKey } from '@/i18n/translations';
 
 const GOLD  = '#C9A84C';
 const CARD  = '#1A1814';
 const GREY  = '#6B6560';
 const SEP   = 'rgba(255,255,255,0.08)';
 
-const FILTERS = ['Tous', 'Coupe', 'Barbe', 'Package', 'Soin', 'Coloration', 'Enfant'] as const;
+const FILTERS = ['all', 'coupe', 'barbe', 'package', 'soin', 'coloration', 'enfant'] as const;
 type Filter = typeof FILTERS[number];
 
 function matchesFilter(svc: StaticService, filter: Filter): boolean {
-  if (filter === 'Tous') return true;
-  if (filter === 'Coupe') return svc.cat.includes('COUPE');
-  if (filter === 'Barbe') return svc.cat === 'BARBE';
-  if (filter === 'Package') return svc.cat === 'PACKAGE';
-  if (filter === 'Soin') return svc.cat === 'SOIN';
-  if (filter === 'Coloration') return svc.cat === 'COLORATION';
-  if (filter === 'Enfant') return svc.cat === 'ENFANT';
+  if (filter === 'all') return true;
+  if (filter === 'coupe') return svc.cat.includes('COUPE');
+  if (filter === 'barbe') return svc.cat === 'BARBE';
+  if (filter === 'package') return svc.cat === 'PACKAGE';
+  if (filter === 'soin') return svc.cat === 'SOIN';
+  if (filter === 'coloration') return svc.cat === 'COLORATION';
+  if (filter === 'enfant') return svc.cat === 'ENFANT';
   return true;
 }
 
@@ -39,13 +41,18 @@ export default function CatalogueScreen() {
   const router = useRouter();
   const isTablet = useIsTablet();
   const { width } = useWindowDimensions();
+  const { t } = useLanguage();
   const columns = !isTablet ? 1 : width >= 1024 ? 3 : 2;
-  const [activeFilter, setActiveFilter] = useState<Filter>('Tous');
+  const [activeFilter, setActiveFilter] = useState<Filter>('all');
 
   const filteredServices = useMemo(
     () => SERVICES.filter(s => matchesFilter(s, activeFilter)),
     [activeFilter]
   );
+
+  const svcName = (svc: StaticService) => t(`services.svc.${svc.id}.name` as TranslationKey);
+  const svcDesc = (svc: StaticService) => t(`services.svc.${svc.id}.desc` as TranslationKey);
+  const svcCat  = (svc: StaticService) => t(`services.cat.${svc.cat}` as TranslationKey);
 
   const handleReserve = (svc: StaticService) => {
     router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } });
@@ -56,9 +63,9 @@ export default function CatalogueScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.kicker}>NOS PRESTATIONS</Text>
-          <Text style={[styles.title, isTablet && { fontSize: 38 }]}>Services</Text>
-          <Text style={styles.subtitle}>Découvrez nos rituels signature.</Text>
+          <Text style={styles.kicker}>{t('services.kicker')}</Text>
+          <Text style={[styles.title, isTablet && { fontSize: 38 }]}>{t('services.title')}</Text>
+          <Text style={styles.subtitle}>{t('services.subtitle')}</Text>
         </View>
 
         {/* Filtres catégories */}
@@ -76,7 +83,7 @@ export default function CatalogueScreen() {
                 onPress={() => setActiveFilter(f)}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.pillText, isActive && styles.pillTextActive]}>{f}</Text>
+                <Text style={[styles.pillText, isActive && styles.pillTextActive]}>{t(`services.filter.${f}` as TranslationKey)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -105,11 +112,11 @@ export default function CatalogueScreen() {
                 />
                 <View style={styles.badgesRow}>
                   <View style={styles.catBadge}>
-                    <Text style={styles.catBadgeText}>{svc.cat}</Text>
+                    <Text style={styles.catBadgeText}>{svcCat(svc)}</Text>
                   </View>
                   {svc.popular && (
                     <View style={[styles.catBadge, styles.popularBadge]}>
-                      <Text style={styles.catBadgeText}>POPULAIRE</Text>
+                      <Text style={styles.catBadgeText}>{t('common.popular')}</Text>
                     </View>
                   )}
                 </View>
@@ -117,8 +124,8 @@ export default function CatalogueScreen() {
 
               {/* Zone texte */}
               <View style={styles.textZone}>
-                <Text style={styles.name}>{svc.name}</Text>
-                <Text style={styles.desc}>{svc.desc}</Text>
+                <Text style={styles.name}>{svcName(svc)}</Text>
+                <Text style={styles.desc}>{svcDesc(svc)}</Text>
 
                 <View style={styles.sep} />
 
@@ -141,7 +148,7 @@ export default function CatalogueScreen() {
                   activeOpacity={0.85}
                   onPress={() => handleReserve(svc)}
                 >
-                  <Text style={styles.reserveBtnText}>Sélectionner</Text>
+                  <Text style={styles.reserveBtnText}>{t('common.select')}</Text>
                   <View style={styles.reserveBtnArrowCircle}>
                     <Text style={styles.reserveBtnArrowText}>→</Text>
                   </View>

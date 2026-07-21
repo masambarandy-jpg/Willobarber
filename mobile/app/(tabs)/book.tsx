@@ -10,9 +10,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
 import { reservationsApi, servicesApi } from '@/services/api';
 import { useIsTablet } from '@/components/client/useIsTablet';
+import type { TranslationKey } from '@/i18n/translations';
 
 import { BookingHeader }      from '@/components/booking/BookingHeader';
 import { BookingStepper }     from '@/components/booking/BookingStepper';
@@ -50,12 +52,13 @@ function RecapSidebar({
   totalPrice: number;
   amountChoice: AmountChoice;
 }) {
+  const { t } = useLanguage();
   const { service, barber, date, time } = booking;
   const rows: { label: string; value: string }[] = [];
-  if (service) rows.push({ label: 'Prestation', value: service.name });
-  if (barber) rows.push({ label: 'Barbier', value: barber.name });
-  if (date) rows.push({ label: 'Date', value: formatDateShortFr(date) });
-  if (time) rows.push({ label: 'Heure', value: formatSlot(time) });
+  if (service) rows.push({ label: t('book.recap.service'), value: t(`services.svc.${service.id}.name` as TranslationKey) });
+  if (barber) rows.push({ label: t('book.recap.barber'), value: barber.name });
+  if (date) rows.push({ label: t('book.recap.date'), value: formatDateShortFr(date) });
+  if (time) rows.push({ label: t('book.recap.time'), value: formatSlot(time) });
 
   const amountDue = step === 4
     ? (amountChoice === 'full' ? (service?.price ?? 0) : ACOMPTE_FIXE)
@@ -63,9 +66,9 @@ function RecapSidebar({
 
   return (
     <View style={recapStyles.card}>
-      <Text style={recapStyles.title}>Récapitulatif</Text>
+      <Text style={recapStyles.title}>{t('book.recap.title')}</Text>
       {rows.length === 0 ? (
-        <Text style={recapStyles.empty}>Vos sélections apparaîtront ici au fil des étapes.</Text>
+        <Text style={recapStyles.empty}>{t('book.recap.empty')}</Text>
       ) : (
         <View style={recapStyles.rows}>
           {rows.map((r) => (
@@ -81,12 +84,12 @@ function RecapSidebar({
         <>
           <View style={recapStyles.sep} />
           <View style={recapStyles.totalRow}>
-            <Text style={recapStyles.totalLabel}>Total</Text>
+            <Text style={recapStyles.totalLabel}>{t('book.recap.total')}</Text>
             <Text style={recapStyles.totalValue}>{fmtPrice(totalPrice)}</Text>
           </View>
           {amountDue !== null && (
             <View style={recapStyles.totalRow}>
-              <Text style={recapStyles.dueLabel}>À payer maintenant</Text>
+              <Text style={recapStyles.dueLabel}>{t('book.recap.dueNow')}</Text>
               <Text style={recapStyles.dueValue}>{fmtPrice(amountDue)}</Text>
             </View>
           )}
@@ -128,12 +131,6 @@ const recapStyles = StyleSheet.create({
   dueLabel: { fontSize: 13, color: GOLD, fontWeight: '600' },
   dueValue: { fontFamily: Fonts.bold, fontSize: 16, fontWeight: '700', color: GOLD },
 });
-
-const CTA_LABELS: Record<number, string> = {
-  1: 'Continuer  →',
-  2: 'Continuer  →',
-  3: 'Aller au paiement  →',
-};
 
 function isCTAEnabled(step: number, booking: BookingState): boolean {
   switch (step) {
@@ -181,6 +178,12 @@ export default function BookScreen() {
   const isQuickbook = quickbook === 'true';
   const { isAuthenticated, user } = useAuth();
   const { showLoginModal } = useAuthModal();
+  const { t } = useLanguage();
+  const CTA_LABELS: Record<number, string> = {
+    1: t('book.cta.continue'),
+    2: t('book.cta.continue'),
+    3: t('book.cta.toPayment'),
+  };
   const prefilled = useRef(false);
   const [step,          setStep]          = useState(isQuickbook ? 4 : 1);
   const [confirmed,     setConfirmed]     = useState(false);
@@ -245,7 +248,7 @@ export default function BookScreen() {
 
   const handleNext = async () => {
     if (step === 1 && !isAuthenticated) {
-      showLoginModal(() => setStep(2), 'Pour réserver, connectez-vous en 10 secondes.');
+      showLoginModal(() => setStep(2), t('book.loginPrompt'));
       return;
     }
     if (step < 4) {
@@ -388,7 +391,7 @@ export default function BookScreen() {
                 {(() => {
                   const price = booking.service?.price ?? 0;
                   const amt = amountChoice === 'full' ? price : ACOMPTE_FIXE;
-                  return `Payer ${fmtPrice(amt)} et réserver →`;
+                  return `${t('book.cta.payPrefix')} ${fmtPrice(amt)} ${t('book.cta.paySuffix')}`;
                 })()}
               </Text>
             </TouchableOpacity>
@@ -403,7 +406,7 @@ export default function BookScreen() {
               onPress={handleBack}
               activeOpacity={0.8}
             >
-              <Text style={styles.backBtnText}>← Retour</Text>
+              <Text style={styles.backBtnText}>{t('common.back')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.cta, !ctaEnabled && styles.ctaDisabled]}

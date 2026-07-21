@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Fonts } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { type BookingState, formatDateShortFr, formatSlot } from './data';
+import type { TranslationKey } from '@/i18n/translations';
 
 const GOLD        = '#C9A84C';
 const HEADER_BG   = 'rgba(13,12,10,0.85)';
@@ -15,14 +17,15 @@ interface Props {
 
 export function BookingHeader({ paddingTop, booking, totalPrice }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useLanguage();
 
   const { service, barber, date, time } = booking;
 
   const recapItems: { label: string; value: string }[] = [];
-  if (service) recapItems.push({ label: 'Prestation', value: service.name });
-  if (barber)  recapItems.push({ label: 'Barbier',    value: barber.name });
-  if (date)    recapItems.push({ label: 'Date',        value: formatDateShortFr(date) });
-  if (time)    recapItems.push({ label: 'Heure',       value: formatSlot(time) });
+  if (service) recapItems.push({ label: t('book.recap.service'), value: t(`services.svc.${service.id}.name` as TranslationKey) });
+  if (barber)  recapItems.push({ label: t('book.recap.barber'), value: barber.name });
+  if (date)    recapItems.push({ label: t('book.recap.date'), value: formatDateShortFr(date) });
+  if (time)    recapItems.push({ label: t('book.recap.time'), value: formatSlot(time) });
 
   const hasRecap = recapItems.length > 0;
 
@@ -47,7 +50,7 @@ export function BookingHeader({ paddingTop, booking, totalPrice }: Props) {
       >
         <View style={styles.accordionLeft}>
           <Text style={styles.chevron}>{expanded ? '↑' : '↓'}</Text>
-          <Text style={styles.accordionLabel}>Voir le récapitulatif</Text>
+          <Text style={styles.accordionLabel}>{t('bookingHeader.recapToggle')}</Text>
         </View>
         {totalPrice > 0 && (
           <Text style={styles.accordionPrice}>{totalPrice} €</Text>

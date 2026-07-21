@@ -21,6 +21,7 @@ import { BlurView } from 'expo-blur';
 import { Feather } from '@expo/vector-icons';
 import { appointmentsApi, authApi, TokenStorage } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
 
 type AuthModalContextType = {
@@ -38,6 +39,7 @@ const AuthModalContext = createContext<AuthModalContextType>({
 
 export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const { refreshUser } = useAuth();
+  const { t } = useLanguage();
 
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState<string | undefined>(undefined);
@@ -126,11 +128,11 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     const rawValue = identifier.trim();
     const value = emailSuffix && !rawValue.includes('@') ? `${rawValue}${emailSuffix}` : rawValue;
     if (!value) {
-      setError('Veuillez saisir votre email ou numéro de téléphone.');
+      setError(t('authModal.errorEmpty'));
       return;
     }
     if (!isEmail(value) && !isPhone(value)) {
-      setError('Veuillez saisir un email ou un numéro de téléphone valide.');
+      setError(t('authModal.errorInvalid'));
       return;
     }
     setLoading(true);
@@ -138,7 +140,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await appointmentsApi.checkClient(value);
       if (res.status !== 'exists') {
-        setError('Aucun compte trouvé pour cet email ou ce numéro.');
+        setError(t('authModal.errorNotFound'));
         return;
       }
       const { access, refresh } = await authApi.passwordlessLogin(value);
@@ -147,7 +149,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
       handleSuccess();
     } catch (error: any) {
       console.log('Login error:', error?.response?.data || error?.message);
-      setError('Connexion impossible. Vérifiez votre connexion et réessayez.');
+      setError(t('authModal.errorGeneric'));
     } finally {
       setLoading(false);
     }
@@ -236,10 +238,10 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
 
-              <Text style={styles.kicker}>— ESPACE CLIENT</Text>
-              <Text style={styles.title}>Connexion</Text>
+              <Text style={styles.kicker}>{t('authModal.kicker')}</Text>
+              <Text style={styles.title}>{t('authModal.title')}</Text>
               <Text style={styles.subtitle}>
-                {message || 'Accédez à vos rendez-vous, votre historique et vos points fidélité.'}
+                {message || t('authModal.subtitleDefault')}
               </Text>
 
               <View style={styles.quickRow}>
@@ -249,7 +251,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                   activeOpacity={0.75}
                 >
                   <Text style={styles.quickPillGmailIcon}>G</Text>
-                  <Text style={styles.quickPillText}>Gmail</Text>
+                  <Text style={styles.quickPillText}>{t('authModal.gmail')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.quickPill}
@@ -257,17 +259,17 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                   activeOpacity={0.75}
                 >
                   <Feather name="mail" size={14} color="#4A9EFF" />
-                  <Text style={styles.quickPillText}>Outlook</Text>
+                  <Text style={styles.quickPillText}>{t('authModal.outlook')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.quickPill} onPress={handleOtherProvider} activeOpacity={0.75}>
                   <Feather name="user" size={14} color="rgba(255,255,255,0.7)" />
-                  <Text style={styles.quickPillText}>Autre</Text>
+                  <Text style={styles.quickPillText}>{t('authModal.other')}</Text>
                 </TouchableOpacity>
               </View>
 
               <View style={styles.separatorRow}>
                 <View style={styles.separatorLine} />
-                <Text style={styles.separatorText}>ou entrez votre email ou téléphone</Text>
+                <Text style={styles.separatorText}>{t('authModal.separator')}</Text>
                 <View style={styles.separatorLine} />
               </View>
 
@@ -277,7 +279,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                 </View>
               )}
 
-              <Text style={styles.label}>PRÉNOM</Text>
+              <Text style={styles.label}>{t('authModal.firstNameLabel')}</Text>
               <View style={styles.inputWrap}>
                 <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
                 <TextInput
@@ -293,7 +295,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                 <Feather name="chevron-down" size={16} color="rgba(255,255,255,0.4)" />
               </View>
 
-              <Text style={styles.label}>E-MAIL OU TÉLÉPHONE</Text>
+              <Text style={styles.label}>{t('authModal.identifierLabel')}</Text>
               <Animated.View style={[styles.inputWrap, { borderColor: identifierBorderColor }]}>
                 <Feather name={isPhone(identifier) ? 'phone' : 'mail'} size={16} color="rgba(255,255,255,0.4)" />
                 <View style={styles.identifierInner}>
@@ -307,7 +309,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                       if (error) setError('');
                       if (emailSuffix && t.includes('@')) setEmailSuffix('');
                     }}
-                    placeholder={emailSuffix ? '' : 'exemple@email.com ou +32 470 ...'}
+                    placeholder={emailSuffix ? '' : t('authModal.identifierPlaceholder')}
                     placeholderTextColor="rgba(255,255,255,0.35)"
                     keyboardType="default"
                     autoCapitalize="none"
@@ -334,8 +336,8 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
               {!!emailSuffix && (
                 <Text style={styles.providerHint}>
                   {emailSuffix === '@gmail.com'
-                    ? 'Entrez votre adresse Gmail et continuez'
-                    : 'Entrez votre adresse Outlook et continuez'}
+                    ? t('authModal.gmailHint')
+                    : t('authModal.outlookHint')}
                 </Text>
               )}
 
@@ -347,7 +349,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
               >
                 {loading
                   ? <ActivityIndicator color="#1A1208" size="small" />
-                  : <Text style={styles.btnPrimaryText}>Accéder à mon espace  →</Text>
+                  : <Text style={styles.btnPrimaryText}>{t('authModal.submit')}</Text>
                 }
               </TouchableOpacity>
             </Animated.View>

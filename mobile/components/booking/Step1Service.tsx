@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fonts } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { SERVICES, type BookingState, type StaticService } from './data';
+import type { TranslationKey } from '@/i18n/translations';
 
 const GOLD       = '#C9A84C';
 const CARD       = '#1A1814';
@@ -28,6 +30,7 @@ interface Props {
 export function Step1Service({ booking, onSelect, onChildCountChange }: Props) {
   const selected   = booking.service;
   const childCount = booking.childCount;
+  const { t } = useLanguage();
 
   return (
     <ScrollView
@@ -37,10 +40,10 @@ export function Step1Service({ booking, onSelect, onChildCountChange }: Props) {
       keyboardShouldPersistTaps="handled"
     >
       {/* Title section */}
-      <Text style={styles.kicker}>RÉSERVATION</Text>
-      <Text style={styles.title}>Choisissez votre prestation</Text>
+      <Text style={styles.kicker}>{t('booking.kicker')}</Text>
+      <Text style={styles.title}>{t('step1.title')}</Text>
       <Text style={styles.subtitle}>
-        Sélectionnez l'une de nos six prestations signature.
+        {t('step1.subtitle')}
       </Text>
 
       {/* Service cards */}
@@ -72,11 +75,11 @@ export function Step1Service({ booking, onSelect, onChildCountChange }: Props) {
               />
               <View style={styles.photoBadges}>
                 <View style={styles.catBadge}>
-                  <Text style={styles.catBadgeText}>{svc.cat}</Text>
+                  <Text style={styles.catBadgeText}>{t(`services.cat.${svc.cat}` as TranslationKey)}</Text>
                 </View>
                 {svc.popular && (
                   <View style={styles.popularBadge}>
-                    <Text style={styles.popularBadgeText}>POPULAIRE</Text>
+                    <Text style={styles.popularBadgeText}>{t('common.popular')}</Text>
                   </View>
                 )}
               </View>
@@ -89,10 +92,10 @@ export function Step1Service({ booking, onSelect, onChildCountChange }: Props) {
             {/* Text zone */}
             <View style={styles.cardTextZone}>
               {/* Name */}
-              <Text style={styles.cardName}>{svc.name}</Text>
+              <Text style={styles.cardName}>{t(`services.svc.${svc.id}.name` as TranslationKey)}</Text>
 
               {/* Description */}
-              <Text style={styles.cardDesc}>{svc.desc}</Text>
+              <Text style={styles.cardDesc}>{t(`services.svc.${svc.id}.desc` as TranslationKey)}</Text>
 
               {/* Separator */}
               <View style={styles.cardSep} />
@@ -111,7 +114,7 @@ export function Step1Service({ booking, onSelect, onChildCountChange }: Props) {
                 <View style={styles.childBlock}>
                   <View style={styles.childSep} />
                   <View style={styles.childRow}>
-                    <Text style={styles.childLabel}>Nombre d'enfants</Text>
+                    <Text style={styles.childLabel}>{t('step1.childCountLabel')}</Text>
                     <View style={styles.counterRow}>
                       <TouchableOpacity
                         style={styles.counterBtnMinus}

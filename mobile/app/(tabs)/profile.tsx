@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { authApi, recommendationsApi, TokenStorage } from '@/services/api';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
@@ -26,13 +27,14 @@ import { useIsTablet } from '@/components/client/useIsTablet';
 
 function LoadingDots() {
   const [count, setCount] = useState(1);
+  const { t } = useLanguage();
 
   useEffect(() => {
     const id = setInterval(() => setCount((c) => (c % 3) + 1), 450);
     return () => clearInterval(id);
   }, []);
 
-  return <Text style={styles.aiLoadingText}>✨ Analyse de vos habitudes en cours{'.'.repeat(count)}</Text>;
+  return <Text style={styles.aiLoadingText}>{t('profile.aiLoadingPrefix')}{'.'.repeat(count)}</Text>;
 }
 
 
@@ -151,6 +153,7 @@ Si vous estimez que le traitement de vos données ne respecte pas la réglementa
 export default function ProfileScreen() {
   const { user, isAuthenticated, logout, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
+  const { t } = useLanguage();
   const router = useRouter();
   const isTablet = useIsTablet();
   const [editModal, setEditModal] = useState(false);
@@ -255,17 +258,17 @@ export default function ProfileScreen() {
     return (
       <View style={[styles.root, { alignItems: 'center', justifyContent: 'center', padding: 28 }]}>
         <Text style={{ fontFamily: Fonts.bold, fontSize: 28, fontWeight: '700', color: '#fff', marginBottom: 10, textAlign: 'center' }}>
-          Mon Profil
+          {t('profile.notAuth.title')}
         </Text>
         <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 32, lineHeight: 22 }}>
-          Connectez-vous pour accéder à votre profil et gérer votre compte.
+          {t('profile.notAuth.sub')}
         </Text>
         <TouchableOpacity
           style={{ backgroundColor: '#C9A84C', borderRadius: 100, paddingVertical: 15, paddingHorizontal: 40 }}
-          onPress={() => showLoginModal(undefined, 'Connectez-vous pour accéder à votre profil.')}
+          onPress={() => showLoginModal(undefined, t('profile.notAuth.loginPrompt'))}
           activeOpacity={0.85}
         >
-          <Text style={{ color: '#1A1208', fontWeight: '700', fontSize: 15 }}>Se connecter</Text>
+          <Text style={{ color: '#1A1208', fontWeight: '700', fontSize: 15 }}>{t('common.login')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -291,25 +294,25 @@ export default function ProfileScreen() {
       await refreshUser();
       setEditModal(false);
     } catch {
-      Alert.alert('Erreur', 'Impossible de sauvegarder.');
+      Alert.alert(t('common.error'), t('profile.saveError'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleChangePassword = async () => {
-    if (!oldPw || !newPw || !newPw2) { Alert.alert('Erreur', 'Tous les champs sont requis.'); return; }
-    if (newPw !== newPw2) { Alert.alert('Erreur', 'Les mots de passe ne correspondent pas.'); return; }
+    if (!oldPw || !newPw || !newPw2) { Alert.alert(t('common.error'), t('profile.pwModal.errorRequired')); return; }
+    if (newPw !== newPw2) { Alert.alert(t('common.error'), t('profile.pwModal.errorMismatch')); return; }
     setSaving(true);
     try {
       await authApi.changePassword({ old_password: oldPw, new_password: newPw, new_password2: newPw2 });
       setPwModal(false);
       setOldPw(''); setNewPw(''); setNewPw2('');
-      Alert.alert('✅ Mot de passe modifié');
+      Alert.alert(t('profile.pwModal.success'));
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: Record<string, string[]> } })?.response?.data;
-      const detail = msg ? Object.values(msg).flat().join('\n') : 'Erreur.';
-      Alert.alert('Erreur', detail);
+      const detail = msg ? Object.values(msg).flat().join('\n') : t('profile.pwModal.genericError');
+      Alert.alert(t('common.error'), detail);
     } finally {
       setSaving(false);
     }
@@ -327,14 +330,14 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     if (Platform.OS === 'web') {
-      if (window.confirm('Voulez-vous vous déconnecter ?')) {
+      if (window.confirm(t('profile.logoutConfirm.message'))) {
         performLogout();
       }
       return;
     }
-    Alert.alert('Déconnexion', 'Êtes-vous sûr de vouloir vous déconnecter ?', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Se déconnecter', style: 'destructive', onPress: performLogout },
+    Alert.alert(t('profile.logoutConfirm.title'), t('profile.logoutConfirm.message'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.logout'), style: 'destructive', onPress: performLogout },
     ]);
   };
 
@@ -348,14 +351,14 @@ export default function ProfileScreen() {
 
       {aiRec && showAiCard && aiText && (
         <Animated.View style={[styles.aiCard, { opacity: aiCardOpacity }]}>
-          <Text style={styles.aiCardBadge}>✨ Généré par Claude IA</Text>
+          <Text style={styles.aiCardBadge}>{t('profile.aiCardBadge')}</Text>
           <Text style={styles.aiCardText}>{aiText}</Text>
           <TouchableOpacity
             style={styles.aiCardButton}
             onPress={() => router.push('/(tabs)/book')}
             activeOpacity={0.85}
           >
-            <Text style={styles.aiCardButtonText}>Réserver maintenant</Text>
+            <Text style={styles.aiCardButtonText}>{t('common.bookNow')}</Text>
           </TouchableOpacity>
           {aiGeneratedAt && <Text style={styles.aiCardTimestamp}>{aiGeneratedAt}</Text>}
         </Animated.View>
@@ -386,31 +389,31 @@ export default function ProfileScreen() {
             <View style={[styles.statsRow, isTablet && styles.statsRowTablet]}>
               <View style={styles.statItem}>
                 <Text style={styles.statNum}>{loyaltyPoints}</Text>
-                <Text style={styles.statLabel}>Points{'\n'}fidélité</Text>
+                <Text style={styles.statLabel}>{t('profile.stats.loyaltyPointsLine1')}{'\n'}{t('profile.stats.loyaltyPointsLine2')}</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <Text style={[styles.statNum, lateCancellations > 0 && { color: '#C0392B' }]}>{lateCancellations}</Text>
-                <Text style={styles.statLabel}>Annulations{'\n'}tardives</Text>
+                <Text style={styles.statLabel}>{t('profile.stats.lateCancellationsLine1')}{'\n'}{t('profile.stats.lateCancellationsLine2')}</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <Text style={styles.statNum}>{memberSince}</Text>
-                <Text style={styles.statLabel}>Membre{'\n'}depuis</Text>
+                <Text style={styles.statLabel}>{t('profile.stats.memberSinceLine1')}{'\n'}{t('profile.stats.memberSinceLine2')}</Text>
               </View>
             </View>
 
             {/* Account settings */}
             <View style={[styles.settingCard, isTablet && styles.settingCardTablet]}>
-              <SectionTitle label="Mon compte" />
+              <SectionTitle label={t('profile.account.title')} />
               <View style={styles.settingDivider} />
-              <SettingRow icon="✏️" label="Modifier le profil" onPress={() => { setFirstName(user.first_name); setLastName(user.last_name); setPhone(user.phone ?? ''); setAiRec(user.ai_recommendations); setEditModal(true); }} />
+              <SettingRow icon="✏️" label={t('profile.account.editProfile')} onPress={() => { setFirstName(user.first_name); setLastName(user.last_name); setPhone(user.phone ?? ''); setAiRec(user.ai_recommendations); setEditModal(true); }} />
               <View style={styles.settingDivider} />
-              <SettingRow icon="🔑" label="Changer le mot de passe" onPress={() => setPwModal(true)} />
+              <SettingRow icon="🔑" label={t('profile.account.changePassword')} onPress={() => setPwModal(true)} />
               <View style={styles.settingDivider} />
               <SettingRow
                 icon="🤖"
-                label="Recommandations IA"
+                label={t('profile.account.aiRecommendations')}
                 rightElement={
                   <Switch
                     value={aiRec}
@@ -438,7 +441,7 @@ export default function ProfileScreen() {
                       await patchPromise;
 
                       if (!v) {
-                        Alert.alert('Recommandations IA désactivées', 'Vous pouvez les réactiver à tout moment.');
+                        Alert.alert(t('profile.aiDisabledTitle'), t('profile.aiDisabledMsg'));
                       }
                     }}
                     trackColor={{ false: 'rgba(255,255,255,0.12)', true: 'rgba(201,168,76,0.4)' }}
@@ -455,7 +458,7 @@ export default function ProfileScreen() {
         {/* Recommandations IA — pleine largeur sur iPad */}
         {isTablet && !!(aiRec && (aiLoading || (showAiCard && aiText))) && (
           <View style={styles.settingCard}>
-            <SectionTitle label="Recommandations IA" />
+            <SectionTitle label={t('profile.account.aiRecommendations')} />
             <View style={styles.settingDivider} />
             {aiBlock}
           </View>
@@ -463,26 +466,26 @@ export default function ProfileScreen() {
 
         {/* Info */}
         <View style={styles.settingCard}>
-          <SectionTitle label="Informations" />
+          <SectionTitle label={t('profile.info.title')} />
           <View style={styles.settingDivider} />
           {isTablet ? (
             <View style={styles.legalRowTablet}>
               <View style={{ flex: 1 }}>
-                <SettingRow icon="📄" label="Conditions d'utilisation" onPress={() => setLegalModal('terms')} />
+                <SettingRow icon="📄" label={t('profile.info.terms')} onPress={() => setLegalModal('terms')} />
               </View>
               <View style={{ flex: 1 }}>
-                <SettingRow icon="🔒" label="Politique de confidentialité" onPress={() => setLegalModal('privacy')} />
+                <SettingRow icon="🔒" label={t('profile.info.privacy')} onPress={() => setLegalModal('privacy')} />
               </View>
             </View>
           ) : (
             <>
-              <SettingRow icon="📄" label="Conditions d'utilisation" onPress={() => setLegalModal('terms')} />
+              <SettingRow icon="📄" label={t('profile.info.terms')} onPress={() => setLegalModal('terms')} />
               <View style={styles.settingDivider} />
-              <SettingRow icon="🔒" label="Politique de confidentialité" onPress={() => setLegalModal('privacy')} />
+              <SettingRow icon="🔒" label={t('profile.info.privacy')} onPress={() => setLegalModal('privacy')} />
             </>
           )}
           <View style={styles.settingDivider} />
-          <SettingRow icon="📍" label="WilloBarber" value="Rue Auguste Van Zande 78, Bruxelles" />
+          <SettingRow icon="📍" label={t('profile.info.address')} value="Rue Auguste Van Zande 78, Bruxelles" />
         </View>
 
         {/* Logout */}
@@ -494,7 +497,7 @@ export default function ProfileScreen() {
               background={TouchableNativeFeedback.Ripple('rgba(192,57,43,0.15)', false)}
             >
               <View style={{ paddingVertical: 15, alignItems: 'center' }}>
-                <Text style={styles.logoutBtnText}>{loggingOut ? 'Déconnexion…' : 'Se déconnecter'}</Text>
+                <Text style={styles.logoutBtnText}>{loggingOut ? t('common.loggingOut') : t('common.logout')}</Text>
               </View>
             </TouchableNativeFeedback>
           </View>
@@ -505,7 +508,7 @@ export default function ProfileScreen() {
             disabled={loggingOut}
             activeOpacity={0.85}
           >
-            <Text style={styles.logoutBtnText}>{loggingOut ? 'Déconnexion…' : 'Se déconnecter'}</Text>
+            <Text style={styles.logoutBtnText}>{loggingOut ? t('common.loggingOut') : t('common.logout')}</Text>
           </TouchableOpacity>
         )}
 
@@ -517,28 +520,28 @@ export default function ProfileScreen() {
         <View style={[styles.overlay, isTablet && styles.overlayTablet]}>
           <View style={[styles.modal, isTablet && styles.modalTablet]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Modifier le profil</Text>
+              <Text style={styles.modalTitle}>{t('profile.editModal.title')}</Text>
               <Pressable onPress={() => setEditModal(false)}><Text style={styles.modalClose}>✕</Text></Pressable>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <ModalField label="Prénom" value={firstName} onChangeText={setFirstName} placeholder="Jean" />
-              <ModalField label="Nom" value={lastName} onChangeText={setLastName} placeholder="Dupont" />
-              <ModalField label="Téléphone" value={phone} onChangeText={setPhone} placeholder="+32 470 …" keyboardType="phone-pad" />
+              <ModalField label={t('profile.editModal.firstName')} value={firstName} onChangeText={setFirstName} placeholder="Jean" />
+              <ModalField label={t('profile.editModal.lastName')} value={lastName} onChangeText={setLastName} placeholder="Dupont" />
+              <ModalField label={t('profile.editModal.phone')} value={phone} onChangeText={setPhone} placeholder="+32 470 …" keyboardType="phone-pad" />
               <View style={styles.switchRow}>
-                <Text style={styles.switchLabel}>Recommandations IA</Text>
+                <Text style={styles.switchLabel}>{t('profile.editModal.aiToggleLabel')}</Text>
                 <Switch value={aiRec} onValueChange={setAiRec} trackColor={{ false: 'rgba(255,255,255,0.12)', true: 'rgba(201,168,76,0.4)' }} thumbColor={aiRec ? '#C9A84C' : 'rgba(255,255,255,0.5)'} />
               </View>
               {Platform.OS === 'android' ? (
                 <View style={[styles.btnPrimary, saving && { opacity: 0.7 }, { overflow: 'hidden', paddingVertical: 0 }]}>
                   <TouchableNativeFeedback onPress={handleSaveProfile} disabled={saving} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}>
                     <View style={{ paddingVertical: 15, alignItems: 'center' }}>
-                      <Text style={styles.btnPrimaryText}>{saving ? 'Sauvegarde…' : 'Sauvegarder'}</Text>
+                      <Text style={styles.btnPrimaryText}>{saving ? t('common.saving') : t('common.save')}</Text>
                     </View>
                   </TouchableNativeFeedback>
                 </View>
               ) : (
                 <TouchableOpacity style={[styles.btnPrimary, saving && { opacity: 0.7 }]} onPress={handleSaveProfile} disabled={saving} activeOpacity={0.85}>
-                  <Text style={styles.btnPrimaryText}>{saving ? 'Sauvegarde…' : 'Sauvegarder'}</Text>
+                  <Text style={styles.btnPrimaryText}>{saving ? t('common.saving') : t('common.save')}</Text>
                 </TouchableOpacity>
               )}
             </ScrollView>
@@ -551,23 +554,23 @@ export default function ProfileScreen() {
         <View style={[styles.overlay, isTablet && styles.overlayTablet]}>
           <View style={[styles.modal, isTablet && styles.modalTablet]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Changer le mot de passe</Text>
+              <Text style={styles.modalTitle}>{t('profile.pwModal.title')}</Text>
               <Pressable onPress={() => setPwModal(false)}><Text style={styles.modalClose}>✕</Text></Pressable>
             </View>
-            <ModalField label="Mot de passe actuel" value={oldPw} onChangeText={setOldPw} placeholder="••••••••" secureTextEntry />
-            <ModalField label="Nouveau mot de passe" value={newPw} onChangeText={setNewPw} placeholder="••••••••" secureTextEntry />
-            <ModalField label="Confirmer" value={newPw2} onChangeText={setNewPw2} placeholder="••••••••" secureTextEntry />
+            <ModalField label={t('profile.pwModal.oldPw')} value={oldPw} onChangeText={setOldPw} placeholder="••••••••" secureTextEntry />
+            <ModalField label={t('profile.pwModal.newPw')} value={newPw} onChangeText={setNewPw} placeholder="••••••••" secureTextEntry />
+            <ModalField label={t('profile.pwModal.confirmPw')} value={newPw2} onChangeText={setNewPw2} placeholder="••••••••" secureTextEntry />
             {Platform.OS === 'android' ? (
               <View style={[styles.btnPrimary, saving && { opacity: 0.7 }, { overflow: 'hidden', paddingVertical: 0 }]}>
                 <TouchableNativeFeedback onPress={handleChangePassword} disabled={saving} background={TouchableNativeFeedback.Ripple('rgba(26,18,8,0.2)', false)}>
                   <View style={{ paddingVertical: 15, alignItems: 'center' }}>
-                    <Text style={styles.btnPrimaryText}>{saving ? 'Modification…' : 'Changer le mot de passe'}</Text>
+                    <Text style={styles.btnPrimaryText}>{saving ? t('profile.pwModal.submitting') : t('profile.pwModal.submit')}</Text>
                   </View>
                 </TouchableNativeFeedback>
               </View>
             ) : (
               <TouchableOpacity style={[styles.btnPrimary, saving && { opacity: 0.7 }]} onPress={handleChangePassword} disabled={saving} activeOpacity={0.85}>
-                <Text style={styles.btnPrimaryText}>{saving ? 'Modification…' : 'Changer le mot de passe'}</Text>
+                <Text style={styles.btnPrimaryText}>{saving ? t('profile.pwModal.submitting') : t('profile.pwModal.submit')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -580,7 +583,7 @@ export default function ProfileScreen() {
           <View style={[styles.legalModalBox, isTablet && styles.legalModalBoxTablet]}>
             <View style={styles.modalHeader}>
               <Text style={styles.legalTitle}>
-                {legalModal === 'terms' ? "Conditions d'utilisation" : 'Politique de confidentialité'}
+                {legalModal === 'terms' ? t('profile.info.terms') : t('profile.info.privacy')}
               </Text>
               <Pressable onPress={() => setLegalModal(null)}><Text style={styles.legalClose}>✕</Text></Pressable>
             </View>
@@ -590,7 +593,7 @@ export default function ProfileScreen() {
               </Text>
             </ScrollView>
             <TouchableOpacity style={styles.legalCloseBtn} onPress={() => setLegalModal(null)} activeOpacity={0.85}>
-              <Text style={styles.legalCloseBtnText}>Fermer</Text>
+              <Text style={styles.legalCloseBtnText}>{t('profile.legalModal.close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
