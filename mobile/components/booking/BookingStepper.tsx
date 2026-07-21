@@ -1,15 +1,18 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Fonts } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const GOLD = '#C9A84C';
-const LABELS = ['Prestation', 'Barbier', 'Date & heure', 'Paiement'];
+const LABEL_KEYS = ['bookingStepper.service', 'bookingStepper.barber', 'bookingStepper.dateTime', 'bookingStepper.payment'] as const;
 
 interface Props {
   currentStep: number;
 }
 
 export function BookingStepper({ currentStep }: Props) {
+  const { t } = useLanguage();
+  const LABELS = LABEL_KEYS.map(t);
   return (
     <View style={styles.container}>
       {LABELS.map((label, i) => {

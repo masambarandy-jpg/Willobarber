@@ -25,40 +25,41 @@ import { useReservations } from '@/hooks/useReservations';
 import type { Reservation } from '@/types';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
+import { useLanguage } from '@/contexts/LanguageContext';
+import type { TranslationKey } from '@/i18n/translations';
 
 const MOCK_LOYALTY = {
   points: 980,
   total_earned: 1480,
 };
 
-const TRANSACTIONS = [
-  { id: 1, date: '13 juil. 2026', reason: 'Coupe Signature (45€ × 2pts)',      points:   90, type: 'earn'  },
-  { id: 2, date: '03 juin 2026',  reason: 'Le Rituel (75€ × 2pts)',            points:  150, type: 'earn'  },
-  { id: 3, date: '20 mai 2026',   reason: 'Coupe gratuite utilisée',           points: -1000, type: 'spend' },
-  { id: 4, date: '05 mai 2026',   reason: 'Rasage Traditionnel (28€ × 2pts)',  points:   56, type: 'earn'  },
-  { id: 5, date: 'Bonus bienvenue', reason: 'Première réservation',           points:   20, type: 'bonus' },
+const TRANSACTIONS_META: { id: number; date?: string; dateKey?: TranslationKey; reasonKey: TranslationKey; points: number; type: string }[] = [
+  { id: 1, date: '13 juil. 2026', reasonKey: 'reservations.tx.signature', points:   90, type: 'earn'  },
+  { id: 2, date: '03 juin 2026',  reasonKey: 'reservations.tx.rituel',    points:  150, type: 'earn'  },
+  { id: 3, date: '20 mai 2026',   reasonKey: 'reservations.tx.freeCut',   points: -1000, type: 'spend' },
+  { id: 4, date: '05 mai 2026',   reasonKey: 'reservations.tx.rasage',    points:   56, type: 'earn'  },
+  { id: 5, dateKey: 'reservations.tx.welcomeLabel', reasonKey: 'reservations.tx.welcomeReason', points: 20, type: 'bonus' },
 ];
 
-const TIERS = [
-  { label: 'BRONZE', min: 0,   threshold: '0 pts',  color: '#8B6914' },
-  { label: 'ARGENT', min: 200, threshold: '200 pts', color: '#6B6560' },
-  { label: 'OR',     min: 500, threshold: '500 pts', color: '#C9A84C' },
+const TIERS_META = [
+  { labelKey: 'reservations.loyalty.tier.bronze' as TranslationKey, min: 0,   threshold: '0',   color: '#8B6914' },
+  { labelKey: 'reservations.loyalty.tier.argent' as TranslationKey, min: 200, threshold: '200', color: '#6B6560' },
+  { labelKey: 'reservations.loyalty.tier.or' as TranslationKey,     min: 500, threshold: '500', color: '#C9A84C' },
 ];
 
-const HISTORIQUE = [
-  { jour: '12', mois: 'AVR',  service: 'Signature WilloBarber', barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '45€', annee: '2026' },
-  { jour: '02', mois: 'MARS', service: 'Taille & rasage',        barbier: 'M', barbierNom: 'Malik', couleur: '#7A3B1E', prix: '28€', annee: '2026' },
-  { jour: '18', mois: 'JANV', service: 'Le Rituel',              barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '75€', annee: '2026' },
-  { jour: '05', mois: 'DÉC',  service: 'Coupe express',          barbier: 'I', barbierNom: 'Idris', couleur: '#1A6B4A', prix: '28€', annee: '2025' },
+const HISTORIQUE_META = [
+  { jour: '12', mois: 'AVR',  serviceKey: 'reservations.hist.signature' as TranslationKey, barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '45€', annee: '2026' },
+  { jour: '02', mois: 'MARS', serviceKey: 'reservations.hist.taille' as TranslationKey,     barbier: 'M', barbierNom: 'Malik', couleur: '#7A3B1E', prix: '28€', annee: '2026' },
+  { jour: '18', mois: 'JANV', serviceKey: 'reservations.hist.rituel' as TranslationKey,     barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '75€', annee: '2026' },
+  { jour: '05', mois: 'DÉC',  serviceKey: 'reservations.hist.express' as TranslationKey,    barbier: 'I', barbierNom: 'Idris', couleur: '#1A6B4A', prix: '28€', annee: '2025' },
 ];
 
-const FAVORIS = [
-  { nom: 'Signature WilloBarber', dur: '45 min', prix: '45€', count: '8×', date: '12 avr.' },
-  { nom: 'Taille & rasage',        dur: '30 min', prix: '28€', count: '5×', date: '2 mars'  },
+const FAVORIS_META = [
+  { nomKey: 'reservations.hist.signature' as TranslationKey, dur: '45 min', prix: '45€', count: '8×', date: '12 avr.' },
+  { nomKey: 'reservations.hist.taille' as TranslationKey,    dur: '30 min', prix: '28€', count: '5×', date: '2 mars'  },
 ];
 
 const NEXT_RDV = {
-  service:   'Coupe + Barbe',
   dateLabel: '23 mai 2026',
   dateShort: '23 MAI',
   time:      '10:30',
@@ -97,29 +98,30 @@ interface CancelModalProps {
 function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps) {
   const [reason, setReason] = useState('');
   const isTablet = useIsTablet();
+  const { t } = useLanguage();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
         <View style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
-          <Text style={styles.modalTitle}>Annuler ce rendez-vous</Text>
-          <Text style={styles.modalSub}>Annulation gratuite 24h avant. Au-delà, l'acompte peut être conservé.</Text>
-          <Text style={styles.fieldLabel}>Raison (optionnel)</Text>
+          <Text style={styles.modalTitle}>{t('reservations.cancelModal.title')}</Text>
+          <Text style={styles.modalSub}>{t('reservations.cancelModal.sub')}</Text>
+          <Text style={styles.fieldLabel}>{t('reservations.cancelModal.reasonLabel')}</Text>
           <TextInput
             style={styles.modalInput}
             value={reason}
             onChangeText={setReason}
-            placeholder="Motif d'annulation…"
+            placeholder={t('reservations.cancelModal.placeholder')}
             placeholderTextColor="rgba(255,255,255,0.3)"
             multiline
           />
           <View style={styles.modalBtns}>
             <TouchableOpacity style={styles.btnOutline} onPress={onClose}>
-              <Text style={styles.btnOutlineText}>Garder</Text>
+              <Text style={styles.btnOutlineText}>{t('reservations.cancelModal.keep')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
               {loading
                 ? <ActivityIndicator color="#C0392B" size="small" />
-                : <Text style={styles.btnDangerText}>Annuler le RDV</Text>
+                : <Text style={styles.btnDangerText}>{t('reservations.cancelModal.confirmCancel')}</Text>
               }
             </TouchableOpacity>
           </View>
@@ -135,11 +137,36 @@ export default function ReservationsScreen() {
   const { user, isAuthenticated } = useAuth();
   const { showLoginModal } = useAuthModal();
   const { isLoading, refetch, cancel } = useReservations();
+  const { t } = useLanguage();
   const [histFilter, setHistFilter] = useState('Tous');
   const [selectedHistIndex, setSelectedHistIndex] = useState(0);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const barAnim = useRef(new Animated.Value(0)).current;
+
+  const TRANSACTIONS = TRANSACTIONS_META.map(tx => ({
+    ...tx,
+    date: tx.dateKey ? t(tx.dateKey) : tx.date!,
+    reason: t(tx.reasonKey),
+  }));
+
+  const TIERS = TIERS_META.map(tier => ({
+    ...tier,
+    label: t(tier.labelKey),
+    threshold: `${tier.threshold} ${t('reservations.pointsSuffix')}`,
+  }));
+
+  const HISTORIQUE = HISTORIQUE_META.map(h => ({
+    ...h,
+    service: t(h.serviceKey),
+  }));
+
+  const FAVORIS = FAVORIS_META.map(f => ({
+    ...f,
+    nom: t(f.nomKey),
+  }));
+
+  const NEXT_RDV_SERVICE_LABEL = `${t('reservations.mockRdv.servicePrefix')} ${t('reservations.mockRdv.serviceGold')}`;
 
   useEffect(() => {
     Animated.timing(barAnim, {
@@ -153,17 +180,17 @@ export default function ReservationsScreen() {
     return (
       <View style={[styles.root, { alignItems: 'center', justifyContent: 'center', padding: 28 }]}>
         <Text style={{ fontFamily: Fonts.bold, fontSize: 28, fontWeight: '700', color: '#fff', marginBottom: 10, textAlign: 'center' }}>
-          Mon Espace
+          {t('reservations.notAuth.title')}
         </Text>
         <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 32, lineHeight: 22 }}>
-          Connectez-vous pour accéder à vos rendez-vous, votre historique et vos points fidélité.
+          {t('reservations.notAuth.sub')}
         </Text>
         <TouchableOpacity
           style={{ backgroundColor: '#C9A84C', borderRadius: 100, paddingVertical: 15, paddingHorizontal: 40 }}
-          onPress={() => showLoginModal(undefined, 'Connectez-vous pour accéder à votre espace.')}
+          onPress={() => showLoginModal(undefined, t('reservations.notAuth.loginPrompt'))}
           activeOpacity={0.85}
         >
-          <Text style={{ color: '#1A1208', fontWeight: '700', fontSize: 15 }}>Se connecter</Text>
+          <Text style={{ color: '#1A1208', fontWeight: '700', fontSize: 15 }}>{t('common.login')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -185,9 +212,9 @@ export default function ReservationsScreen() {
       setCancelTarget(null);
     } catch {
       if (Platform.OS === 'web') {
-        window.alert("Erreur : impossible d'annuler cette réservation.");
+        window.alert(`${t('common.error')} : ${t('reservations.cancelError')}`);
       } else {
-        Alert.alert('Erreur', "Impossible d'annuler cette réservation.");
+        Alert.alert(t('common.error'), t('reservations.cancelError'));
       }
     } finally {
       setCancelling(false);
@@ -209,9 +236,9 @@ export default function ReservationsScreen() {
       await Linking.openURL(calendarUrl);
     } catch {
       Alert.alert(
-        'Ajouter au calendrier',
-        `${NEXT_RDV.service}\n\n📅  ${NEXT_RDV.dateLabel} à ${NEXT_RDV.time}\n✂️  Avec ${NEXT_RDV.barbier}\n📍  ${NEXT_RDV.adresse}`,
-        [{ text: 'OK' }]
+        t('reservations.calendarAlert.title'),
+        `${NEXT_RDV_SERVICE_LABEL}\n\n📅  ${NEXT_RDV.dateLabel} ${t('reservations.cancelNextAlert.confirmWebMid')} ${NEXT_RDV.time}\n${t('reservations.calendarAlert.barberLabel')} ${NEXT_RDV.barbier}\n📍  ${NEXT_RDV.adresse}`,
+        [{ text: t('common.ok') }]
       );
     }
   };
@@ -224,23 +251,23 @@ export default function ReservationsScreen() {
   const handleCancelNextRdv = () => {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(
-        `Annuler votre rendez-vous du ${NEXT_RDV.dateShort} à ${NEXT_RDV.timeLabel} avec ${NEXT_RDV.barbier} ?`
+        `${t('reservations.cancelNextAlert.confirmWebPrefix')} ${NEXT_RDV.dateShort} ${t('reservations.cancelNextAlert.confirmWebMid')} ${NEXT_RDV.timeLabel} ${t('reservations.cancelNextAlert.confirmWebWith')} ${NEXT_RDV.barbier} ?`
       );
       if (confirmed) {
-        window.alert('Rendez-vous annulé. Vous recevrez un email de confirmation.');
+        window.alert(`${t('reservations.cancelNextAlert.doneTitle')}. ${t('reservations.cancelNextAlert.doneMsg')}`);
       }
       return;
     }
     Alert.alert(
-      'Annuler le rendez-vous ?',
-      `Votre rendez-vous du ${NEXT_RDV.dateShort} à ${NEXT_RDV.timeLabel} avec ${NEXT_RDV.barbier} sera annulé.`,
+      t('reservations.cancelNextAlert.title'),
+      `${t('reservations.cancelNextAlert.confirmWebPrefix')} ${NEXT_RDV.dateShort} ${t('reservations.cancelNextAlert.confirmWebMid')} ${NEXT_RDV.timeLabel} ${t('reservations.cancelNextAlert.confirmWebWith')} ${NEXT_RDV.barbier} ${t('reservations.cancelNextAlert.body')}`,
       [
-        { text: 'Retour', style: 'cancel' },
+        { text: t('reservations.cancelNextAlert.cancelBtn'), style: 'cancel' },
         {
-          text: "Confirmer l'annulation",
+          text: t('reservations.cancelNextAlert.confirmBtn'),
           style: 'destructive',
           onPress: () => {
-            Alert.alert('Rendez-vous annulé', 'Vous recevrez un email de confirmation.');
+            Alert.alert(t('reservations.cancelNextAlert.doneTitle'), t('reservations.cancelNextAlert.doneMsg'));
           },
         },
       ]
@@ -251,7 +278,7 @@ export default function ReservationsScreen() {
 
   const handleRebook = (h: typeof HISTORIQUE[number]) => {
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`Rebooker — ${h.service} avec ${h.barbierNom} ?`);
+      const confirmed = window.confirm(`${t('reservations.rebookTitle')} ${h.service} ${t('reservations.rebookWith')} ${h.barbierNom} ?`);
       if (confirmed) {
         router.push('/(tabs)/book');
       }
@@ -260,11 +287,11 @@ export default function ReservationsScreen() {
     // Le wizard (/(tabs)/book) ne lit pas encore de params de prestation/barbier :
     // on informe l'utilisateur avant de le rediriger vers la réservation.
     Alert.alert(
-      `Rebooker — ${h.service} avec ${h.barbierNom}`,
+      `${t('reservations.rebookTitle')} ${h.service} ${t('reservations.rebookWith')} ${h.barbierNom}`,
       undefined,
       [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Aller réserver', onPress: () => router.push('/(tabs)/book') },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('reservations.rebookGo'), onPress: () => router.push('/(tabs)/book') },
       ]
     );
   };
@@ -272,10 +299,10 @@ export default function ReservationsScreen() {
   const handleReceipt = (h: typeof HISTORIQUE[number], index: number) => {
     const message = `${h.service}\n${h.jour} ${h.mois} · ${h.barbierNom} · ${h.prix}\nN° WB-${h.annee}-${String(index + 1).padStart(5, '0')}`;
     if (Platform.OS === 'web') {
-      window.alert(`Reçu\n\n${message}`);
+      window.alert(`${t('reservations.receiptTitle')}\n\n${message}`);
       return;
     }
-    Alert.alert('Reçu', message, [{ text: 'Fermer' }]);
+    Alert.alert(t('reservations.receiptTitle'), message, [{ text: t('common.close') }]);
   };
 
   return (
@@ -298,12 +325,12 @@ export default function ReservationsScreen() {
       {isTablet ? (
         <View style={styles.tabletContainer}>
           {/* ── HEADER (pleine largeur, au-dessus des 2 colonnes) ────── */}
-          <Text style={styles.kicker}>— BONJOUR {username.toUpperCase()}</Text>
+          <Text style={styles.kicker}>{t('reservations.greetingPrefix')} {username.toUpperCase()}</Text>
           <Text style={styles.pageTitle}>
-            Votre espace, <GoldItalic>au poil.</GoldItalic>
+            {t('reservations.pageTitle1')} <GoldItalic>{t('reservations.pageTitleGold')}</GoldItalic>
           </Text>
           <TouchableOpacity style={styles.newRdvBtn} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-            <Text style={styles.newRdvBtnText}>📅  Nouveau rendez-vous →</Text>
+            <Text style={styles.newRdvBtnText}>{t('reservations.newRdvBtn')}</Text>
           </TouchableOpacity>
 
           <View style={styles.tabletRow}>
@@ -317,24 +344,24 @@ export default function ReservationsScreen() {
               <View style={styles.statsGrid}>
                 <View style={styles.statCard}>
                   <Text style={styles.statNum}>12</Text>
-                  <Text style={styles.statLabel}>VISITES</Text>
+                  <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
                 </View>
                 <View style={styles.statCard}>
                   <Text style={styles.statNum}>28</Text>
-                  <Text style={styles.statNumSub}>jours</Text>
-                  <Text style={styles.statLabel}>DERNIÈRE VISITE</Text>
+                  <Text style={styles.statNumSub}>{t('reservations.stats.days')}</Text>
+                  <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
                 </View>
                 <View style={styles.statCard}>
                   <Text style={[styles.statNum, { color: '#C9A84C' }]}>{MOCK_LOYALTY.points}</Text>
                   <Text style={styles.statNumSub}>/ 1000</Text>
-                  <Text style={styles.statLabel}>POINTS FIDÉLITÉ</Text>
+                  <Text style={styles.statLabel}>{t('reservations.stats.loyaltyPoints')}</Text>
                 </View>
               </View>
 
               {/* Prochain rendez-vous */}
               <View style={styles.nextRdvBadgeWrap}>
                 <View style={styles.nextRdvBadge}>
-                  <Text style={styles.nextRdvBadgeText}>PROCHAIN RENDEZ-VOUS · DANS 4 JOURS</Text>
+                  <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvBadge')}</Text>
                 </View>
               </View>
 
@@ -342,59 +369,59 @@ export default function ReservationsScreen() {
                 <View style={styles.mockRdvInner}>
                   <View style={styles.mockDateBox}>
                     <Text style={styles.mockDateNum}>23</Text>
-                    <Text style={styles.mockDateMon}>MAI</Text>
-                    <Text style={styles.mockDateDay}>SAM.</Text>
+                    <Text style={styles.mockDateMon}>{t('reservations.mockRdv.monthAbbr')}</Text>
+                    <Text style={styles.mockDateDay}>{t('reservations.mockRdv.dayAbbr')}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.mockRdvService}>
-                      Coupe + <GoldItalic>Barbe</GoldItalic>
+                      {t('reservations.mockRdv.servicePrefix')} <GoldItalic>{t('reservations.mockRdv.serviceGold')}</GoldItalic>
                     </Text>
                     <View style={styles.mockRdvInfoRow}>
-                      <Text style={styles.mockRdvKey}>Heure</Text>
+                      <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.time')}</Text>
                       <Text style={styles.mockRdvVal}>10:30</Text>
                     </View>
                     <View style={styles.mockRdvInfoRow}>
-                      <Text style={styles.mockRdvKey}>Barbier</Text>
+                      <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.barber')}</Text>
                       <Text style={styles.mockRdvVal}>Willo</Text>
                     </View>
                     <View style={styles.mockRdvInfoRow}>
-                      <Text style={styles.mockRdvKey}>Adresse</Text>
+                      <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.address')}</Text>
                       <Text style={styles.mockRdvVal}>Rue Auguste Van Zande 78</Text>
                     </View>
                   </View>
                 </View>
 
                 <View style={styles.soldePill}>
-                  <Text style={styles.soldeText}>Solde 42,70€ au salon</Text>
+                  <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
                 </View>
 
                 <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
-                  <Text style={styles.btnPrimaryText}>📅  Ajouter au calendrier</Text>
+                  <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
                 </TouchableOpacity>
                 <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
                   <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
-                    <Text style={styles.btnOutlineText}>↺ Reprogrammer</Text>
+                    <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={handleCancelNextRdv} activeOpacity={0.85}>
-                    <Text style={styles.btnDangerSmText}>Annuler</Text>
+                    <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {/* Reprenez là où vous en étiez */}
-              <Text style={styles.sectionTitle}>Reprenez là où vous en étiez</Text>
+              {/* Resume card */}
+              <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
 
               <View style={styles.resumeCard}>
                 <View style={styles.resumeBadge}>
-                  <Text style={styles.resumeBadgeText}>VOTRE COUPE HABITUELLE · 8 FOIS</Text>
+                  <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge')}</Text>
                 </View>
                 <View style={styles.resumeRow}>
                   <View style={styles.scissorsBox}>
                     <Text style={{ fontSize: 22 }}>✂️</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.resumeServiceName}>Signature WilloBarber</Text>
-                    <Text style={styles.resumeServiceMeta}>45 min · avec Willo · 45€</Text>
+                    <Text style={styles.resumeServiceName}>{t('reservations.hist.signature')}</Text>
+                    <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -414,16 +441,16 @@ export default function ReservationsScreen() {
                     })}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.btnPrimaryText}>Reprendre la même coupe</Text>
+                    <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.btnOutline, { paddingHorizontal: 18 }]} onPress={handleAdapter} activeOpacity={0.85}>
-                    <Text style={styles.btnOutlineText}>✏️ Adapter</Text>
+                    <Text style={styles.btnOutlineText}>{t('reservations.adaptBtn')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
               {/* Vos favoris */}
-              <Text style={styles.sectionTitle}>Vos favoris</Text>
+              <Text style={styles.sectionTitle}>{t('reservations.favoritesTitle')}</Text>
 
               <View style={styles.favGrid}>
                 {FAVORIS.map((fav, i) => (
@@ -448,26 +475,26 @@ export default function ReservationsScreen() {
               refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#C9A84C" />}
             >
               {/* Historique des réservations */}
-              <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Historique</Text>
+              <Text style={[styles.sectionTitle, { marginTop: 0 }]}>{t('reservations.historyTitle')}</Text>
 
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8, marginBottom: 14 }}
               >
-                {['Tous', '2026', '2025'].map(t => (
+                {['Tous', '2026', '2025'].map(yr => (
                   <Pressable
-                    key={t}
-                    onPress={() => { setHistFilter(t); setSelectedHistIndex(0); }}
-                    style={[styles.filterChip, histFilter === t && styles.filterChipActive]}
+                    key={yr}
+                    onPress={() => { setHistFilter(yr); setSelectedHistIndex(0); }}
+                    style={[styles.filterChip, histFilter === yr && styles.filterChipActive]}
                   >
-                    <Text style={[styles.filterChipText, histFilter === t && styles.filterChipTextActive]}>{t}</Text>
+                    <Text style={[styles.filterChipText, histFilter === yr && styles.filterChipTextActive]}>{yr === 'Tous' ? t('reservations.filter.all') : yr}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
 
               {filteredHist.length === 0 ? (
-                <Text style={styles.emptyHist}>Aucun historique à afficher.</Text>
+                <Text style={styles.emptyHist}>{t('reservations.emptyHistory')}</Text>
               ) : (
                 <View style={styles.histSplit}>
                   <View style={styles.histSplitList}>
@@ -518,10 +545,10 @@ export default function ReservationsScreen() {
                         <Text style={styles.histDetailRef}>N° WB-{h.annee}-{String(i + 1).padStart(5, '0')}</Text>
                         <View style={{ flexDirection: 'column', gap: 10, marginTop: 18 }}>
                           <TouchableOpacity testID={`btn-rebook-${i}`} style={[styles.btnPrimary, { width: '100%' }]} onPress={() => handleRebook(h)} activeOpacity={0.85}>
-                            <Text style={styles.btnPrimaryText}>↺ Rebooker</Text>
+                            <Text style={styles.btnPrimaryText}>{t('reservations.rebook')}</Text>
                           </TouchableOpacity>
                           <TouchableOpacity testID={`btn-receipt-${i}`} style={[styles.btnOutline, { width: '100%' }]} onPress={() => handleReceipt(h, i)} activeOpacity={0.85}>
-                            <Text style={styles.btnOutlineText}>↓ Reçu</Text>
+                            <Text style={styles.btnOutlineText}>{t('reservations.receipt')}</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -531,12 +558,12 @@ export default function ReservationsScreen() {
               )}
 
               {/* Programme fidélité */}
-              <Text style={[styles.sectionKicker, { marginTop: 28 }]}>PROGRAMME FIDÉLITÉ</Text>
+              <Text style={[styles.sectionKicker, { marginTop: 28 }]}>{t('reservations.loyalty.programTitle')}</Text>
               <View style={styles.loyaltyCard}>
                 <View style={styles.loyaltyHeader}>
                   <View>
                     <Text style={styles.loyaltyBrandLogo}>{'{w}'} willobarber</Text>
-                    <Text style={styles.loyaltyBrandSub}>Programme Fidélité</Text>
+                    <Text style={styles.loyaltyBrandSub}>{t('reservations.loyalty.brandSub')}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.loyaltyPoints}>{MOCK_LOYALTY.points}</Text>
@@ -544,7 +571,7 @@ export default function ReservationsScreen() {
                   </View>
                 </View>
 
-                <Text style={styles.loyaltyProgressLabel}>Progression vers la coupe gratuite</Text>
+                <Text style={styles.loyaltyProgressLabel}>{t('reservations.loyalty.progressLabel')}</Text>
                 <View style={styles.loyaltyBarBg}>
                   <Animated.View
                     style={[
@@ -598,19 +625,19 @@ export default function ReservationsScreen() {
                 {MOCK_LOYALTY.points >= 500 ? (
                   <>
                     <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85}>
-                      <Text style={styles.loyaltyCtaText}>Utiliser 500 pts — Coupe offerte →</Text>
+                      <Text style={styles.loyaltyCtaText}>{t('reservations.loyalty.ctaText')}</Text>
                     </TouchableOpacity>
-                    <Text style={styles.loyaltyCtaNote}>Valable sur toute coupe · Sans date d'expiration</Text>
+                    <Text style={styles.loyaltyCtaNote}>{t('reservations.loyalty.ctaNote')}</Text>
                   </>
                 ) : (
                   <Text style={styles.loyaltyCtaDisabled}>
-                    500 points requis ({500 - MOCK_LOYALTY.points} restants)
+                    500 {t('reservations.loyalty.pointsRequired')} ({500 - MOCK_LOYALTY.points} {t('reservations.loyalty.ctaDisabledSuffix')}
                   </Text>
                 )}
               </View>
 
               {/* Historique des points */}
-              <Text style={[styles.sectionKicker, { marginTop: 24 }]}>HISTORIQUE DES POINTS</Text>
+              <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
               {TRANSACTIONS.map(tx => {
                 const isSpend = tx.type === 'spend';
                 const isBonus = tx.type === 'bonus';
@@ -645,36 +672,36 @@ export default function ReservationsScreen() {
       >
 
         {/* ── 1. HEADER ─────────────────────────────────────────────── */}
-        <Text style={styles.kicker}>— BONJOUR {username.toUpperCase()}</Text>
+        <Text style={styles.kicker}>{t('reservations.greetingPrefix')} {username.toUpperCase()}</Text>
         <Text style={styles.pageTitle}>
-          Votre espace, <GoldItalic>au poil.</GoldItalic>
+          {t('reservations.pageTitle1')} <GoldItalic>{t('reservations.pageTitleGold')}</GoldItalic>
         </Text>
         <TouchableOpacity style={styles.newRdvBtn} onPress={() => router.push('/(tabs)/book')} activeOpacity={0.85}>
-          <Text style={styles.newRdvBtnText}>📅  Nouveau rendez-vous →</Text>
+          <Text style={styles.newRdvBtnText}>{t('reservations.newRdvBtn')}</Text>
         </TouchableOpacity>
 
         {/* ── 2. GRILLE STATS ───────────────────────────────────────── */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <Text style={styles.statNum}>12</Text>
-            <Text style={styles.statLabel}>VISITES</Text>
+            <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statNum}>28</Text>
-            <Text style={styles.statNumSub}>jours</Text>
-            <Text style={styles.statLabel}>DERNIÈRE VISITE</Text>
+            <Text style={styles.statNumSub}>{t('reservations.stats.days')}</Text>
+            <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={[styles.statNum, { color: '#C9A84C' }]}>{MOCK_LOYALTY.points}</Text>
             <Text style={styles.statNumSub}>/ 1000</Text>
-            <Text style={styles.statLabel}>POINTS FIDÉLITÉ</Text>
+            <Text style={styles.statLabel}>{t('reservations.stats.loyaltyPoints')}</Text>
           </View>
         </View>
 
         {/* ── 3. PROCHAIN RENDEZ-VOUS ───────────────────────────────── */}
         <View style={styles.nextRdvBadgeWrap}>
           <View style={styles.nextRdvBadge}>
-            <Text style={styles.nextRdvBadgeText}>PROCHAIN RENDEZ-VOUS · DANS 4 JOURS</Text>
+            <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvBadge')}</Text>
           </View>
         </View>
 
@@ -682,59 +709,59 @@ export default function ReservationsScreen() {
           <View style={styles.mockRdvInner}>
             <View style={styles.mockDateBox}>
               <Text style={styles.mockDateNum}>23</Text>
-              <Text style={styles.mockDateMon}>MAI</Text>
-              <Text style={styles.mockDateDay}>SAM.</Text>
+              <Text style={styles.mockDateMon}>{t('reservations.mockRdv.monthAbbr')}</Text>
+              <Text style={styles.mockDateDay}>{t('reservations.mockRdv.dayAbbr')}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.mockRdvService}>
-                Coupe + <GoldItalic>Barbe</GoldItalic>
+                {t('reservations.mockRdv.servicePrefix')} <GoldItalic>{t('reservations.mockRdv.serviceGold')}</GoldItalic>
               </Text>
               <View style={styles.mockRdvInfoRow}>
-                <Text style={styles.mockRdvKey}>Heure</Text>
+                <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.time')}</Text>
                 <Text style={styles.mockRdvVal}>10:30</Text>
               </View>
               <View style={styles.mockRdvInfoRow}>
-                <Text style={styles.mockRdvKey}>Barbier</Text>
+                <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.barber')}</Text>
                 <Text style={styles.mockRdvVal}>Willo</Text>
               </View>
               <View style={styles.mockRdvInfoRow}>
-                <Text style={styles.mockRdvKey}>Adresse</Text>
+                <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.address')}</Text>
                 <Text style={styles.mockRdvVal}>Rue Auguste Van Zande 78</Text>
               </View>
             </View>
           </View>
 
           <View style={styles.soldePill}>
-            <Text style={styles.soldeText}>Solde 42,70€ au salon</Text>
+            <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
           </View>
 
           <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
-            <Text style={styles.btnPrimaryText}>📅  Ajouter au calendrier</Text>
+            <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
             <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
-              <Text style={styles.btnOutlineText}>↺ Reprogrammer</Text>
+              <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
             </TouchableOpacity>
             <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={handleCancelNextRdv} activeOpacity={0.85}>
-              <Text style={styles.btnDangerSmText}>Annuler</Text>
+              <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* ── 4. REPRENEZ LÀ OÙ VOUS EN ÉTIEZ ────────────────────── */}
-        <Text style={styles.sectionTitle}>Reprenez là où vous en étiez</Text>
+        <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
 
         <View style={styles.resumeCard}>
           <View style={styles.resumeBadge}>
-            <Text style={styles.resumeBadgeText}>VOTRE COUPE HABITUELLE · 8 FOIS</Text>
+            <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge')}</Text>
           </View>
           <View style={styles.resumeRow}>
             <View style={styles.scissorsBox}>
               <Text style={{ fontSize: 22 }}>✂️</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.resumeServiceName}>Signature WilloBarber</Text>
-              <Text style={styles.resumeServiceMeta}>45 min · avec Willo · 45€</Text>
+              <Text style={styles.resumeServiceName}>{t('reservations.hist.signature')}</Text>
+              <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -754,16 +781,16 @@ export default function ReservationsScreen() {
               })}
               activeOpacity={0.85}
             >
-              <Text style={styles.btnPrimaryText}>Reprendre la même coupe</Text>
+              <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.btnOutline, { paddingHorizontal: 18 }]} onPress={handleAdapter} activeOpacity={0.85}>
-              <Text style={styles.btnOutlineText}>✏️ Adapter</Text>
+              <Text style={styles.btnOutlineText}>{t('reservations.adaptBtn')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* ── 5. VOS FAVORIS ────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Vos favoris</Text>
+        <Text style={styles.sectionTitle}>{t('reservations.favoritesTitle')}</Text>
 
         {isTablet ? (
           <View style={styles.favGrid}>
@@ -800,26 +827,26 @@ export default function ReservationsScreen() {
         )}
 
         {/* ── 6. HISTORIQUE DES RÉSERVATIONS ────────────────────────── */}
-        <Text style={styles.sectionTitle}>Historique</Text>
+        <Text style={styles.sectionTitle}>{t('reservations.historyTitle')}</Text>
 
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 8, marginBottom: 14 }}
         >
-          {['Tous', '2026', '2025'].map(t => (
+          {['Tous', '2026', '2025'].map(yr => (
             <Pressable
-              key={t}
-              onPress={() => { setHistFilter(t); setSelectedHistIndex(0); }}
-              style={[styles.filterChip, histFilter === t && styles.filterChipActive]}
+              key={yr}
+              onPress={() => { setHistFilter(yr); setSelectedHistIndex(0); }}
+              style={[styles.filterChip, histFilter === yr && styles.filterChipActive]}
             >
-              <Text style={[styles.filterChipText, histFilter === t && styles.filterChipTextActive]}>{t}</Text>
+              <Text style={[styles.filterChipText, histFilter === yr && styles.filterChipTextActive]}>{yr === 'Tous' ? t('reservations.filter.all') : yr}</Text>
             </Pressable>
           ))}
         </ScrollView>
 
         {filteredHist.length === 0 ? (
-          <Text style={styles.emptyHist}>Aucun historique à afficher.</Text>
+          <Text style={styles.emptyHist}>{t('reservations.emptyHistory')}</Text>
         ) : isTablet ? (
           <View style={styles.histSplit}>
             <View style={styles.histSplitList}>
@@ -870,10 +897,10 @@ export default function ReservationsScreen() {
                   <Text style={styles.histDetailRef}>N° WB-{h.annee}-{String(i + 1).padStart(5, '0')}</Text>
                   <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
                     <TouchableOpacity testID={`btn-rebook-${i}`} style={[styles.btnPrimary, { flex: 1 }]} onPress={() => handleRebook(h)} activeOpacity={0.85}>
-                      <Text style={styles.btnPrimaryText}>↺ Rebooker</Text>
+                      <Text style={styles.btnPrimaryText}>{t('reservations.rebook')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity testID={`btn-receipt-${i}`} style={[styles.btnOutline, { flex: 1 }]} onPress={() => handleReceipt(h, i)} activeOpacity={0.85}>
-                      <Text style={styles.btnOutlineText}>↓ Reçu</Text>
+                      <Text style={styles.btnOutlineText}>{t('reservations.receipt')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -912,12 +939,12 @@ export default function ReservationsScreen() {
         }
 
         {/* ── 7. PROGRAMME FIDÉLITÉ ─────────────────────────────────── */}
-        <Text style={[styles.sectionKicker, { marginTop: 28 }]}>PROGRAMME FIDÉLITÉ</Text>
+        <Text style={[styles.sectionKicker, { marginTop: 28 }]}>{t('reservations.loyalty.programTitle')}</Text>
         <View style={styles.loyaltyCard}>
           <View style={styles.loyaltyHeader}>
             <View>
               <Text style={styles.loyaltyBrandLogo}>{'{w}'} willobarber</Text>
-              <Text style={styles.loyaltyBrandSub}>Programme Fidélité</Text>
+              <Text style={styles.loyaltyBrandSub}>{t('reservations.loyalty.brandSub')}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.loyaltyPoints}>{MOCK_LOYALTY.points}</Text>
@@ -925,7 +952,7 @@ export default function ReservationsScreen() {
             </View>
           </View>
 
-          <Text style={styles.loyaltyProgressLabel}>Progression vers la coupe gratuite</Text>
+          <Text style={styles.loyaltyProgressLabel}>{t('reservations.loyalty.progressLabel')}</Text>
           <View style={styles.loyaltyBarBg}>
             <Animated.View
               style={[
@@ -979,19 +1006,19 @@ export default function ReservationsScreen() {
           {MOCK_LOYALTY.points >= 500 ? (
             <>
               <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85}>
-                <Text style={styles.loyaltyCtaText}>Utiliser 500 pts — Coupe offerte →</Text>
+                <Text style={styles.loyaltyCtaText}>{t('reservations.loyalty.ctaText')}</Text>
               </TouchableOpacity>
-              <Text style={styles.loyaltyCtaNote}>Valable sur toute coupe · Sans date d'expiration</Text>
+              <Text style={styles.loyaltyCtaNote}>{t('reservations.loyalty.ctaNote')}</Text>
             </>
           ) : (
             <Text style={styles.loyaltyCtaDisabled}>
-              500 points requis ({500 - MOCK_LOYALTY.points} restants)
+              500 {t('reservations.loyalty.pointsRequired')} ({500 - MOCK_LOYALTY.points} {t('reservations.loyalty.ctaDisabledSuffix')}
             </Text>
           )}
         </View>
 
         {/* ── 8. HISTORIQUE DES POINTS ──────────────────────────────── */}
-        <Text style={[styles.sectionKicker, { marginTop: 24 }]}>HISTORIQUE DES POINTS</Text>
+        <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
         {TRANSACTIONS.map(tx => {
           const isSpend = tx.type === 'spend';
           const isBonus = tx.type === 'bonus';

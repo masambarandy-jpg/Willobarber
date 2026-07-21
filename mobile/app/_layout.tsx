@@ -16,6 +16,7 @@ import {
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { AuthModalProvider } from '@/contexts/AuthModalContext';
 import { CartProvider } from '@/contexts/CartContext';
+import { LanguageProvider } from '@/contexts/LanguageContext';
 import { Colors } from '@/constants';
 
 SplashScreen.preventAutoHideAsync();
@@ -60,13 +61,15 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <CartProvider>
-          <AuthModalProvider>
-            <RootNavigation />
-          </AuthModalProvider>
-        </CartProvider>
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <CartProvider>
+            <AuthModalProvider>
+              <RootNavigation />
+            </AuthModalProvider>
+          </CartProvider>
+        </AuthProvider>
+      </LanguageProvider>
     </GestureHandlerRootView>
   );
 }

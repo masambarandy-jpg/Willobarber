@@ -14,6 +14,8 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { TokenStorage } from '@/services/api';
 import { API_BASE_URL, Fonts } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
+import type { TranslationKey } from '@/i18n/translations';
 import {
   ACOMPTE_FIXE,
   dayBeforeLabel,
@@ -69,7 +71,9 @@ function RecapLine({
 export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { service, barber, date, time } = booking;
+  const serviceName = service ? t(`services.svc.${service.id}.name` as TranslationKey) : null;
 
   const price   = service ? service.price : 0;
   const deposit = ACOMPTE_FIXE;
@@ -93,7 +97,7 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
     const fmt = (d: Date) =>
       `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
 
-    const text    = encodeURIComponent(`${service?.name ?? 'Rendez-vous'} — WilloBarber`);
+    const text    = encodeURIComponent(`${serviceName ?? t('bookingConfirm.defaultServiceName')} — WilloBarber`);
     const details = encodeURIComponent(
       `Barbier : ${barber?.name ?? '—'}\nAdresse : ${ADDRESS}\nSolde à payer au salon : ${fmtPrice(solde)}`
     );
@@ -113,7 +117,7 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
 
   const handleGenerateInvoice = async () => {
     if (Platform.OS !== 'web') {
-      Alert.alert('Facture', 'La facture téléchargeable est disponible sur la version web.');
+      Alert.alert(t('bookingConfirm.invoiceWebOnlyTitle'), t('bookingConfirm.invoiceWebOnlyMsg'));
       return;
     }
 
@@ -133,25 +137,25 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
   };
 
   const handleCancelAppointment = () => {
-    const label = `${service?.name ?? 'votre rendez-vous'} du ${dateStr} à ${timeStr}`;
+    const label = `${serviceName ?? t('bookingConfirm.defaultBarberName')} du ${dateStr} à ${timeStr}`;
     if (Platform.OS === 'web') {
-      const confirmedCancel = window.confirm(`Annuler ${label} ?`);
+      const confirmedCancel = window.confirm(`${t('common.cancel')} ${label} ?`);
       if (confirmedCancel) {
-        window.alert('Rendez-vous annulé. Vous recevrez un email de confirmation.');
+        window.alert(`${t('reservations.cancelNextAlert.doneTitle')}. ${t('reservations.cancelNextAlert.doneMsg')}`);
         onGoHome();
       }
       return;
     }
     Alert.alert(
-      'Annuler le rendez-vous ?',
-      `${label} sera annulé.`,
+      t('reservations.cancelNextAlert.title'),
+      `${label} ${t('reservations.cancelNextAlert.body')}`,
       [
-        { text: 'Retour', style: 'cancel' },
+        { text: t('reservations.cancelNextAlert.cancelBtn'), style: 'cancel' },
         {
-          text: "Confirmer l'annulation",
+          text: t('reservations.cancelNextAlert.confirmBtn'),
           style: 'destructive',
           onPress: () => {
-            Alert.alert('Rendez-vous annulé', 'Vous recevrez un email de confirmation.');
+            Alert.alert(t('reservations.cancelNextAlert.doneTitle'), t('reservations.cancelNextAlert.doneMsg'));
             onGoHome();
           },
         },
@@ -170,14 +174,13 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
           <View style={styles.checkCircle}>
             <Text style={styles.checkIcon}>✓</Text>
           </View>
-          <Text style={styles.kicker}>CONFIRMATION</Text>
+          <Text style={styles.kicker}>{t('bookingConfirm.kicker')}</Text>
           <Text style={styles.heroTitle}>
-            Votre rendez-vous est{' '}
-            <Text style={styles.heroTitleGold}>confirmé.</Text>
+            {t('bookingConfirm.heroTitle1')}{' '}
+            <Text style={styles.heroTitleGold}>{t('bookingConfirm.heroTitleGold')}</Text>
           </Text>
           <Text style={styles.heroSubtitle}>
-            Un email de confirmation vient de vous être envoyé.
-            Rappel SMS la veille.
+            {t('bookingConfirm.heroSubtitle')}
           </Text>
         </View>
 
@@ -185,11 +188,11 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
         <View style={styles.card}>
           <View style={styles.bookingNumRow}>
             <View style={styles.bookingNumLeft}>
-              <Text style={styles.bookingNumKicker}>NUMÉRO DE RÉSERVATION</Text>
+              <Text style={styles.bookingNumKicker}>{t('bookingConfirm.bookingNumKicker')}</Text>
               <Text style={styles.bookingNum}>{BOOKING_NUMBER}</Text>
             </View>
             <View style={styles.emailBadge}>
-              <Text style={styles.emailBadgeText}>✓ Email envoyé</Text>
+              <Text style={styles.emailBadgeText}>{t('bookingConfirm.emailSent')}</Text>
             </View>
           </View>
         </View>
@@ -198,19 +201,19 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.calIcon}>📅</Text>
-            <Text style={styles.cardTitle}>Votre rendez-vous</Text>
+            <Text style={styles.cardTitle}>{t('bookingConfirm.appointmentTitle')}</Text>
           </View>
 
-          {service && (
+          {serviceName && (
             <View style={styles.serviceBadge}>
-              <Text style={styles.serviceBadgeText}>{service.name}</Text>
+              <Text style={styles.serviceBadgeText}>{serviceName}</Text>
             </View>
           )}
 
           <View style={styles.dotList}>
-            <DotLine label="Barbier"      value={barber?.name ?? '—'} />
-            <DotLine label="Date & heure" value={`${dateStr} · ${timeStr}`} />
-            <DotLine label="Adresse"      value={ADDRESS} />
+            <DotLine label={t('book.recap.barber')}     value={barber?.name ?? '—'} />
+            <DotLine label={t('bookingStepper.dateTime')} value={`${dateStr} · ${timeStr}`} />
+            <DotLine label={t('bookingConfirm.address')} value={ADDRESS} />
           </View>
         </View>
 
@@ -218,37 +221,37 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.calIcon}>🧾</Text>
-            <Text style={styles.cardTitle}>Récapitulatif de paiement</Text>
+            <Text style={styles.cardTitle}>{t('bookingConfirm.paymentRecapTitle')}</Text>
           </View>
 
-          <RecapLine label={service?.name ?? '—'} value={fmtPrice(price)} />
-          <RecapLine label="Acompte réglé"      value={`-${fmtPrice(deposit)}`} negative />
+          <RecapLine label={serviceName ?? '—'} value={fmtPrice(price)} />
+          <RecapLine label={t('bookingConfirm.depositPaid')} value={`-${fmtPrice(deposit)}`} negative />
 
           <View style={styles.recapSep} />
 
           <View style={styles.soldeRow}>
-            <Text style={styles.soldeLabel}>SOLDE À RÉGLER AU SALON</Text>
+            <Text style={styles.soldeLabel}>{t('step4.soldeLabel')}</Text>
             <Text style={styles.soldeValue}>{fmtPrice(solde)}</Text>
           </View>
 
-          <Text style={styles.paymentNote}>💳 Règlement au salon le jour du RDV</Text>
+          <Text style={styles.paymentNote}>{t('bookingConfirm.paymentNote')}</Text>
         </View>
 
         {/* ── Et maintenant ? ───────────────────────────────────────────── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Et maintenant ?</Text>
+          <Text style={styles.cardTitle}>{t('bookingConfirm.nextTitle')}</Text>
 
           <View style={styles.nextRow}>
             <Text style={styles.nextIcon}>📧</Text>
-            <Text style={styles.nextLabel}>Email de confirmation</Text>
+            <Text style={styles.nextLabel}>{t('bookingConfirm.confirmEmailLabel')}</Text>
             <View style={styles.nextBadgeGreen}>
-              <Text style={styles.nextBadgeGreenText}>Envoyé ✓</Text>
+              <Text style={styles.nextBadgeGreenText}>{t('bookingConfirm.sentBadge')}</Text>
             </View>
           </View>
 
           <View style={styles.nextRow}>
             <Text style={styles.nextIcon}>📱</Text>
-            <Text style={styles.nextLabel}>Rappel SMS</Text>
+            <Text style={styles.nextLabel}>{t('bookingConfirm.smsReminderLabel')}</Text>
             <View style={styles.nextBadgeGold}>
               <Text style={styles.nextBadgeGoldText}>{smsDate}</Text>
             </View>
@@ -256,9 +259,9 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
 
           <View style={[styles.nextRow, { borderBottomWidth: 0 }]}>
             <Text style={styles.nextIcon}>✕</Text>
-            <Text style={styles.nextLabel}>Annulation gratuite</Text>
+            <Text style={styles.nextLabel}>{t('bookingConfirm.freeCancelLabel')}</Text>
             <View style={styles.nextBadge}>
-              <Text style={styles.nextBadgeText}>-24h</Text>
+              <Text style={styles.nextBadgeText}>{t('bookingConfirm.freeCancelBadge')}</Text>
             </View>
           </View>
         </View>
@@ -274,16 +277,16 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
             <View style={styles.pointsCard}>
               <View style={styles.pointsCardHeader}>
                 <Text style={styles.pointsStarIcon}>★</Text>
-                <Text style={styles.pointsCardTitle}>Vous avez gagné</Text>
+                <Text style={styles.pointsCardTitle}>{t('bookingConfirm.pointsEarnedTitle')}</Text>
               </View>
               <Text style={styles.pointsEarned}>+{earned} pts</Text>
-              <Text style={styles.pointsSubtext}>Crédités sur votre compte fidélité</Text>
+              <Text style={styles.pointsSubtext}>{t('bookingConfirm.pointsCredited')}</Text>
               <View style={styles.pointsSep} />
               <Text style={styles.pointsFooter}>
-                Total : {newTotal} pts
+                {t('bookingConfirm.pointsTotalPrefix')} {newTotal} pts
                 {remaining > 0
-                  ? ` · ${remaining} avant coupe offerte`
-                  : ' · Coupe offerte disponible 🎉'}
+                  ? ` · ${remaining} ${t('bookingConfirm.pointsRemainingSuffix')}`
+                  : ` · ${t('bookingConfirm.pointsRewardAvailable')}`}
               </Text>
             </View>
           );
@@ -292,7 +295,7 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
         {/* ── Boutons ───────────────────────────────────────────────────── */}
         <View style={styles.btns}>
           <TouchableOpacity style={styles.btnCalendar} onPress={handleAddToCalendar} activeOpacity={0.85}>
-            <Text style={styles.btnCalendarText}>Ajouter au calendrier 📅</Text>
+            <Text style={styles.btnCalendarText}>{t('bookingConfirm.btnCalendar')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -300,7 +303,7 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
             onPress={handleGoToReservations}
             activeOpacity={0.85}
           >
-            <Text style={styles.btnDarkText}>→ Mon espace</Text>
+            <Text style={styles.btnDarkText}>{t('bookingConfirm.btnMySpace')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -308,7 +311,7 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
             onPress={handleGenerateInvoice}
             activeOpacity={0.85}
           >
-            <Text style={styles.btnDarkText}>↓ Facture</Text>
+            <Text style={styles.btnDarkText}>{t('bookingConfirm.btnInvoice')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -316,7 +319,7 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
             activeOpacity={0.7}
             style={styles.btnCancel}
           >
-            <Text style={styles.btnCancelText}>Annuler le rendez-vous</Text>
+            <Text style={styles.btnCancelText}>{t('bookingConfirm.btnCancel')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

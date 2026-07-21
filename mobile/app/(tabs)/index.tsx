@@ -17,27 +17,30 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
 import { useAuth } from '@/hooks/useAuth';
 import { useCart } from '@/contexts/CartContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { ServiceCarousel } from '@/components/home/ServiceCarousel';
 import { HamburgerMenu } from '@/components/HamburgerMenu';
+import { LanguagePicker } from '@/components/ui/LanguagePicker';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { Fonts } from '@/constants';
+import type { TranslationKey } from '@/i18n/translations';
 
 const CONTENT_MAX_W = 1100;
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
 // Static team data matching design
-const BARBERS = [
-  { id: 'willo', initial: 'W', name: 'Willo', role: 'FONDATEUR & MASTER BARBER', color: '#C9A84C', ringColor: '#C9A84C', rating: '4,9', reviews: 312, desc: '30 ans de passion pour la coiffure. Spécialiste des coupes texturées et des fondus ultra-précis.', tags: ['Fade', 'Texturé', 'Rasoir'] },
-  { id: 'malik', initial: 'M', name: 'Malik', role: 'BARBIER SENIOR', color: '#d8a06a', ringColor: '#8a5a35', rating: '4,9', reviews: 184, desc: "L'œil pour la barbe ciselée. Patience d'orfèvre, geste vif, résultat impeccable.", tags: ['Barbe', 'Rasage', 'Classique'] },
-  { id: 'idris', initial: 'I', name: 'Idris', role: 'BARBIER & COLORISTE', color: '#6fc191', ringColor: '#2D6A4F', rating: '4,8', reviews: 96, desc: 'Le réflexe pour les coupes contemporaines et la couleur masculine la plus discrète.', tags: ['Color', 'Crop', 'Soin'] },
+const BARBERS_META = [
+  { id: 'willo', initial: 'W', name: 'Willo', color: '#C9A84C', ringColor: '#C9A84C', rating: '4,9', reviews: 312 },
+  { id: 'malik', initial: 'M', name: 'Malik', color: '#d8a06a', ringColor: '#8a5a35', rating: '4,9', reviews: 184 },
+  { id: 'idris', initial: 'I', name: 'Idris', color: '#6fc191', ringColor: '#2D6A4F', rating: '4,8', reviews: 96 },
 ];
 
-const REVIEWS = [
-  { name: 'Thomas L.', color: '#6fc191', ring: '#2D6A4F', stars: 5, quote: 'Le meilleur barbier de Bruxelles, sans hésiter. On ressort avec dix ans de moins.', service: 'Signature WilloBarber' },
-  { name: 'Karim B.', color: '#d8a06a', ring: '#8a5a35', stars: 5, quote: 'Un vrai rituel. La serviette chaude, le rasoir droit… on prend le temps.', service: 'Taille & rasage' },
-  { name: 'Noé V.', color: '#b69ae0', ring: '#6b4fa0', stars: 5, quote: 'Idris a compris exactement ce que je voulais. Couleur impeccable et naturelle.', service: 'Camouflage gris' },
-  { name: 'Antoine R.', color: '#C9A84C', ring: '#8B6914', stars: 5, quote: 'Réservation en deux clics, accueil parfait, résultat au-dessus de mes attentes.', service: 'Le Rituel' },
+const REVIEWS_META = [
+  { key: 'thomas', name: 'Thomas L.', color: '#6fc191', ring: '#2D6A4F', stars: 5 },
+  { key: 'karim', name: 'Karim B.', color: '#d8a06a', ring: '#8a5a35', stars: 5 },
+  { key: 'noe', name: 'Noé V.', color: '#b69ae0', ring: '#6b4fa0', stars: 5 },
+  { key: 'antoine', name: 'Antoine R.', color: '#C9A84C', ring: '#8B6914', stars: 5 },
 ];
 
 type Produit = {
@@ -51,47 +54,11 @@ type Produit = {
   prix: number;
 };
 
-const NOS_PRODUITS: Produit[] = [
-  {
-    id: 'cire',
-    cat: 'COIFFANT',
-    popular: true,
-    photo: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80',
-    nom: 'Cire Mate Signature',
-    desc: 'Fixation forte, fini mat. Tient la journée sans effet carton.',
-    contenance: '75 ml',
-    prix: 18,
-  },
-  {
-    id: 'huile',
-    cat: 'SOIN BARBE',
-    popular: false,
-    photo: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80',
-    nom: 'Huile Barbe Cèdre',
-    desc: 'Nourrit, assouplit, parfume. Cèdre & bois de santal.',
-    contenance: '30 ml',
-    prix: 24,
-  },
-  {
-    id: 'serum',
-    cat: 'SOIN VISAGE',
-    popular: true,
-    photo: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80',
-    nom: 'Sérum Visage',
-    desc: 'Hydratation profonde, teint réveillé. Matin et soir.',
-    contenance: '30 ml',
-    prix: 32,
-  },
-  {
-    id: 'pommade',
-    cat: 'STYLING',
-    popular: false,
-    photo: 'https://images.unsplash.com/photo-1594035910387-fea081e66b5d?w=600&q=80',
-    nom: 'Pommade Brillance',
-    desc: "Brillance soignée, coiffage souple, rework facile à l'eau.",
-    contenance: '100 ml',
-    prix: 22,
-  },
+const PRODUITS_META = [
+  { id: 'cire', popular: true, photo: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80', contenance: '75 ml', prix: 18 },
+  { id: 'huile', popular: false, photo: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80', contenance: '30 ml', prix: 24 },
+  { id: 'serum', popular: true, photo: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80', contenance: '30 ml', prix: 32 },
+  { id: 'pommade', popular: false, photo: 'https://images.unsplash.com/photo-1594035910387-fea081e66b5d?w=600&q=80', contenance: '100 ml', prix: 22 },
 ];
 
 const PRODUITS_CARD_W = 300;
@@ -139,6 +106,7 @@ export default function HomeScreen() {
   const isTablet = useIsTablet();
   const { user, isAuthenticated } = useAuth();
   const { addItem, nbArticles } = useCart();
+  const { t } = useLanguage();
   const firstName = user?.first_name || user?.username || 'vous';
   const scrollRef = useRef<ScrollView>(null);
   const [servicesY, setServicesY] = useState(0);
@@ -146,9 +114,37 @@ export default function HomeScreen() {
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [produitsIndex, setProduitsIndex] = useState(0);
 
+  const BARBERS = BARBERS_META.map(b => ({
+    ...b,
+    role: t(`home.team.${b.id}.role` as TranslationKey),
+    desc: t(`home.team.${b.id}.desc` as TranslationKey),
+    tags: [
+      t(`home.team.${b.id}.tag1` as TranslationKey),
+      t(`home.team.${b.id}.tag2` as TranslationKey),
+      t(`home.team.${b.id}.tag3` as TranslationKey),
+    ],
+  }));
+
+  const REVIEWS = REVIEWS_META.map(r => ({
+    ...r,
+    quote: t(`home.review.${r.key}.quote` as TranslationKey),
+    service: t(`home.review.${r.key}.service` as TranslationKey),
+  }));
+
+  const NOS_PRODUITS: Produit[] = PRODUITS_META.map(p => ({
+    id: p.id,
+    popular: p.popular,
+    photo: p.photo,
+    contenance: p.contenance,
+    prix: p.prix,
+    cat: t(`home.product.${p.id}.cat` as TranslationKey),
+    nom: t(`home.product.${p.id}.nom` as TranslationKey),
+    desc: t(`home.product.${p.id}.desc` as TranslationKey),
+  }));
+
   const handleAddToCart = (prod: Produit) => {
     addItem({
-      product_id: NOS_PRODUITS.findIndex(p => p.id === prod.id) + 1,
+      product_id: PRODUITS_META.findIndex(p => p.id === prod.id) + 1,
       cat: prod.cat,
       nom: prod.nom,
       prix: prod.prix,
@@ -182,6 +178,7 @@ export default function HomeScreen() {
           <Text style={styles.headerBrand}>willobarber</Text>
         </View>
         <View style={styles.headerRight}>
+          <LanguagePicker />
           <TouchableOpacity style={styles.cartIconBtn} onPress={() => router.push('/cart' as any)}>
             <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
               <Path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
@@ -212,20 +209,20 @@ export default function HomeScreen() {
         >
           <View style={[styles.heroInner, isTablet && styles.heroInnerTablet]}>
             <View style={isTablet ? styles.heroColLeft : undefined}>
-              <Text style={styles.heroKicker}>BARBER PRIVÉ · RUE AUGUSTE VAN ZANDE 78</Text>
+              <Text style={styles.heroKicker}>{t('home.heroKicker')}</Text>
               <Text style={[styles.heroTitle, isTablet && styles.heroTitleTablet]}>
-                L'art de la{'\n'}
-                <Text style={styles.heroTitleGold}>coupe,{'\n'}</Text>
-                l'esprit du{'\n'}
-                <Text style={styles.heroTitleGold}>détail.</Text>
+                {t('home.heroTitleLine1')}{'\n'}
+                <Text style={styles.heroTitleGold}>{t('home.heroTitleGold1')}{'\n'}</Text>
+                {t('home.heroTitleLine2')}{'\n'}
+                <Text style={styles.heroTitleGold}>{t('home.heroTitleGold2')}</Text>
               </Text>
               <Text style={styles.heroSub}>
-                WilloBarber élève la coupe masculine au rang de rituel. Une heure suspendue, un geste précis, un résultat sur mesure.
+                {t('home.heroSub')}
               </Text>
               <View style={styles.heroBtns}>
-                <PrimaryBookButton label="Réserver maintenant" onPress={() => router.push('/(tabs)/book')} />
+                <PrimaryBookButton label={t('common.bookNow')} onPress={() => router.push('/(tabs)/book')} />
                 <TouchableOpacity style={styles.btnOutline} onPress={() => scrollRef.current?.scrollTo({ y: servicesY, animated: true })} activeOpacity={0.85}>
-                  <Text style={styles.btnOutlineText}>↓  Nos prestations</Text>
+                  <Text style={styles.btnOutlineText}>{t('home.discoverServices')}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -240,7 +237,7 @@ export default function HomeScreen() {
                   <Text style={styles.proofCount}>2.4k+</Text>
                 </View>
                 <Text style={styles.proofText}>
-                  Plus de 2 400 clients fidèles nous confient leur image chaque année  ·  4.9★ sur Google.
+                  {t('home.proofText')}
                 </Text>
               </View>
             </View>
@@ -251,10 +248,10 @@ export default function HomeScreen() {
                   <Avatar initial="W" color="#C9A84C" ring="#C9A84C" size={72} />
                   <Stars n={5} />
                   <Text style={styles.heroFeatureQuote}>
-                    « Le meilleur barbier de Bruxelles, sans hésiter. On ressort avec dix ans de moins. »
+                    {t('home.heroFeatureQuote')}
                   </Text>
                   <Text style={styles.heroFeatureName}>Willo</Text>
-                  <Text style={styles.heroFeatureRole}>FONDATEUR & MASTER BARBER</Text>
+                  <Text style={styles.heroFeatureRole}>{t('home.heroFeatureRole')}</Text>
                 </View>
               </View>
             )}
@@ -264,11 +261,11 @@ export default function HomeScreen() {
         {/* ── Services section (cream) ── */}
         <View style={styles.creamSection} onLayout={e => setServicesY(e.nativeEvent.layout.y)}>
           <View style={styles.sectionInner}>
-            <Text style={styles.sectionKicker}>NOS PRESTATIONS</Text>
+            <Text style={styles.sectionKicker}>{t('home.servicesKicker')}</Text>
             <Text style={styles.sectionTitleDark}>
-              Une carte courte, <Text style={styles.sectionTitleGold}>une exigence longue.</Text>
+              {t('home.servicesTitle1')} <Text style={styles.sectionTitleGold}>{t('home.servicesTitleGold')}</Text>
             </Text>
-            <Text style={styles.sectionSub}>Six prestations choisies, exécutées avec la même rigueur.</Text>
+            <Text style={styles.sectionSub}>{t('home.servicesSub')}</Text>
           </View>
           <View style={{ marginHorizontal: -22, marginTop: 6 }}>
             <ServiceCarousel />
@@ -278,12 +275,12 @@ export default function HomeScreen() {
         {/* ── Nos Produits section (cream) ── */}
         <View style={styles.produitsSection}>
           <View style={styles.sectionInner}>
-            <Text style={styles.produitsKicker}>NOS PRODUITS</Text>
+            <Text style={styles.produitsKicker}>{t('home.productsKicker')}</Text>
             <Text style={styles.produitsTitle}>
-              L'entretien, <Text style={styles.produitsTitleGold}>prolongé chez vous.</Text>
+              {t('home.productsTitle1')} <Text style={styles.produitsTitleGold}>{t('home.productsTitleGold')}</Text>
             </Text>
             <Text style={styles.produitsSub}>
-              Les soins que nous utilisons au salon, sélectionnés pour durer.
+              {t('home.productsSub')}
             </Text>
           </View>
 
@@ -308,7 +305,7 @@ export default function HomeScreen() {
                       </View>
                       {prod.popular && (
                         <View style={[styles.prodBadgeCat2, styles.prodBadgePopular2]}>
-                          <Text style={styles.prodBadgeText2}>POPULAIRE</Text>
+                          <Text style={styles.prodBadgeText2}>{t('common.popular')}</Text>
                         </View>
                       )}
                     </View>
@@ -336,7 +333,7 @@ export default function HomeScreen() {
                       onPress={() => handleAddToCart(prod)}
                     >
                       <Text style={styles.cartBtnText2}>
-                        {added ? '✓ Ajouté' : 'Ajouter au panier →'}
+                        {added ? t('common.added') : t('common.addToCart')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -355,9 +352,9 @@ export default function HomeScreen() {
         {/* ── Team section (dark) ── */}
         <View style={styles.darkSection}>
           <View style={styles.sectionInner}>
-            <Text style={styles.sectionKicker}>L'ÉQUIPE</Text>
+            <Text style={styles.sectionKicker}>{t('home.teamKicker')}</Text>
             <Text style={styles.sectionTitleLight}>
-              Trois mains, <Text style={styles.sectionTitleGold}>une même école.</Text>
+              {t('home.teamTitle1')} <Text style={styles.sectionTitleGold}>{t('home.teamTitleGold')}</Text>
             </Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
@@ -368,9 +365,9 @@ export default function HomeScreen() {
                 <Text style={styles.barberRole}>{b.role}</Text>
                 <Text style={styles.barberDesc}>{b.desc}</Text>
                 <View style={styles.tagRow}>
-                  {b.tags.map(t => (
-                    <View key={t} style={styles.tag}>
-                      <Text style={styles.tagText}>{t}</Text>
+                  {b.tags.map(tag => (
+                    <View key={tag} style={styles.tag}>
+                      <Text style={styles.tagText}>{tag}</Text>
                     </View>
                   ))}
                 </View>
@@ -382,9 +379,9 @@ export default function HomeScreen() {
         {/* ── Reviews section (cream) ── */}
         <View style={styles.creamSection}>
           <View style={styles.sectionInner}>
-            <Text style={styles.sectionKicker}>ILS EN PARLENT</Text>
+            <Text style={styles.sectionKicker}>{t('home.reviewsKicker')}</Text>
             <Text style={[styles.sectionTitleGold, { fontFamily: Fonts.italic, fontSize: 26, marginBottom: 20, textAlign: 'center' }]}>
-              4,9 / 5 sur 720 avis vérifiés.
+              {t('home.reviewsRating')}
             </Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
@@ -407,12 +404,12 @@ export default function HomeScreen() {
         {/* ── CTA final (dark) ── */}
         <View style={[styles.darkSection, { paddingVertical: 40, alignItems: 'center' }]}>
           <Text style={[styles.sectionTitleLight, { textAlign: 'center', fontSize: 30, marginBottom: 12, fontFamily: Fonts.light }]}>
-            Votre prochain rendez-vous <Text style={[styles.sectionTitleGold, { fontFamily: Fonts.lightItalic }]}>commence ici.</Text>
+            {t('home.ctaTitle1')} <Text style={[styles.sectionTitleGold, { fontFamily: Fonts.lightItalic }]}>{t('home.ctaTitleGold')}</Text>
           </Text>
           <Text style={[styles.sectionSub, { color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 24, maxWidth: 280 }]}>
-            Plage horaire en quelques clics. Acompte sécurisé. Confirmation immédiate.
+            {t('home.ctaSub')}
           </Text>
-          <PrimaryBookButton label="Réserver une plage" onPress={() => router.push('/(tabs)/book')} />
+          <PrimaryBookButton label={t('home.bookSlot')} onPress={() => router.push('/(tabs)/book')} />
         </View>
       </ScrollView>
     </View>

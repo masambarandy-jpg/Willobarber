@@ -8,24 +8,14 @@ import {
   View,
 } from 'react-native';
 import { Fonts } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { BARBERS, type BookingState, type StaticBarber } from './data';
+import type { TranslationKey } from '@/i18n/translations';
 
 const GOLD       = '#C9A84C';
 const CARD       = '#1A1814';
 const GREY       = '#6B6560';
 const BORDER_MED = 'rgba(255,255,255,0.16)';
-
-const ANY_BARBER: StaticBarber = {
-  id: 'any',
-  initial: '~',
-  name: 'Peu importe — premier disponible',
-  role: '',
-  roleShort: '',
-  avatarColor: '',
-  rating: '',
-  reviews: 0,
-  desc: "Plus de créneaux disponibles, garantie qualité identique.",
-};
 
 interface Props {
   booking: BookingState;
@@ -34,6 +24,19 @@ interface Props {
 
 export function Step2Barber({ booking, onSelect }: Props) {
   const selected = booking.barber;
+  const { t } = useLanguage();
+
+  const ANY_BARBER: StaticBarber = {
+    id: 'any',
+    initial: '~',
+    name: t('step2.anyBarberName'),
+    role: '',
+    roleShort: '',
+    avatarColor: '',
+    rating: '',
+    reviews: 0,
+    desc: t('step2.anyBarberDesc'),
+  };
 
   return (
     <ScrollView
@@ -41,10 +44,10 @@ export function Step2Barber({ booking, onSelect }: Props) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.kicker}>RÉSERVATION</Text>
-      <Text style={styles.title}>Choisissez votre barbier</Text>
+      <Text style={styles.kicker}>{t('booking.kicker')}</Text>
+      <Text style={styles.title}>{t('step2.title')}</Text>
       <Text style={styles.subtitle}>
-        Une équipe formée à la même école. Trois personnalités, trois mains.
+        {t('step2.subtitle')}
       </Text>
 
       {/* Barber cards */}
@@ -75,11 +78,11 @@ export function Step2Barber({ booking, onSelect }: Props) {
               {/* Info */}
               <View style={styles.info}>
                 <Text style={styles.barberName}>{barber.name}</Text>
-                <Text style={styles.barberRole}>{barber.role}</Text>
+                <Text style={styles.barberRole}>{t(`barbers.brb.${barber.id}.role` as TranslationKey)}</Text>
                 <Text style={styles.barberRating}>
-                  ⭐ {barber.rating} · {barber.reviews} avis
+                  ⭐ {barber.rating} · {barber.reviews} {t('step2.reviewsSuffix')}
                 </Text>
-                <Text style={styles.barberDesc}>{barber.desc}</Text>
+                <Text style={styles.barberDesc}>{t(`barbers.brb.${barber.id}.desc` as TranslationKey)}</Text>
               </View>
 
               {/* Radio */}

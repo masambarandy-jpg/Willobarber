@@ -8,7 +8,9 @@ import {
   View,
 } from 'react-native';
 import { Fonts } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { SLOT_GROUPS, isSlotAvailable, type BookingState } from './data';
+import type { TranslationKey } from '@/i18n/translations';
 
 const GOLD       = '#C9A84C';
 const CARD       = '#1A1814';
@@ -19,12 +21,6 @@ const BORDER_MED = 'rgba(255,255,255,0.16)';
 const { width: SCREEN_W } = Dimensions.get('window');
 // 3 columns, 2 gaps of 9, 20px padding each side
 const SLOT_W = Math.floor((SCREEN_W - 40 - 18) / 3);
-
-const MONTH_LABELS = [
-  'Janvier','Février','Mars','Avril','Mai','Juin',
-  'Juillet','Août','Septembre','Octobre','Novembre','Décembre',
-];
-const DAY_LABELS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM'];
 
 type Cell = { day: number; prev: boolean } | null;
 
@@ -51,6 +47,9 @@ interface CalendarProps {
 }
 
 function Calendar({ selectedDate, onSelect }: CalendarProps) {
+  const { t } = useLanguage();
+  const MONTH_LABELS = Array.from({ length: 12 }, (_, i) => t(`step3.month.${i}` as TranslationKey));
+  const DAY_LABELS = Array.from({ length: 7 }, (_, i) => t(`step3.day.${i}` as TranslationKey));
   const now = new Date();
   const [viewYear,  setViewYear]  = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -197,6 +196,7 @@ interface Props {
 
 export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
   const { date: selectedDate, time: selectedTime, service } = booking;
+  const { t } = useLanguage();
 
   return (
     <ScrollView
@@ -204,9 +204,9 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.title}>Date & heure</Text>
+      <Text style={styles.title}>{t('step3.title')}</Text>
       <Text style={styles.subtitle}>
-        Choisissez le jour, puis le créneau qui vous arrange.
+        {t('step3.subtitle')}
       </Text>
 
       {/* Calendar card */}
@@ -218,7 +218,7 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
       <View style={styles.hoursBadge}>
         <Text style={styles.hoursBadgeIcon}>⏱</Text>
         <Text style={styles.hoursBadgeText}>
-          Ouvert du mardi au dimanche, 11h – 20h. Fermé le lundi.
+          {t('step3.hoursNote')}
         </Text>
       </View>
 
@@ -227,7 +227,7 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
         <View style={styles.slotsWrap}>
           {SLOT_GROUPS.map((group) => (
             <View key={group.label} style={styles.slotGroup}>
-              <Text style={styles.slotGroupLabel}>{group.label}</Text>
+              <Text style={styles.slotGroupLabel}>{t(`step3.slotGroup.${group.label}` as TranslationKey)}</Text>
               <View style={styles.slotsGrid}>
                 {group.slots.map((slot) => {
                   const isOn     = selectedTime === slot;
