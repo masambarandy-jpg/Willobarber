@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,10 +11,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { CardField, useConfirmPayment, type CardFieldInput } from '@stripe/stripe-react-native';
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { paymentsApi } from '@/services/api';
+import { StripeCardField } from './StripeCardField';
+import type { CardInputDetails, StripeCardFieldHandle } from './StripeCardField.types';
 import type { TranslationKey } from '@/i18n/translations';
 import {
   ACOMPTE_FIXE,
@@ -33,16 +33,6 @@ const GREEN_TEXT = '#6fc191';
 const INPUT_BG     = 'rgba(255,255,255,0.05)';
 const INPUT_BORDER = 'rgba(255,255,255,0.08)';
 
-const cardFieldStyle: CardFieldInput.Styles = {
-  backgroundColor: INPUT_BG,
-  borderColor: INPUT_BORDER,
-  borderWidth: 1,
-  borderRadius: 10,
-  textColor: '#FFFFFF',
-  placeholderColor: 'rgba(255,255,255,0.22)',
-  fontSize: 14,
-};
-
 const PAYMENT_TAB_KEYS: { id: PaymentMethod; labelKey: TranslationKey }[] = [
   { id: 'card',   labelKey: 'step4.tabCard'   },
   { id: 'apple',  labelKey: 'step4.tabApple'  },
@@ -59,7 +49,7 @@ interface Props {
   onAmountChoiceChange: (a: AmountChoice) => void;
 }
 
-function BankCard({ cardForm, cardDetails }: { cardForm: CardForm; cardDetails?: CardFieldInput.Details }) {
+function BankCard({ cardForm, cardDetails }: { cardForm: CardForm; cardDetails?: CardInputDetails }) {
   const { t } = useLanguage();
   const displayLast = cardDetails?.last4 || '••••';
 
@@ -244,8 +234,8 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
 }, ref) {
   const { service } = booking;
   const { t } = useLanguage();
-  const { confirmPayment } = useConfirmPayment();
-  const [cardDetails, setCardDetails] = useState<CardFieldInput.Details>();
+  const [cardDetails, setCardDetails] = useState<CardInputDetails>();
+  const cardFieldRef = useRef<StripeCardFieldHandle>(null);
 
   const price   = service ? service.price : 0;
   const deposit = ACOMPTE_FIXE;
@@ -259,31 +249,10 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
 
   useImperativeHandle(ref, () => ({
     pay: async () => {
-      if (!cardDetails?.complete) {
+      if (!cardDetails?.complete || !cardFieldRef.current) {
         throw new Error(t('step4.cardIncomplete'));
       }
-
-      const { clientSecret } = await paymentsApi.createPaymentIntent(payNow, 'eur');
-
-      const { paymentIntent, error } = await confirmPayment(clientSecret, {
-        paymentMethodType: 'Card',
-        paymentMethodData: {
-          billingDetails: {
-            email: cardForm.email || undefined,
-            phone: cardForm.phone || undefined,
-            name: `${cardForm.prenom} ${cardForm.nom}`.trim() || undefined,
-          },
-        },
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-      if (!paymentIntent || paymentIntent.status !== 'Succeeded') {
-        throw new Error(t('step4.cardIncomplete'));
-      }
-
-      return paymentIntent.id;
+      return cardFieldRef.current.pay(payNow, cardForm);
     },
   }));
 
@@ -365,12 +334,10 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
             <View>
               <BankCard cardForm={cardForm} cardDetails={cardDetails} />
               <FieldLabel text={t('step4.cardNumberLabel')} />
-              <CardField
-                postalCodeEnabled={false}
-                placeholders={{ number: '4242 4242 4242 4242' }}
-                cardStyle={cardFieldStyle}
-                style={styles.cardField}
-                onCardChange={setCardDetails}
+              <StripeCardField
+                ref={cardFieldRef}
+                incompleteMessage={t('step4.cardIncomplete')}
+                onChange={setCardDetails}
               />
             </View>
           )}
@@ -545,12 +512,6 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#1a1208',
     fontWeight: '600',
-  },
-
-  cardField: {
-    width: '100%',
-    height: 50,
-    marginBottom: 4,
   },
 
   altPay: {

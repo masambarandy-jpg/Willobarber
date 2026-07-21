@@ -118,15 +118,31 @@ function useDashboardData() {
   const [caData, setCaData] = useState<Record<Period, CaPeriodData>>(MOCK_CA_DATA);
   const [topServices, setTopServices] = useState<TopServiceWithCount[]>(MOCK_TOP_SERVICES);
   const [moisBarsReport, setMoisBarsReport] = useState(MOCK_CA_DATA.mois.bars);
+  // undefined = pas encore lu dans AsyncStorage, null = lu mais absent, string = token trouvé
+  const [token, setToken] = useState<string | null | undefined>(undefined);
 
+  // Le token du gérant est stocké sous 'coiffeur_token' (cf. app/coiffeur/index.tsx),
+  // pas 'accessToken' qui n'est jamais écrit nulle part dans l'app.
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const t = await AsyncStorage.getItem('coiffeur_token');
+      console.log('TOKEN DASHBOARD:', t);
+      if (!cancelled) setToken(t);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    // Le fetch attend que le token ait été lu (même s'il est null) avant de partir,
+    // pour éviter de fetcher sans Authorization juste parce que AsyncStorage n'avait
+    // pas encore répondu au premier rendu.
+    if (token === undefined) return;
+
+    let cancelled = false;
+
+    const attemptFetch = async (): Promise<boolean> => {
       try {
-        // Le token du gérant est stocké sous 'coiffeur_token' (cf. app/coiffeur/index.tsx),
-        // pas 'accessToken' qui n'est jamais écrit nulle part dans l'app.
-        const token = await AsyncStorage.getItem('coiffeur_token');
-        console.log('TOKEN:', token);
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
         // Pas d'endpoint /api/users/ côté backend (confirmé via la page 404 Django,
@@ -154,7 +170,7 @@ function useDashboardData() {
         const services: ApiService[] = Array.isArray(servicesRaw) ? servicesRaw : (servicesRaw.results ?? []);
         const clientsTotal: number = new Set(reservations.map((r) => r.user)).size;
 
-        if (cancelled) return;
+        if (cancelled) return true;
 
         const priceByServiceName: Record<string, number> = {};
         services.forEach((s) => { priceByServiceName[s.name] = parseFloat(s.price) || 0; });
@@ -237,7 +253,7 @@ function useDashboardData() {
           return d.getFullYear() === currentYear && d.getMonth() === now.getMonth();
         }).length;
 
-        if (cancelled) return;
+        if (cancelled) return true;
 
         setStats({
           clientsTotal,
@@ -256,15 +272,25 @@ function useDashboardData() {
         // Le PDF a un graphique en barres à largeur fixe (7 colonnes) : on ne peut pas y
         // faire tenir les 12 mois sans casser la mise en page — on garde les 7 premiers.
         setMoisBarsReport(moisBars.slice(0, 7));
+        return true;
       } catch (error) {
         console.log('ERREUR DASHBOARD:', error);
         // Erreur API ou pas de token → on garde les données mock déjà en state par défaut.
-      } finally {
-        if (!cancelled) setLoading(false);
+        return false;
       }
+    };
+
+    (async () => {
+      const ok = await attemptFetch();
+      if (!ok && !cancelled) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (!cancelled) await attemptFetch();
+      }
+      if (!cancelled) setLoading(false);
     })();
+
     return () => { cancelled = true; };
-  }, []);
+  }, [token]);
 
   return { loading, stats, upcomingClients, caData, topServices, moisBarsReport };
 }
