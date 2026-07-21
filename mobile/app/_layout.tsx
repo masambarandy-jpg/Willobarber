@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import { useFonts } from 'expo-font';
 import {
   CormorantGaramond_300Light,
@@ -17,7 +18,7 @@ import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { AuthModalProvider } from '@/contexts/AuthModalContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
-import { Colors } from '@/constants';
+import { Colors, STRIPE_PUBLISHABLE_KEY } from '@/constants';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -69,15 +70,17 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <LanguageProvider>
-        <AuthProvider>
-          <CartProvider>
-            <AuthModalProvider>
-              <RootNavigation />
-            </AuthModalProvider>
-          </CartProvider>
-        </AuthProvider>
-      </LanguageProvider>
+      <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+        <LanguageProvider>
+          <AuthProvider>
+            <CartProvider>
+              <AuthModalProvider>
+                <RootNavigation />
+              </AuthModalProvider>
+            </CartProvider>
+          </AuthProvider>
+        </LanguageProvider>
+      </StripeProvider>
     </GestureHandlerRootView>
   );
 }

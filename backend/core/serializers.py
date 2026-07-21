@@ -55,4 +55,5 @@ class ReservationSerializer(serializers.ModelSerializer):
             'date',
             'time',
             'status',
+            'payment_intent_id',
         ]

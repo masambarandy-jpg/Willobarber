@@ -5,6 +5,8 @@ export * from './Spacing';
 
 export const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app/api';
 
+export const STRIPE_PUBLISHABLE_KEY = 'pk_test_6tsmrkpRy0ltaHJgNXTJnZC7009ZsWy9B2';
+
 export const LANGUAGES = [
   { code: 'fr', label: 'Français' },
   { code: 'nl', label: 'Nederlands' },

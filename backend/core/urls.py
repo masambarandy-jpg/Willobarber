@@ -21,4 +21,5 @@ urlpatterns = [
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('appointments/check-client/', views.CheckClientView.as_view(), name='check-client'),
     path('recommendations/', views.recommendations, name='recommendations'),
+    path('payments/create-payment-intent/', views.create_payment_intent, name='create-payment-intent'),
 ]

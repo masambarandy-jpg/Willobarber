@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Platform,
   StyleSheet,
   Text,
@@ -21,7 +22,7 @@ import { BookingStepper }     from '@/components/booking/BookingStepper';
 import { Step1Service }       from '@/components/booking/Step1Service';
 import { Step2Barber }        from '@/components/booking/Step2Barber';
 import { Step3Date }          from '@/components/booking/Step3Date';
-import { Step4Payment }       from '@/components/booking/Step4Payment';
+import { Step4Payment, type Step4PaymentHandle } from '@/components/booking/Step4Payment';
 import { BookingConfirmation } from '@/components/booking/BookingConfirmation';
 
 import {
@@ -206,6 +207,8 @@ export default function BookScreen() {
   const [cardForm,      setCardForm]      = useState<CardForm>(EMPTY_CARD);
   const [amountChoice,  setAmountChoice]  = useState<AmountChoice>('deposit');
   const [serviceIdMap,  setServiceIdMap]  = useState<Record<string, number>>({});
+  const [isPaying,      setIsPaying]      = useState(false);
+  const step4Ref = useRef<Step4PaymentHandle>(null);
 
   // Map slugs statiques → vrais IDs Django (/api/services/)
   useEffect(() => {
@@ -256,6 +259,19 @@ export default function BookScreen() {
       return;
     }
 
+    let paymentIntentId: string | undefined;
+    if (paymentMethod === 'card') {
+      setIsPaying(true);
+      try {
+        paymentIntentId = await step4Ref.current?.pay();
+      } catch (e: any) {
+        setIsPaying(false);
+        Alert.alert(t('step4.paymentErrorTitle'), e?.message || t('step4.cardIncomplete'));
+        return;
+      }
+      setIsPaying(false);
+    }
+
     if (isAuthenticated && booking.date && booking.time) {
       try {
         const d = booking.date;
@@ -265,6 +281,7 @@ export default function BookScreen() {
           date: dateStr,
           time: booking.time,
           notes: `Barbier: ${booking.barber?.name || 'Willo'}`,
+          payment_intent_id: paymentIntentId,
         });
       } catch (e) {
         console.log('[RESERVATION] Erreur création:', e);
@@ -367,6 +384,7 @@ export default function BookScreen() {
       )}
       {step === 4 && (
         <Step4Payment
+          ref={step4Ref}
           booking={booking}
           paymentMethod={paymentMethod}
           cardForm={cardForm}
@@ -383,12 +401,13 @@ export default function BookScreen() {
         <View style={styles.footerContainer} pointerEvents="box-none">
           <View style={[styles.footerInner, { paddingBottom }]}>
             <TouchableOpacity
-              style={styles.ctaFull}
+              style={[styles.ctaFull, isPaying && styles.ctaDisabled]}
               onPress={handleNext}
+              disabled={isPaying}
               activeOpacity={0.85}
             >
               <Text style={styles.ctaFullText}>
-                {(() => {
+                {isPaying ? t('book.cta.paying') : (() => {
                   const price = booking.service?.price ?? 0;
                   const amt = amountChoice === 'full' ? price : ACOMPTE_FIXE;
                   return `${t('book.cta.payPrefix')} ${fmtPrice(amt)} ${t('book.cta.paySuffix')}`;
