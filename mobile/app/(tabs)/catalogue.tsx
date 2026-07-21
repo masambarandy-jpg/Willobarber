@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   ScrollView,
   StyleSheet,
@@ -17,6 +18,41 @@ import { SERVICES, type StaticService } from '@/components/booking/data';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
+import { servicesApi } from '@/services/api';
+import type { Service } from '@/types';
+
+const API_CATEGORY_MAP: Record<string, string> = {
+  coupe_homme: 'COUPE HOMME',
+  barbe: 'BARBE',
+  package: 'PACKAGE',
+  coloration: 'COLORATION',
+  soin: 'SOIN',
+  enfant: 'ENFANT',
+};
+
+const PHOTO_BY_NAME: Record<string, string> = {
+  'Signature WilloBarber': 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800&q=80',
+  "Taille & rasage à l'ancienne": 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800&q=80',
+  'Le Rituel': 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80',
+  'Coupe express': 'https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=800&q=80',
+  'Camouflage gris': 'https://images.unsplash.com/photo-1518710843675-2540dd79065c?w=800&q=80',
+  'Soin du visage': 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=800&q=80',
+  'Coupe enfant −15 ans': 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80',
+  'Coupe enfant +15 ans': 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80',
+};
+
+function mapApiService(s: Service): StaticService {
+  return {
+    id: String(s.id),
+    cat: API_CATEGORY_MAP[s.category] ?? s.category.toUpperCase(),
+    name: s.name,
+    desc: s.description,
+    dur: `${s.duration} min`,
+    price: parseFloat(s.price),
+    popular: s.is_popular,
+    photo: PHOTO_BY_NAME[s.name],
+  };
+}
 
 const GOLD  = '#C9A84C';
 const CARD  = '#1A1814';
@@ -44,14 +80,41 @@ export default function CatalogueScreen() {
   const { t } = useLanguage();
   const columns = !isTablet ? 1 : width >= 1024 ? 3 : 2;
   const [activeFilter, setActiveFilter] = useState<Filter>('all');
+  const [apiServices, setApiServices] = useState<StaticService[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await servicesApi.list();
+        if (!cancelled) setApiServices(data.map(mapApiService));
+      } catch (e) {
+        if (!cancelled) setApiServices(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const services = apiServices ?? SERVICES;
 
   const filteredServices = useMemo(
-    () => SERVICES.filter(s => matchesFilter(s, activeFilter)),
-    [activeFilter]
+    () => services.filter(s => matchesFilter(s, activeFilter)),
+    [services, activeFilter]
   );
 
-  const svcName = (svc: StaticService) => t(`services.svc.${svc.id}.name` as TranslationKey);
-  const svcDesc = (svc: StaticService) => t(`services.svc.${svc.id}.desc` as TranslationKey);
+  const svcName = (svc: StaticService) => {
+    const key = `services.svc.${svc.id}.name` as TranslationKey;
+    const translated = t(key);
+    return translated === key ? svc.name : translated;
+  };
+  const svcDesc = (svc: StaticService) => {
+    const key = `services.svc.${svc.id}.desc` as TranslationKey;
+    const translated = t(key);
+    return translated === key ? svc.desc : translated;
+  };
   const svcCat  = (svc: StaticService) => t(`services.cat.${svc.cat}` as TranslationKey);
 
   const handleReserve = (svc: StaticService) => {
@@ -90,6 +153,9 @@ export default function CatalogueScreen() {
         </ScrollView>
 
         {/* Liste des prestations */}
+        {loading ? (
+          <ActivityIndicator color={GOLD} size="large" style={styles.loader} />
+        ) : (
         <View style={[styles.list, isTablet && styles.listGrid]}>
           {filteredServices.map(svc => (
             <View
@@ -158,6 +224,7 @@ export default function CatalogueScreen() {
             </View>
           ))}
         </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -227,6 +294,9 @@ const styles = StyleSheet.create({
   },
 
   // Liste
+  loader: {
+    marginTop: 60,
+  },
   list: {
     marginTop: 24,
   },
