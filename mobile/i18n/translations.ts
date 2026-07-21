@@ -147,6 +147,17 @@ const fr = {
   'services.svc.enfant+15.name': 'Coupe enfant +15 ans',
   'services.svc.enfant+15.desc': 'Coupe ado & jeune adulte, finitions précises au style du moment.',
 
+  // ── Gérant (AuthModalContext.tsx) ─────────────────────────────────────────
+  'gerant.kicker': '— ESPACE GÉRANT',
+  'gerant.title': 'Connexion',
+  'gerant.subtitle': 'Connectez-vous pour gérer votre salon.',
+  'gerant.emailLabel': 'EMAIL',
+  'gerant.passwordLabel': 'MOT DE PASSE',
+  'gerant.submitBtn': 'Se connecter',
+  'gerant.backToClient': '← Retour espace client',
+  'gerant.errorInvalid': 'Email ou mot de passe incorrect.',
+  'gerant.errorNetwork': 'Erreur de connexion. Vérifiez votre internet.',
+
   // ── Book (book.tsx) ───────────────────────────────────────────────────────
   'book.recap.title': 'Récapitulatif',
   'book.recap.empty': 'Vos sélections apparaîtront ici au fil des étapes.',
@@ -647,6 +658,16 @@ const nl: Record<TranslationKey, string> = {
   'services.svc.enfant+15.name': 'Kinderkapsel +15 jaar',
   'services.svc.enfant+15.desc': 'Kapsel voor tieners & jongvolwassenen, precieze afwerking in de huidige stijl.',
 
+  'gerant.kicker': '— BEHEERDERSRUIMTE',
+  'gerant.title': 'Inloggen',
+  'gerant.subtitle': 'Log in om uw salon te beheren.',
+  'gerant.emailLabel': 'E-MAIL',
+  'gerant.passwordLabel': 'WACHTWOORD',
+  'gerant.submitBtn': 'Inloggen',
+  'gerant.backToClient': '← Terug naar klantruimte',
+  'gerant.errorInvalid': 'E-mail of wachtwoord onjuist.',
+  'gerant.errorNetwork': 'Verbindingsfout. Controleer uw internet.',
+
   'book.recap.title': 'Overzicht',
   'book.recap.empty': 'Uw keuzes verschijnen hier naarmate u de stappen doorloopt.',
   'book.recap.service': 'Dienst',
@@ -1141,6 +1162,16 @@ const en: Record<TranslationKey, string> = {
   'services.svc.enfant-15.desc': 'Adapted cut, relaxed atmosphere.',
   'services.svc.enfant+15.name': "Kids' cut 15 and up",
   'services.svc.enfant+15.desc': 'Cut for teens & young adults, precise finish in the current style.',
+
+  'gerant.kicker': '— MANAGER SPACE',
+  'gerant.title': 'Login',
+  'gerant.subtitle': 'Sign in to manage your salon.',
+  'gerant.emailLabel': 'EMAIL',
+  'gerant.passwordLabel': 'PASSWORD',
+  'gerant.submitBtn': 'Sign in',
+  'gerant.backToClient': '← Back to client space',
+  'gerant.errorInvalid': 'Invalid email or password.',
+  'gerant.errorNetwork': 'Connection error. Check your internet.',
 
   'book.recap.title': 'Summary',
   'book.recap.empty': 'Your selections will appear here as you go through the steps.',

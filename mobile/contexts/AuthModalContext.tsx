@@ -156,10 +156,10 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
           router.push('/coiffeur/dashboard');
         });
       } else {
-        setGerantError('Email ou mot de passe incorrect.');
+        setGerantError(t('gerant.errorInvalid'));
       }
     } catch (e) {
-      setGerantError('Erreur de connexion. Vérifiez votre internet.');
+      setGerantError(t('gerant.errorNetwork'));
     } finally {
       setGerantLoading(false);
     }
@@ -412,9 +412,9 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                 </>
               ) : (
                 <>
-                  <Text style={styles.kicker}>— ESPACE GÉRANT</Text>
-                  <Text style={styles.title}>Connexion</Text>
-                  <Text style={styles.subtitle}>Connectez-vous pour gérer votre salon.</Text>
+                  <Text style={styles.kicker}>{t('gerant.kicker')}</Text>
+                  <Text style={styles.title}>{t('gerant.title')}</Text>
+                  <Text style={styles.subtitle}>{t('gerant.subtitle')}</Text>
 
                   {!!gerantError && (
                     <View style={styles.errorBox}>
@@ -422,7 +422,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                     </View>
                   )}
 
-                  <Text style={styles.label}>EMAIL</Text>
+                  <Text style={styles.label}>{t('gerant.emailLabel')}</Text>
                   <View style={styles.inputWrap}>
                     <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
                     <TextInput
@@ -435,7 +435,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                     />
                   </View>
 
-                  <Text style={styles.label}>MOT DE PASSE</Text>
+                  <Text style={styles.label}>{t('gerant.passwordLabel')}</Text>
                   <View style={styles.gerantPasswordWrap}>
                     <Feather name="lock" size={16} color="rgba(255,255,255,0.4)" />
                     <TextInput
@@ -468,12 +468,12 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                   >
                     {gerantLoading
                       ? <ActivityIndicator color="#1A1208" size="small" />
-                      : <Text style={styles.btnPrimaryText}>Se connecter →</Text>
+                      : <Text style={styles.btnPrimaryText}>{t('gerant.submitBtn')} →</Text>
                     }
                   </TouchableOpacity>
 
                   <TouchableOpacity onPress={handleBackToClient} activeOpacity={0.7} style={[styles.gerantBtn, { marginTop: 16 }]}>
-                    <Text style={styles.backToClientText}>← Retour espace client</Text>
+                    <Text style={styles.backToClientText}>{t('gerant.backToClient')}</Text>
                   </TouchableOpacity>
                 </>
               )}
