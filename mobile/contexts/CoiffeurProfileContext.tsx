@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type CoiffeurProfile = {
   firstName: string;
@@ -15,7 +16,7 @@ type CoiffeurProfileContextType = {
 
 const DEFAULT_PROFILE: CoiffeurProfile = {
   firstName: 'Willo',
-  lastName: 'Diallo',
+  lastName: 'Barber',
   email: 'willo@willobarber.fr',
   phone: '06 45 78 29 70',
   role: 'Gérant',
@@ -32,6 +33,30 @@ export function CoiffeurProfileProvider({ children }: { children: React.ReactNod
   const updateProfile = useCallback((updates: Partial<CoiffeurProfile>) => {
     setProfile((prev) => ({ ...prev, ...updates }));
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('coiffeur_token');
+        if (!token) return;
+
+        const response = await fetch(
+          'https://willobarber-production-6951.up.railway.app/api/auth/me/',
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!response.ok) return;
+
+        const data = await response.json();
+        updateProfile({
+          firstName: data.first_name,
+          lastName: data.last_name,
+          role: data.role === 'barber' ? 'Gérant' : data.role,
+        });
+      } catch (e) {
+        // Garder les valeurs par défaut en cas d'erreur
+      }
+    })();
+  }, [updateProfile]);
 
   return (
     <CoiffeurProfileContext.Provider value={{ profile, updateProfile }}>
