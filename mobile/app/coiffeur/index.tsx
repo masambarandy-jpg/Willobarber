@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { EyeIcon, EyeOffIcon, CheckIcon, GoogleIcon, ArrowRightIcon } from '@/components/coiffeur/Icons';
@@ -15,9 +16,38 @@ import { CC, SERIF } from '@/components/coiffeur/theme';
 
 export default function CoiffeurLoginScreen() {
   const [email, setEmail] = useState('willo@willobarber.fr');
-  const [password, setPassword] = useState('••••••••');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(
+        'https://willobarber-production-6951.up.railway.app/api/auth/login/',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'willo', password }),
+        }
+      );
+      const data = await response.json();
+      if (response.ok && data.access) {
+        await AsyncStorage.setItem('coiffeur_token', data.access);
+        await AsyncStorage.setItem('coiffeur_refresh', data.refresh);
+        router.push('/coiffeur/dashboard');
+      } else {
+        setError('Email ou mot de passe incorrect.');
+      }
+    } catch (e) {
+      setError('Erreur de connexion. Vérifiez votre internet.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -91,10 +121,12 @@ export default function CoiffeurLoginScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/coiffeur/dashboard')}>
-          <Text style={styles.loginBtnText}>Se connecter</Text>
+        <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading}>
+          <Text style={styles.loginBtnText}>{loading ? 'Connexion...' : 'Se connecter'}</Text>
           <ArrowRightIcon color={CC.black} size={16} />
         </TouchableOpacity>
+
+        {error !== '' && <Text style={styles.errorText}>{error}</Text>}
 
         <View style={styles.separatorRow}>
           <View style={styles.separatorLine} />
@@ -278,6 +310,13 @@ const styles = StyleSheet.create({
     color: CC.black,
     fontWeight: '700',
     fontSize: 15,
+  },
+  errorText: {
+    color: '#E53935',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: -12,
+    marginBottom: 12,
   },
   separatorRow: {
     flexDirection: 'row',
