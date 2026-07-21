@@ -99,7 +99,7 @@ function badgeStyle(badge: Badge) {
 export default function CoiffeurAvisScreen() {
   const isTablet = useIsTablet();
   const { profile } = useCoiffeurProfile();
-  const avatarLetter = profile.firstName.charAt(0).toUpperCase() || 'W';
+  const avatarLetter = (profile.firstName ?? '').charAt(0).toUpperCase() || 'W';
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -123,7 +123,7 @@ export default function CoiffeurAvisScreen() {
               ...r,
               badge: 'Vérifié',
               reply: {
-                author: `${profile.firstName} ${profile.lastName.charAt(0)}.`,
+                author: `${profile.firstName} ${(profile.lastName ?? '').charAt(0)}.`,
                 role: profile.role,
                 when: 'répondu à l’instant',
                 text: draft.trim(),

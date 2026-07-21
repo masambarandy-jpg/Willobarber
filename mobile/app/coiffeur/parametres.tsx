@@ -80,7 +80,7 @@ function ProfilTab() {
     <View style={styles.card}>
       <View style={styles.avatarRow}>
         <View>
-          <Avatar letter={firstName.charAt(0).toUpperCase() || 'W'} size={64} />
+          <Avatar letter={(firstName ?? '').charAt(0).toUpperCase() || 'W'} size={64} />
           <TouchableOpacity style={styles.cameraBtn}>
             <CameraIcon />
           </TouchableOpacity>

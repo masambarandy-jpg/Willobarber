@@ -70,7 +70,7 @@ export default function CoiffeurClientsScreen() {
     if (!form.firstName.trim() || !form.lastName.trim()) return;
 
     const newClient: Client = {
-      letter: form.firstName.trim().charAt(0).toUpperCase(),
+      letter: (form.firstName ?? '').trim().charAt(0).toUpperCase(),
       name: `${form.firstName.trim()} ${form.lastName.trim()}`,
       badge: 'Nouveau',
       email: form.email.trim(),
@@ -123,7 +123,7 @@ export default function CoiffeurClientsScreen() {
     const updated: Client = {
       ...clientEnEdition,
       name,
-      letter: name.charAt(0).toUpperCase() || clientEnEdition.letter,
+      letter: (name ?? '').charAt(0).toUpperCase() || clientEnEdition.letter,
       email: editForm.email.trim(),
       phone: editForm.phone.trim(),
       badge: editForm.badge || null,

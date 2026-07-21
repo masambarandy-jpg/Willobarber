@@ -15,7 +15,7 @@ type Props = {
 export default function CoiffeurTopBar({ onMenuPress }: Props) {
   const isTablet = useIsTablet();
   const { profile } = useCoiffeurProfile();
-  const avatarLetter = profile.firstName.charAt(0).toUpperCase() || 'W';
+  const avatarLetter = (profile.firstName ?? '').charAt(0).toUpperCase() || 'W';
   const { width: windowWidth } = useWindowDimensions();
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });

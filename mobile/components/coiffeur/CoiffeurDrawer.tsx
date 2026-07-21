@@ -48,7 +48,7 @@ const NAV_ITEMS: { key: CoiffeurRoute; label: string; icon: (color: string) => R
 
 export default function CoiffeurDrawer({ visible, onClose, active }: Props) {
   const { profile } = useCoiffeurProfile();
-  const avatarLetter = profile.firstName.charAt(0).toUpperCase() || 'W';
+  const avatarLetter = (profile.firstName ?? '').charAt(0).toUpperCase() || 'W';
   const [supportVisible, setSupportVisible] = useState(false);
 
   if (!visible) return null;
@@ -75,7 +75,7 @@ export default function CoiffeurDrawer({ visible, onClose, active }: Props) {
           <View style={styles.profile}>
             <Avatar letter={avatarLetter} size={38} />
             <View>
-              <Text style={styles.profileName}>{profile.firstName} {profile.lastName.charAt(0)}.</Text>
+              <Text style={styles.profileName}>{profile.firstName} {(profile.lastName ?? '').charAt(0)}.</Text>
               <Text style={styles.profileRole}>{profile.role}</Text>
             </View>
           </View>
