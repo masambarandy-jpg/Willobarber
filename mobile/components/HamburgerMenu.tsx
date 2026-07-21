@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -104,6 +105,12 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
           </TouchableOpacity>
         </View>
 
+        <ScrollView
+          style={styles.scrollArea}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+
         {/* ── MENU label ── */}
         <Text style={styles.menuLabel}>{t('hamburgerMenu.menuLabel')}</Text>
 
@@ -170,6 +177,18 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
           </TouchableOpacity>
         )}
 
+        {/* ── Espace gérant (discret) ── */}
+        <View style={styles.gerantSeparator} />
+        <TouchableOpacity
+          style={styles.gerantBtn}
+          onPress={() => navigate('/coiffeur')}
+          activeOpacity={0.6}
+        >
+          <Text style={styles.gerantBtnText}>⚙ Espace gérant →</Text>
+        </TouchableOpacity>
+
+        </ScrollView>
+
       </Animated.View>
     </Modal>
   );
@@ -215,6 +234,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   closeBtnText: { color: 'rgba(255,255,255,0.65)', fontSize: 14, lineHeight: 16 },
+
+  // Scrollable content area
+  scrollArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
 
   // MENU label
   menuLabel: {
@@ -332,5 +359,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: GOLD,
     letterSpacing: 0.3,
+  },
+
+  // Espace gérant (discret)
+  gerantSeparator: {
+    height: 1,
+    backgroundColor: 'rgba(201,168,76,0.15)',
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  gerantBtn: {
+    alignItems: 'center',
+  },
+  gerantBtnText: {
+    fontSize: 12,
+    color: 'rgba(201,168,76,0.6)',
   },
 });
