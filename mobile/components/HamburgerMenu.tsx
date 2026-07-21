@@ -177,16 +177,6 @@ export function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) {
           </TouchableOpacity>
         )}
 
-        {/* ── Espace gérant (discret) ── */}
-        <View style={styles.gerantSeparator} />
-        <TouchableOpacity
-          style={styles.gerantBtn}
-          onPress={() => navigate('/coiffeur')}
-          activeOpacity={0.6}
-        >
-          <Text style={styles.gerantBtnText}>⚙ Espace gérant →</Text>
-        </TouchableOpacity>
-
         </ScrollView>
 
       </Animated.View>
@@ -359,20 +349,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: GOLD,
     letterSpacing: 0.3,
-  },
-
-  // Espace gérant (discret)
-  gerantSeparator: {
-    height: 1,
-    backgroundColor: 'rgba(201,168,76,0.15)',
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  gerantBtn: {
-    alignItems: 'center',
-  },
-  gerantBtnText: {
-    fontSize: 12,
-    color: 'rgba(201,168,76,0.6)',
   },
 });

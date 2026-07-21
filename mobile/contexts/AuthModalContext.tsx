@@ -19,6 +19,8 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { appointmentsApi, authApi, TokenStorage } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -40,6 +42,7 @@ const AuthModalContext = createContext<AuthModalContextType>({
 export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const { refreshUser } = useAuth();
   const { t } = useLanguage();
+  const router = useRouter();
 
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState<string | undefined>(undefined);
@@ -53,6 +56,13 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [identifierSelection, setIdentifierSelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const [suffixOffset, setSuffixOffset] = useState(0);
 
+  const [isGerant, setIsGerant] = useState(false);
+  const [gerantEmail, setGerantEmail] = useState('willo@willobarber.fr');
+  const [gerantPassword, setGerantPassword] = useState('');
+  const [showGerantPassword, setShowGerantPassword] = useState(false);
+  const [gerantLoading, setGerantLoading] = useState(false);
+  const [gerantError, setGerantError] = useState('');
+
   const identifierInputRef = useRef<TextInput>(null);
 
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -65,6 +75,9 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     setFirstName('');
     setIdentifier('');
     setError('');
+    setIsGerant(false);
+    setGerantPassword('');
+    setGerantError('');
     overlayAnim.setValue(0);
     cardAnim.setValue(0.92);
     setVisible(true);
@@ -114,6 +127,43 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleClose = () => dismiss(hideLoginModal);
+
+  const handleGerantAccess = () => setIsGerant(true);
+
+  const handleBackToClient = () => {
+    setIsGerant(false);
+    setGerantError('');
+  };
+
+  const handleGerantLogin = async () => {
+    setGerantLoading(true);
+    setGerantError('');
+    try {
+      const response = await fetch(
+        'https://willobarber-production-6951.up.railway.app/api/auth/login/',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'willo', password: gerantPassword }),
+        }
+      );
+      const data = await response.json();
+      if (response.ok && data.access) {
+        await AsyncStorage.setItem('coiffeur_token', data.access);
+        await AsyncStorage.setItem('coiffeur_refresh', data.refresh);
+        dismiss(() => {
+          hideLoginModal();
+          router.push('/coiffeur/dashboard');
+        });
+      } else {
+        setGerantError('Email ou mot de passe incorrect.');
+      }
+    } catch (e) {
+      setGerantError('Erreur de connexion. Vérifiez votre internet.');
+    } finally {
+      setGerantLoading(false);
+    }
+  };
 
   const handleSuccess = () => {
     const cb = onSuccessCallback;
@@ -238,120 +288,195 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
 
-              <Text style={styles.kicker}>{t('authModal.kicker')}</Text>
-              <Text style={styles.title}>{t('authModal.title')}</Text>
-              <Text style={styles.subtitle}>
-                {message || t('authModal.subtitleDefault')}
-              </Text>
+              {!isGerant ? (
+                <>
+                  <Text style={styles.kicker}>{t('authModal.kicker')}</Text>
+                  <Text style={styles.title}>{t('authModal.title')}</Text>
+                  <Text style={styles.subtitle}>
+                    {message || t('authModal.subtitleDefault')}
+                  </Text>
 
-              <View style={styles.quickRow}>
-                <TouchableOpacity
-                  style={styles.quickPill}
-                  onPress={() => handleProviderSelect('@gmail.com')}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.quickPillGmailIcon}>G</Text>
-                  <Text style={styles.quickPillText}>{t('authModal.gmail')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.quickPill}
-                  onPress={() => handleProviderSelect('@outlook.com')}
-                  activeOpacity={0.75}
-                >
-                  <Feather name="mail" size={14} color="#4A9EFF" />
-                  <Text style={styles.quickPillText}>{t('authModal.outlook')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.quickPill} onPress={handleOtherProvider} activeOpacity={0.75}>
-                  <Feather name="user" size={14} color="rgba(255,255,255,0.7)" />
-                  <Text style={styles.quickPillText}>{t('authModal.other')}</Text>
-                </TouchableOpacity>
-              </View>
+                  <View style={styles.quickRow}>
+                    <TouchableOpacity
+                      style={styles.quickPill}
+                      onPress={() => handleProviderSelect('@gmail.com')}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.quickPillGmailIcon}>G</Text>
+                      <Text style={styles.quickPillText}>{t('authModal.gmail')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.quickPill}
+                      onPress={() => handleProviderSelect('@outlook.com')}
+                      activeOpacity={0.75}
+                    >
+                      <Feather name="mail" size={14} color="#4A9EFF" />
+                      <Text style={styles.quickPillText}>{t('authModal.outlook')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.quickPill} onPress={handleOtherProvider} activeOpacity={0.75}>
+                      <Feather name="user" size={14} color="rgba(255,255,255,0.7)" />
+                      <Text style={styles.quickPillText}>{t('authModal.other')}</Text>
+                    </TouchableOpacity>
+                  </View>
 
-              <View style={styles.separatorRow}>
-                <View style={styles.separatorLine} />
-                <Text style={styles.separatorText}>{t('authModal.separator')}</Text>
-                <View style={styles.separatorLine} />
-              </View>
+                  <View style={styles.separatorRow}>
+                    <View style={styles.separatorLine} />
+                    <Text style={styles.separatorText}>{t('authModal.separator')}</Text>
+                    <View style={styles.separatorLine} />
+                  </View>
 
-              {!!error && (
-                <View style={styles.errorBox}>
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
-
-              <Text style={styles.label}>{t('authModal.firstNameLabel')}</Text>
-              <View style={styles.inputWrap}>
-                <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
-                <TextInput
-                  style={styles.input}
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  placeholder="Antoine"
-                  placeholderTextColor="rgba(255,255,255,0.35)"
-                  autoCorrect={false}
-                  returnKeyType="next"
-                  onSubmitEditing={focusIdentifier}
-                />
-                <Feather name="chevron-down" size={16} color="rgba(255,255,255,0.4)" />
-              </View>
-
-              <Text style={styles.label}>{t('authModal.identifierLabel')}</Text>
-              <Animated.View style={[styles.inputWrap, { borderColor: identifierBorderColor }]}>
-                <Feather name={isPhone(identifier) ? 'phone' : 'mail'} size={16} color="rgba(255,255,255,0.4)" />
-                <View style={styles.identifierInner}>
-                  <TextInput
-                    ref={identifierInputRef}
-                    style={styles.input}
-                    value={identifier}
-                    selection={identifierSelection}
-                    onChangeText={(t) => {
-                      setIdentifier(t);
-                      if (error) setError('');
-                      if (emailSuffix && t.includes('@')) setEmailSuffix('');
-                    }}
-                    placeholder={emailSuffix ? '' : t('authModal.identifierPlaceholder')}
-                    placeholderTextColor="rgba(255,255,255,0.35)"
-                    keyboardType="default"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="off"
-                    returnKeyType="done"
-                    onSubmitEditing={handleAccess}
-                  />
-                  {!!emailSuffix && (
-                    <>
-                      <Text
-                        style={[styles.input, styles.measureText]}
-                        onLayout={(e) => setSuffixOffset(e.nativeEvent.layout.width)}
-                      >
-                        {identifier}
-                      </Text>
-                      <Text style={[styles.suffixOverlay, { left: suffixOffset }]} pointerEvents="none">
-                        {emailSuffix}
-                      </Text>
-                    </>
+                  {!!error && (
+                    <View style={styles.errorBox}>
+                      <Text style={styles.errorText}>{error}</Text>
+                    </View>
                   )}
-                </View>
-              </Animated.View>
-              {!!emailSuffix && (
-                <Text style={styles.providerHint}>
-                  {emailSuffix === '@gmail.com'
-                    ? t('authModal.gmailHint')
-                    : t('authModal.outlookHint')}
-                </Text>
-              )}
 
-              <TouchableOpacity
-                style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
-                onPress={handleAccess}
-                disabled={loading}
-                activeOpacity={0.85}
-              >
-                {loading
-                  ? <ActivityIndicator color="#1A1208" size="small" />
-                  : <Text style={styles.btnPrimaryText}>{t('authModal.submit')}</Text>
-                }
-              </TouchableOpacity>
+                  <Text style={styles.label}>{t('authModal.firstNameLabel')}</Text>
+                  <View style={styles.inputWrap}>
+                    <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
+                    <TextInput
+                      style={styles.input}
+                      value={firstName}
+                      onChangeText={setFirstName}
+                      placeholder="Antoine"
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      autoCorrect={false}
+                      returnKeyType="next"
+                      onSubmitEditing={focusIdentifier}
+                    />
+                    <Feather name="chevron-down" size={16} color="rgba(255,255,255,0.4)" />
+                  </View>
+
+                  <Text style={styles.label}>{t('authModal.identifierLabel')}</Text>
+                  <Animated.View style={[styles.inputWrap, { borderColor: identifierBorderColor }]}>
+                    <Feather name={isPhone(identifier) ? 'phone' : 'mail'} size={16} color="rgba(255,255,255,0.4)" />
+                    <View style={styles.identifierInner}>
+                      <TextInput
+                        ref={identifierInputRef}
+                        style={styles.input}
+                        value={identifier}
+                        selection={identifierSelection}
+                        onChangeText={(t) => {
+                          setIdentifier(t);
+                          if (error) setError('');
+                          if (emailSuffix && t.includes('@')) setEmailSuffix('');
+                        }}
+                        placeholder={emailSuffix ? '' : t('authModal.identifierPlaceholder')}
+                        placeholderTextColor="rgba(255,255,255,0.35)"
+                        keyboardType="default"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="off"
+                        returnKeyType="done"
+                        onSubmitEditing={handleAccess}
+                      />
+                      {!!emailSuffix && (
+                        <>
+                          <Text
+                            style={[styles.input, styles.measureText]}
+                            onLayout={(e) => setSuffixOffset(e.nativeEvent.layout.width)}
+                          >
+                            {identifier}
+                          </Text>
+                          <Text style={[styles.suffixOverlay, { left: suffixOffset }]} pointerEvents="none">
+                            {emailSuffix}
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  </Animated.View>
+                  {!!emailSuffix && (
+                    <Text style={styles.providerHint}>
+                      {emailSuffix === '@gmail.com'
+                        ? t('authModal.gmailHint')
+                        : t('authModal.outlookHint')}
+                    </Text>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
+                    onPress={handleAccess}
+                    disabled={loading}
+                    activeOpacity={0.85}
+                  >
+                    {loading
+                      ? <ActivityIndicator color="#1A1208" size="small" />
+                      : <Text style={styles.btnPrimaryText}>{t('authModal.submit')}</Text>
+                    }
+                  </TouchableOpacity>
+
+                  <View style={styles.gerantSeparator} />
+                  <TouchableOpacity onPress={handleGerantAccess} activeOpacity={0.6} style={styles.gerantBtn}>
+                    <Text style={styles.gerantBtnText}>⚙ Espace gérant →</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.kicker}>— ESPACE GÉRANT</Text>
+                  <Text style={styles.title}>Connexion</Text>
+                  <Text style={styles.subtitle}>Connectez-vous pour gérer votre salon.</Text>
+
+                  {!!gerantError && (
+                    <View style={styles.errorBox}>
+                      <Text style={styles.errorText}>{gerantError}</Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.label}>EMAIL</Text>
+                  <View style={styles.inputWrap}>
+                    <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
+                    <TextInput
+                      style={styles.input}
+                      value={gerantEmail}
+                      onChangeText={setGerantEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                    />
+                  </View>
+
+                  <Text style={styles.label}>MOT DE PASSE</Text>
+                  <View style={styles.gerantPasswordWrap}>
+                    <Feather name="lock" size={16} color="rgba(255,255,255,0.4)" />
+                    <TextInput
+                      style={[
+                        styles.gerantPasswordInput,
+                        Platform.OS === 'web' && ({
+                          backgroundColor: 'transparent',
+                          background: 'none',
+                          WebkitBoxShadow: '0 0 0 1000px #1A1814 inset',
+                          WebkitTextFillColor: '#FFFFFF',
+                          caretColor: '#FFFFFF',
+                        } as any),
+                      ]}
+                      value={gerantPassword}
+                      onChangeText={setGerantPassword}
+                      secureTextEntry={!showGerantPassword}
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      onSubmitEditing={handleGerantLogin}
+                    />
+                    <TouchableOpacity onPress={() => setShowGerantPassword((v) => !v)} hitSlop={10}>
+                      <Feather name={showGerantPassword ? 'eye-off' : 'eye'} size={16} color="rgba(255,255,255,0.4)" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.btnPrimary, gerantLoading && { opacity: 0.7 }]}
+                    onPress={handleGerantLogin}
+                    disabled={gerantLoading}
+                    activeOpacity={0.85}
+                  >
+                    {gerantLoading
+                      ? <ActivityIndicator color="#1A1208" size="small" />
+                      : <Text style={styles.btnPrimaryText}>Se connecter →</Text>
+                    }
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={handleBackToClient} activeOpacity={0.7} style={[styles.gerantBtn, { marginTop: 16 }]}>
+                    <Text style={styles.backToClientText}>← Retour espace client</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </Animated.View>
           </View>
         )}
@@ -545,5 +670,49 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.2,
+  },
+  gerantSeparator: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  gerantBtn: {
+    alignItems: 'center',
+  },
+  gerantBtnText: {
+    fontSize: 12,
+    color: 'rgba(201,168,76,0.5)',
+  },
+  gerantPasswordWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#1A1814',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  gerantPasswordInput: {
+    flex: 1,
+    fontSize: 14.5,
+    color: '#FFFFFF',
+    padding: 0,
+    backgroundColor: 'transparent',
+    ...(Platform.OS === 'web'
+      ? ({
+          backgroundColor: 'transparent',
+          outline: 'none',
+          WebkitAppearance: 'none',
+        } as any)
+      : {}),
+  },
+  backToClientText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
   },
 });
