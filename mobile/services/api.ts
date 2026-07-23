@@ -199,7 +199,13 @@ export const paymentsApi = {
   createPaymentIntent: (amount: number, currency: string = 'eur') =>
     http
       .post<{ clientSecret: string }>('/payments/create-payment-intent/', { amount, currency })
-      .then((r) => r.data),
+      .then((r) => {
+        console.log(
+          'CLIENT SECRET:', r.data.clientSecret,
+          '— format valide:', typeof r.data.clientSecret === 'string' && r.data.clientSecret.startsWith('pi_'),
+        );
+        return r.data;
+      }),
 };
 
 // ─── Reviews API ─────────────────────────────────────────────────────────────
