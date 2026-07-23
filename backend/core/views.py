@@ -29,6 +29,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
+from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
 from .models import Barbershop, Service, Reservation, User, ClientMedia
 from .permissions import IsStaffRole
@@ -759,3 +760,33 @@ def client_media_list(request, pk):
 
     media = ClientMedia.objects.filter(client_id=pk)
     return Response(ClientMediaSerializer(media, many=True).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def client_list(request):
+    clients = User.objects.filter(role='client').annotate(
+        total_reservations=Count('reservation', distinct=True),
+        last_visit=Max('reservation__date'),
+        total_spent=Sum('reservation__amount_paid'),
+    ).order_by('-date_joined')
+
+    data = [
+        {
+            'id': c.id,
+            'first_name': c.first_name,
+            'last_name': c.last_name,
+            'email': c.email,
+            'phone': c.phone,
+            'total_reservations': c.total_reservations,
+            'last_visit': c.last_visit.isoformat() if c.last_visit else None,
+            'total_spent': float(c.total_spent or 0),
+            'status': (
+                'VIP' if c.total_reservations >= 10
+                else 'Nouveau' if c.total_reservations == 1
+                else 'Fidèle'
+            ),
+        }
+        for c in clients
+    ]
+    return Response(data)
