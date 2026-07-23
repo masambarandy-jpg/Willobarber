@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { API_BASE_URL } from '@/constants';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { EditIcon, MailIcon, PhoneIcon, PersonIcon } from '@/components/coiffeur/Icons';
@@ -9,7 +13,7 @@ import { useClientMedia } from '@/hooks/useClientMedia';
 import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 import AddMediaButton from '@/components/media/AddMediaButton';
 
-type Badge = 'VIP' | 'Nouveau' | 'Inactif' | null;
+type Badge = 'VIP' | 'Nouveau' | 'Fidèle' | 'Inactif' | null;
 
 type Client = {
   id: number;
@@ -23,33 +27,63 @@ type Client = {
   total: string;
 };
 
-const INITIAL_CLIENTS: Client[] = [
-  { id: 1, letter: 'A', name: 'Antoine Rivière', badge: 'VIP', email: 'antoine.r@gmail.com', phone: '06 12 34 56 78', rdv: 12, last: '28 avr.', total: '540€' },
-  { id: 2, letter: 'K', name: 'Karim Benali', badge: 'VIP', email: 'karim.b@gmail.com', phone: '06 22 11 88 04', rdv: 18, last: '2 mai', total: '720€' },
-  { id: 3, letter: 'L', name: 'Léo Martin', badge: 'Nouveau', email: 'leo.martin@gmail.com', phone: '06 78 45 12 33', rdv: 1, last: '30 mai', total: '45€' },
-  { id: 4, letter: 'N', name: 'Noé Vasseur', badge: 'Nouveau', email: 'noe.v@gmail.com', phone: '06 90 34 22 18', rdv: 2, last: '21 mai', total: '63€' },
-  { id: 5, letter: 'T', name: 'Thomas Leroy', badge: 'Inactif', email: 'thomas.l@gmail.com', phone: '06 12 78 90 11', rdv: 6, last: '12 nov.', total: '310€' },
-  { id: 6, letter: 'M', name: 'Marc Dubois', badge: null, email: 'marc.d@gmail.com', phone: '06 55 33 22 11', rdv: 4, last: '8 avr.', total: '180€' },
-];
+type ApiClient = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string | null;
+  total_reservations: number;
+  last_visit: string | null;
+  total_spent: number;
+  status: string;
+};
 
-const TABS = ['Tous', 'VIP', 'Nouveaux', 'Inactifs'] as const;
+function badgeFromReservations(count: number): Badge {
+  if (count >= 10) return 'VIP';
+  if (count === 1) return 'Nouveau';
+  return 'Fidèle';
+}
+
+function mapApiClient(c: ApiClient): Client {
+  const firstName = (c.first_name ?? '').trim();
+  const lastName = (c.last_name ?? '').trim();
+  const name = `${firstName} ${lastName}`.trim() || c.email;
+
+  return {
+    id: c.id,
+    letter: (firstName || name).charAt(0).toUpperCase() || '?',
+    name,
+    badge: badgeFromReservations(c.total_reservations),
+    email: c.email ?? '',
+    phone: c.phone ?? '',
+    rdv: c.total_reservations,
+    last: c.last_visit ? format(new Date(c.last_visit), 'd MMM', { locale: fr }) : '—',
+    total: `${Math.round(c.total_spent)}€`,
+  };
+}
+
+const TABS = ['Tous', 'VIP', 'Nouveaux', 'Fidèles', 'Inactifs'] as const;
 const TAB_TO_BADGE: Record<(typeof TABS)[number], Badge | 'ALL'> = {
   Tous: 'ALL',
   VIP: 'VIP',
   Nouveaux: 'Nouveau',
+  Fidèles: 'Fidèle',
   Inactifs: 'Inactif',
 };
 
 const EMPTY_FORM = { firstName: '', lastName: '', email: '', phone: '' };
 
-type EditBadge = 'VIP' | 'Nouveau' | 'Inactif' | '';
+type EditBadge = 'VIP' | 'Nouveau' | 'Fidèle' | 'Inactif' | '';
 const EMPTY_EDIT_FORM = { name: '', email: '', phone: '', badge: '' as EditBadge };
-const BADGE_OPTIONS: Exclude<EditBadge, ''>[] = ['VIP', 'Nouveau', 'Inactif'];
+const BADGE_OPTIONS: Exclude<EditBadge, ''>[] = ['VIP', 'Nouveau', 'Fidèle', 'Inactif'];
 
 export default function CoiffeurClientsScreen() {
   const isTablet = useIsTablet();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
-  const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -60,6 +94,39 @@ export default function CoiffeurClientsScreen() {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
   const { media, isLoading: mediaLoading, isUploading, upload } = useClientMedia(clientEnEdition?.id ?? null);
+
+  const fetchClients = useCallback(async () => {
+    setIsLoadingClients(true);
+    setLoadError(null);
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) {
+        setLoadError('Impossible de charger les clients');
+        return;
+      }
+
+      const url = `${API_BASE_URL}/clients/`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      console.log('[CLIENTS] GET', url, '→', res.status);
+
+      if (!res.ok) {
+        setLoadError('Impossible de charger les clients');
+        return;
+      }
+
+      const data: ApiClient[] = await res.json();
+      setClients(data.map(mapApiClient));
+    } catch (e) {
+      console.log('[CLIENTS] fetch error', e);
+      setLoadError('Impossible de charger les clients');
+    } finally {
+      setIsLoadingClients(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
 
   const filter = TAB_TO_BADGE[activeTab];
   const filtered = filter === 'ALL' ? clients : clients.filter((c) => c.badge === filter);
@@ -153,7 +220,7 @@ export default function CoiffeurClientsScreen() {
       selectClient(clients[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTablet]);
+  }, [isTablet, clients]);
 
   const handlePickMedia = async (file: any) => {
     await upload(file);
@@ -276,7 +343,20 @@ export default function CoiffeurClientsScreen() {
           })}
         </View>
 
-        {filtered.map((c, i) => {
+        {isLoadingClients && clients.length === 0 && (
+          <ActivityIndicator color={CC.gold} style={{ marginVertical: 24 }} />
+        )}
+
+        {loadError && !isLoadingClients && (
+          <View style={styles.errorWrap}>
+            <Text style={styles.errorText}>{loadError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={fetchClients}>
+              <Text style={styles.retryBtnText}>Réessayer</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!isLoadingClients && !loadError && filtered.map((c, i) => {
           const selected = isTablet && clientEnEdition?.name === c.name;
           return (
           <TouchableOpacity
@@ -549,24 +629,28 @@ export default function CoiffeurClientsScreen() {
 function badgeStyle(badge: Exclude<Badge, null>) {
   if (badge === 'VIP') return { backgroundColor: CC.vipBg };
   if (badge === 'Nouveau') return { backgroundColor: CC.successBg };
+  if (badge === 'Fidèle') return { backgroundColor: CC.grayBg };
   return { backgroundColor: CC.errorBg };
 }
 
 function badgeTextStyle(badge: Exclude<Badge, null>) {
   if (badge === 'VIP') return { color: CC.vipText };
   if (badge === 'Nouveau') return { color: CC.successText };
+  if (badge === 'Fidèle') return { color: CC.grayText };
   return { color: CC.errorText };
 }
 
 function badgeToggleActiveStyle(badge: Exclude<EditBadge, ''>) {
   if (badge === 'VIP') return { backgroundColor: CC.vipBg, borderColor: CC.vipBg };
   if (badge === 'Nouveau') return { backgroundColor: CC.successBg, borderColor: CC.successBg };
+  if (badge === 'Fidèle') return { backgroundColor: CC.grayBg, borderColor: CC.grayBg };
   return { backgroundColor: CC.errorBg, borderColor: CC.errorBg };
 }
 
 function badgeToggleActiveTextStyle(badge: Exclude<EditBadge, ''>) {
   if (badge === 'VIP') return { color: CC.vipText };
   if (badge === 'Nouveau') return { color: CC.successText };
+  if (badge === 'Fidèle') return { color: CC.grayText };
   return { color: CC.errorText };
 }
 
@@ -770,6 +854,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  errorWrap: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 14,
+  },
+  errorText: {
+    fontSize: 14,
+    color: CC.textSecondary,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    backgroundColor: CC.gold,
+    borderRadius: 100,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+  },
+  retryBtnText: {
+    color: CC.white,
+    fontWeight: '600',
+    fontSize: 14,
   },
   tab: {
     backgroundColor: CC.white,
