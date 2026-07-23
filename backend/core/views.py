@@ -7,6 +7,7 @@ from collections import Counter
 from datetime import datetime
 
 import anthropic
+import cloudinary.uploader
 import sendgrid
 import stripe
 from django.conf import settings
@@ -29,11 +30,11 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
 from django.http import HttpResponse
-from .models import Barbershop, Service, Reservation, User
+from .models import Barbershop, Service, Reservation, User, ClientMedia
 from .permissions import IsStaffRole
 from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
-    UserSerializer, RegisterSerializer,
+    UserSerializer, RegisterSerializer, ClientMediaSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -694,3 +695,66 @@ def download_final_invoice(request, pk):
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{invoice_number}.pdf"'
     return response
+
+
+@api_view(['POST'])
+@permission_classes([IsStaffRole])
+def upload_client_media(request):
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return Response({'error': 'Fichier requis.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    client_id = request.data.get('client')
+    if not client_id:
+        return Response({'error': 'client requis.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        client = User.objects.get(pk=client_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Client introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    media_type = request.data.get('media_type') or (
+        'video' if (uploaded_file.content_type or '').startswith('video') else 'photo'
+    )
+    if media_type not in ('photo', 'video'):
+        return Response({'error': 'media_type doit être "photo" ou "video".'}, status=status.HTTP_400_BAD_REQUEST)
+
+    reservation = None
+    reservation_id = request.data.get('reservation')
+    if reservation_id:
+        try:
+            reservation = Reservation.objects.get(pk=reservation_id)
+        except Reservation.DoesNotExist:
+            return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        result = cloudinary.uploader.upload(
+            uploaded_file,
+            resource_type='video' if media_type == 'video' else 'image',
+            folder='willobarber/client_media',
+        )
+    except Exception as e:
+        logger.error(f"[CLOUDINARY UPLOAD ERROR] {e}")
+        return Response({'error': "Échec de l'upload vers Cloudinary."}, status=status.HTTP_502_BAD_GATEWAY)
+
+    media = ClientMedia.objects.create(
+        client=client,
+        reservation=reservation,
+        media_type=media_type,
+        cloudinary_url=result.get('secure_url'),
+        cloudinary_public_id=result.get('public_id'),
+        caption=request.data.get('caption', ''),
+    )
+
+    return Response(ClientMediaSerializer(media).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def client_media_list(request, pk):
+    is_staff = request.user.is_superuser or getattr(request.user, 'role', None) == 'admin'
+    if not is_staff and request.user.id != pk:
+        return Response({'error': "Vous n'avez pas accès à cette galerie."}, status=status.HTTP_403_FORBIDDEN)
+
+    media = ClientMedia.objects.filter(client_id=pk)
+    return Response(ClientMediaSerializer(media, many=True).data)

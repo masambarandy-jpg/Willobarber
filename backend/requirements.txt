@@ -18,3 +18,4 @@ anthropic==0.75.0
 reportlab
 sendgrid
 stripe
+cloudinary

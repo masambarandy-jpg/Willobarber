@@ -24,4 +24,6 @@ urlpatterns = [
     path('payments/create-payment-intent/', views.create_payment_intent, name='create-payment-intent'),
     path('reservations/<int:pk>/send-final-invoice/', views.send_final_invoice, name='send-final-invoice'),
     path('reservations/<int:pk>/invoice/', views.download_final_invoice, name='reservation-invoice'),
+    path('media/upload/', views.upload_client_media, name='media-upload'),
+    path('clients/<int:pk>/media/', views.client_media_list, name='client-media-list'),
 ]

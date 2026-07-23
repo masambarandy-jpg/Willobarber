@@ -67,3 +67,24 @@ class Reservation(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.date} {self.time}"
+
+
+class ClientMedia(models.Model):
+    MEDIA_TYPE_CHOICES = [
+        ('photo', 'Photo'),
+        ('video', 'Vidéo'),
+    ]
+
+    client = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='media_items')
+    reservation = models.ForeignKey(Reservation, on_delete=models.SET_NULL, null=True, blank=True, related_name='media_items')
+    media_type = models.CharField(max_length=10, choices=MEDIA_TYPE_CHOICES)
+    cloudinary_url = models.URLField(max_length=500)
+    cloudinary_public_id = models.CharField(max_length=255)
+    caption = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.media_type} - {self.client} ({self.created_at:%Y-%m-%d})"
