@@ -1,3 +1,4 @@
+import base64
 import io
 import logging
 import os
@@ -9,7 +10,10 @@ import anthropic
 import sendgrid
 import stripe
 from django.conf import settings
-from sendgrid.helpers.mail import Mail, Email, To, Content
+from sendgrid.helpers.mail import (
+    Mail, Email, To, Content,
+    Attachment, FileContent, FileName, FileType, Disposition,
+)
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
@@ -26,6 +30,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
 from django.http import HttpResponse
 from .models import Barbershop, Service, Reservation, User
+from .permissions import IsStaffRole
 from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer,
@@ -34,6 +39,7 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_MODEL = 'claude-sonnet-5'
+ACOMPTE_FIXE = 5
 
 
 class PayeStamp(Flowable):
@@ -52,6 +58,28 @@ class PayeStamp(Flowable):
 
     def wrap(self, *args):
         return (120, 60)
+
+
+class SoldeRegleStamp(Flowable):
+    def draw(self):
+        self.canv.saveState()
+        self.canv.translate(60, 30)
+        self.canv.rotate(-15)
+        stamp_color = HexColor('#2D6A4F')
+        self.canv.setStrokeColor(stamp_color)
+        self.canv.setFillColor(stamp_color)
+        self.canv.setLineWidth(2)
+        self.canv.roundRect(-62, -18, 124, 36, 4, stroke=1, fill=0)
+        self.canv.setFont('Helvetica-Bold', 15)
+        self.canv.drawCentredString(0, -6, 'SOLDE RÉGLÉ')
+        self.canv.restoreState()
+
+    def wrap(self, *args):
+        return (140, 60)
+
+
+def fmt_eur(n):
+    return f"{n:.2f}".replace('.', ',') + ' €'
 
 
 class BarbershopViewSet(viewsets.ModelViewSet):
@@ -106,6 +134,14 @@ def send_confirmation_email(to_email, first_name, service_name, date, time, barb
 class ReservationViewSet(viewsets.ModelViewSet):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
+
+    def get_permissions(self):
+        # Marking a reservation as paid (payment_status/payment_method/amount_paid)
+        # is a staff-only operation — any authenticated user could otherwise
+        # tamper with another client's payment record.
+        if self.action in ('update', 'partial_update'):
+            return [IsStaffRole()]
+        return super().get_permissions()
 
     def create(self, request, *args, **kwargs):
         try:
@@ -499,3 +535,162 @@ def create_payment_intent(request):
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response({'clientSecret': intent.client_secret})
+
+
+def build_final_invoice_pdf(reservation):
+    """Facture finale émise quand le solde est réglé au salon (cash/carte)."""
+    user = reservation.user
+    service = reservation.service
+    invoice_number = f"WB-FINAL-{reservation.id}"
+    today = datetime.now().strftime("%d %B %Y")
+
+    total_ttc = float(service.price)
+    acompte = ACOMPTE_FIXE
+    solde = float(reservation.amount_paid) if reservation.amount_paid is not None else max(total_ttc - acompte, 0)
+    methode_label = reservation.get_payment_method_display() or '—'
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+        rightMargin=20*mm, leftMargin=20*mm,
+        topMargin=20*mm, bottomMargin=20*mm)
+
+    gold = colors.HexColor('#C9A84C')
+    dark = colors.HexColor('#1A1814')
+    green = colors.HexColor('#2D6A4F')
+    grey = colors.HexColor('#888888')
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # Header
+    header_data = [[
+        Paragraph('<b>w willobarber</b><br/><font size=8 color=grey>SALON DE BARBIER · BERCHEM</font>', styles['Normal']),
+        Paragraph(f'<font size=26><i>Facture finale.</i></font><br/><br/><font size=10 color=grey>N° {invoice_number}</font><br/><font size=10 color=grey>Émise le {today}</font>', ParagraphStyle('h', alignment=TA_RIGHT, spaceAfter=6, leading=32))
+    ]]
+    header_table = Table(header_data, colWidths=[90*mm, 90*mm])
+    header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
+    elements.append(header_table)
+    elements.append(HRFlowable(width="100%", thickness=1, color=dark))
+    elements.append(Spacer(1, 10*mm))
+
+    # Parties
+    first_name = user.first_name or user.username
+    last_name = user.last_name or ''
+    parties_data = [[
+        Paragraph(f'<font size=9 color=grey>ÉMETTEUR</font><br/><b>WilloBarber SRL</b><br/>78 rue Auguste van Zande<br/>1082 Bruxelles · Belgique<br/>contact@willobarber.be<br/>+32 2 555 04 04<br/><font size=9 color=grey>TVA BE 0789.123.456</font>', styles['Normal']),
+        [
+            Paragraph(f'<font size=9 color=grey>FACTURÉ À</font><br/><b>{first_name} {last_name}</b><br/>{user.email}', ParagraphStyle('right', alignment=TA_RIGHT)),
+            SoldeRegleStamp(),
+        ]
+    ]]
+    parties_table = Table(parties_data, colWidths=[90*mm, 90*mm])
+    parties_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (1,0), (1,0), 'RIGHT'),
+    ]))
+    elements.append(parties_table)
+    elements.append(Spacer(1, 10*mm))
+
+    # Récapitulatif
+    recap_data = [
+        [service.name, fmt_eur(total_ttc)],
+        ['Acompte déjà réglé en ligne', f'-{fmt_eur(acompte)}'],
+        [f'Solde réglé au salon ({methode_label})', fmt_eur(solde)],
+        ['Total réglé', fmt_eur(total_ttc)],
+    ]
+    recap_table = Table(recap_data, colWidths=[130*mm, 40*mm], hAlign='RIGHT')
+    recap_table.setStyle(TableStyle([
+        ('FONTSIZE', (0,0), (-1,-1), 10.5),
+        ('TEXTCOLOR', (1,1), (1,1), green),
+        ('TEXTCOLOR', (1,2), (1,2), green),
+        ('FONTNAME', (0,3), (-1,3), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,3), (-1,3), 12.5),
+        ('TEXTCOLOR', (1,3), (1,3), gold),
+        ('LINEABOVE', (0,3), (-1,3), 1, dark),
+        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+        ('PADDING', (0,0), (-1,-1), 8),
+    ]))
+    elements.append(recap_table)
+    elements.append(Spacer(1, 8*mm))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=grey))
+    elements.append(Spacer(1, 4*mm))
+    elements.append(Paragraph(
+        "Prestation entièrement réglée. Merci de votre confiance.",
+        ParagraphStyle('note', fontSize=10, textColor=green, alignment=TA_CENTER)
+    ))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.read(), invoice_number
+
+
+@api_view(['POST'])
+@permission_classes([IsStaffRole])
+def send_final_invoice(request, pk):
+    try:
+        reservation = Reservation.objects.get(pk=pk)
+    except Reservation.DoesNotExist:
+        return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if reservation.payment_status != 'paid_onsite':
+        return Response(
+            {'error': "La réservation n'est pas marquée comme payée au salon."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    pdf_bytes, invoice_number = build_final_invoice_pdf(reservation)
+
+    try:
+        sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
+        message = Mail(
+            from_email=Email('masamba.randy@gmail.com', 'WilloBarber'),
+            to_emails=To(reservation.user.email),
+            subject=f'✂️ Facture finale — {reservation.service.name}',
+            html_content=Content('text/html', f"""
+                <div style="font-family: Georgia, serif; background-color: #0D0C0A; color: #FFFFFF; padding: 40px; max-width: 600px; margin: auto;">
+                    <h1 style="color: #C9A84C; font-size: 32px; margin-bottom: 4px;">WilloBarber</h1>
+                    <p style="color: #6B6560; font-size: 12px; letter-spacing: 2px; margin-top: 0;">SALON DE BARBIER · BRUXELLES</p>
+                    <hr style="border: 1px solid #1A1814; margin: 24px 0;">
+                    <h2 style="color: #FFFFFF;">Merci pour votre visite {reservation.user.first_name or reservation.user.username} ✂️</h2>
+                    <p style="color: #CCCCCC;">Votre prestation est entièrement réglée. Vous trouverez votre facture finale en pièce jointe.</p>
+                    <hr style="border: 1px solid #1A1814; margin: 24px 0;">
+                    <p style="color: #C9A84C; font-size: 14px; text-align: center;">À bientôt chez WilloBarber ✂️</p>
+                </div>
+            """),
+        )
+        message.attachment = Attachment(
+            FileContent(base64.b64encode(pdf_bytes).decode()),
+            FileName(f'{invoice_number}.pdf'),
+            FileType('application/pdf'),
+            Disposition('attachment'),
+        )
+        sg.send(message)
+        print(f"[EMAIL] Facture finale envoyée à {reservation.user.email}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] Facture finale: {str(e)}")
+        return Response(
+            {'error': "Le paiement a été enregistré mais l'email n'a pas pu être envoyé."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    return Response({'success': True, 'invoice_number': invoice_number})
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def download_final_invoice(request, pk):
+    try:
+        reservation = Reservation.objects.get(pk=pk)
+    except Reservation.DoesNotExist:
+        return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if reservation.payment_status != 'paid_onsite':
+        return Response(
+            {'error': "La réservation n'est pas marquée comme payée au salon."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    pdf_bytes, invoice_number = build_final_invoice_pdf(reservation)
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{invoice_number}.pdf"'
+    return response

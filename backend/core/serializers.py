@@ -43,6 +43,7 @@ class ReservationSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(read_only=True)
     user_username = serializers.CharField(source='user.username', read_only=True)
     service_name = serializers.CharField(source='service.name', read_only=True)
+    service_price = serializers.DecimalField(source='service.price', max_digits=6, decimal_places=2, read_only=True)
 
     class Meta:
         model = Reservation
@@ -52,8 +53,12 @@ class ReservationSerializer(serializers.ModelSerializer):
             'user_username',
             'service',
             'service_name',
+            'service_price',
             'date',
             'time',
             'status',
             'payment_intent_id',
+            'payment_status',
+            'payment_method',
+            'amount_paid',
         ]

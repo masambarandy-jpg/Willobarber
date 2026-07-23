@@ -44,12 +44,26 @@ class Reservation(models.Model):
         ('cancelled', 'Annulé'),
     ]
 
+    PAYMENT_STATUS_CHOICES = [
+        ('unpaid', 'Non payé'),
+        ('paid_onsite', 'Payé au salon'),
+        ('paid_online', 'Payé en ligne'),
+    ]
+
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Espèces'),
+        ('card', 'Carte'),
+    ]
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     service = models.ForeignKey(Service, on_delete=models.CASCADE)
     date = models.DateField()
     time = models.TimeField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     payment_intent_id = models.CharField(max_length=255, blank=True, default='')
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True, default='')
+    amount_paid = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return f"{self.user} - {self.date} {self.time}"
