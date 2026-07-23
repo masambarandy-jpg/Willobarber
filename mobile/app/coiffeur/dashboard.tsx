@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'reac
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import jsPDF from 'jspdf';
+import * as XLSX from 'xlsx';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon } from '@/components/coiffeur/Icons';
@@ -16,6 +17,7 @@ const PERIOD_LABELS: Record<Period, string> = { jour: 'Jour', semaine: 'Semaine'
 
 const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app';
 const JOURS_SEMAINE = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const JOURS_SEMAINE_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 const MOIS_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 
 type CaPeriodData = { total: string; bars: { label: string; v: number }[]; active: string };
@@ -23,8 +25,17 @@ type UpcomingClient = { letter: string; name: string; service: string; barber: s
 type TopService = { name: string; pct: number };
 type TopServiceWithCount = TopService & { count: number };
 
-// Réel : /api/reservations/ → {id, user, user_username, service, service_name, date, time, status}
-// (pas de champ price / barber_name / client_name côté API)
+type AnalyticsData = {
+  peakHour: { label: string; count: number; pct: number };
+  bestDay: { label: string; total: number };
+  topBarber: { name: string; count: number; revenue: number };
+  topClient: { name: string; count: number };
+};
+
+type ExportReservation = ApiReservation & { price: number };
+
+// Réel : /api/reservations/ → {id, user, user_username, service, service_name, date, time,
+// status, payment_status} (pas de champ barber_name / client_name côté API)
 type ApiReservation = {
   id: number;
   user: number;
@@ -34,13 +45,21 @@ type ApiReservation = {
   date: string;
   time: string;
   status: string;
+  payment_status?: string;
 };
 
-// Réel : /api/services/ → contient bien price (string)
+// Réel : /api/services/ → contient bien price et duration (minutes)
 type ApiService = {
   id: number;
   name: string;
   price: string;
+  duration?: number;
+};
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  unpaid: 'Non payé',
+  paid_onsite: 'Payé au salon',
+  paid_online: 'Payé en ligne',
 };
 
 const MOCK_CA_DATA: Record<Period, CaPeriodData> = {
@@ -102,6 +121,13 @@ const MOCK_UPCOMING_CLIENTS: UpcomingClient[] = [
 
 const MOCK_STATS = { clientsTotal: 2412, prestationsCount: 14, equipeCount: 3, rdvCount: 386, rdvCountMonth: 386 };
 
+const MOCK_ANALYTICS: AnalyticsData = {
+  peakHour: { label: '14h00', count: 8, pct: 80 },
+  bestDay: { label: 'Samedi', total: 1240 },
+  topBarber: { name: 'Willo', count: 9, revenue: 382 },
+  topClient: { name: 'sophie_lebrun', count: 10 },
+};
+
 function parseApiDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
@@ -118,6 +144,9 @@ function useDashboardData() {
   const [caData, setCaData] = useState<Record<Period, CaPeriodData>>(MOCK_CA_DATA);
   const [topServices, setTopServices] = useState<TopServiceWithCount[]>(MOCK_TOP_SERVICES);
   const [moisBarsReport, setMoisBarsReport] = useState(MOCK_CA_DATA.mois.bars);
+  const [analytics, setAnalytics] = useState<AnalyticsData>(MOCK_ANALYTICS);
+  const [exportReservations, setExportReservations] = useState<ExportReservation[]>([]);
+  const [exportServices, setExportServices] = useState<ApiService[]>([]);
   // undefined = pas encore lu dans AsyncStorage, null = lu mais absent, string = token trouvé
   const [token, setToken] = useState<string | null | undefined>(undefined);
 
@@ -247,6 +276,46 @@ function useDashboardData() {
           .sort((a, b) => b.count - a.count)
           .slice(0, 5);
 
+        // ── Heure de pointe : quelle heure a le plus de RDV ──
+        const countByHour: Record<string, number> = {};
+        activeReservations.forEach((r) => {
+          const hourLabel = `${parseInt(r.time.slice(0, 2), 10)}h00`;
+          countByHour[hourLabel] = (countByHour[hourLabel] ?? 0) + 1;
+        });
+        const peakHourEntry = Object.entries(countByHour).sort((a, b) => b[1] - a[1])[0];
+        const peakHour = peakHourEntry
+          ? { label: peakHourEntry[0], count: peakHourEntry[1], pct: Math.round((peakHourEntry[1] / totalRdv) * 100) }
+          : null;
+
+        // ── Jour de la semaine le plus rentable (toutes dates confondues) ──
+        const revenueByDay: Record<string, number> = {};
+        activeReservations.forEach((r) => {
+          const d = parseApiDate(r.date);
+          const label = JOURS_SEMAINE_LONG[(d.getDay() + 6) % 7];
+          revenueByDay[label] = (revenueByDay[label] ?? 0) + (priceByServiceName[r.service_name] ?? 0);
+        });
+        const bestDayEntry = Object.entries(revenueByDay).sort((a, b) => b[1] - a[1])[0];
+        const bestDay = bestDayEntry ? { label: bestDayEntry[0], total: bestDayEntry[1] } : null;
+
+        // ── Barbier top performer ──
+        // Pas de champ barbier côté API (cf. commentaire fallback dans planning.tsx) :
+        // chaque réservation est rattachée au barbier par défaut 'Willo'.
+        const topBarber = activeReservations.length > 0
+          ? {
+              name: 'Willo',
+              count: activeReservations.length,
+              revenue: activeReservations.reduce((sum, r) => sum + (priceByServiceName[r.service_name] ?? 0), 0),
+            }
+          : null;
+
+        // ── Client le plus fidèle (nombre de réservations) ──
+        const countByClient: Record<string, number> = {};
+        activeReservations.forEach((r) => {
+          countByClient[r.user_username] = (countByClient[r.user_username] ?? 0) + 1;
+        });
+        const topClientEntry = Object.entries(countByClient).sort((a, b) => b[1] - a[1])[0];
+        const topClient = topClientEntry ? { name: topClientEntry[0], count: topClientEntry[1] } : null;
+
         // ── Rendez-vous ce mois (pour le rapport PDF) ──
         const rdvCountMonth = activeReservations.filter((r) => {
           const d = parseApiDate(r.date);
@@ -272,6 +341,15 @@ function useDashboardData() {
         // Le PDF a un graphique en barres à largeur fixe (7 colonnes) : on ne peut pas y
         // faire tenir les 12 mois sans casser la mise en page — on garde les 7 premiers.
         setMoisBarsReport(moisBars.slice(0, 7));
+        setAnalytics(
+          peakHour && bestDay && topBarber && topClient
+            ? { peakHour, bestDay, topBarber, topClient }
+            : MOCK_ANALYTICS
+        );
+        setExportReservations(
+          reservations.map((r) => ({ ...r, price: priceByServiceName[r.service_name] ?? 0 }))
+        );
+        setExportServices(services);
         return true;
       } catch (error) {
         console.log('ERREUR DASHBOARD:', error);
@@ -292,7 +370,17 @@ function useDashboardData() {
     return () => { cancelled = true; };
   }, [token]);
 
-  return { loading, stats, upcomingClients, caData, topServices, moisBarsReport };
+  return {
+    loading,
+    stats,
+    upcomingClients,
+    caData,
+    topServices,
+    moisBarsReport,
+    analytics,
+    exportReservations,
+    exportServices,
+  };
 }
 
 type RapportData = {
@@ -467,13 +555,78 @@ function genererRapport(data: RapportData) {
   doc.save(`rapport-willobarber-${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
+type ExcelData = {
+  reservations: ExportReservation[];
+  services: ApiService[];
+  analytics: AnalyticsData;
+  caTotal: string;
+  clientsTotal: number;
+  rdvCount: number;
+};
+
+function genererExcel(data: ExcelData) {
+  if (typeof window === 'undefined') return;
+
+  // ── Onglet Réservations ──
+  const reservationsRows = data.reservations.map((r) => ({
+    ID: r.id,
+    Client: r.user_username,
+    Service: r.service_name,
+    Date: r.date,
+    Heure: r.time.slice(0, 5),
+    'Montant (€)': r.price,
+    'Statut paiement': PAYMENT_STATUS_LABELS[r.payment_status ?? ''] ?? r.payment_status ?? '—',
+  }));
+
+  // ── Onglet Services ──
+  const countByService: Record<string, number> = {};
+  const revenueByService: Record<string, number> = {};
+  data.reservations.forEach((r) => {
+    countByService[r.service_name] = (countByService[r.service_name] ?? 0) + 1;
+    revenueByService[r.service_name] = (revenueByService[r.service_name] ?? 0) + r.price;
+  });
+  const servicesRows = data.services.map((s) => ({
+    Nom: s.name,
+    'Prix (€)': parseFloat(s.price) || 0,
+    'Durée (min)': s.duration ?? '—',
+    'Nombre de réservations': countByService[s.name] ?? 0,
+    'CA généré (€)': revenueByService[s.name] ?? 0,
+  }));
+
+  // ── Onglet Analytics ──
+  const analyticsRows = [
+    { Indicateur: 'Heure de pointe', Valeur: `${data.analytics.peakHour.label} — ${data.analytics.peakHour.count} RDV` },
+    { Indicateur: 'Jour le plus rentable', Valeur: `${data.analytics.bestDay.label} — ${fmtEuro(data.analytics.bestDay.total)}` },
+    { Indicateur: "Chiffre d'affaires total", Valeur: data.caTotal },
+    { Indicateur: 'Nombre de clients', Valeur: String(data.clientsTotal) },
+    { Indicateur: 'Nombre de RDV', Valeur: String(data.rdvCount) },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(reservationsRows), 'Réservations');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(servicesRows), 'Services');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(analyticsRows), 'Analytics');
+
+  XLSX.writeFile(wb, `dashboard-willobarber-${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
 export default function CoiffeurDashboardScreen() {
   const isTablet = useIsTablet();
   const [period, setPeriod] = useState<Period>('mois');
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const periodBtnRef = useRef<View>(null);
-  const { loading, stats, upcomingClients, caData, topServices, moisBarsReport } = useDashboardData();
+  const {
+    loading,
+    stats,
+    upcomingClients,
+    caData,
+    topServices,
+    moisBarsReport,
+    analytics,
+    exportReservations,
+    exportServices,
+  } = useDashboardData();
 
   const periodData = caData[period];
   const maxValue = Math.max(...periodData.bars.map((b) => b.v), 1);
@@ -508,15 +661,31 @@ export default function CoiffeurDashboardScreen() {
     });
   };
 
+  const handleExporterExcel = () => {
+    genererExcel({
+      reservations: exportReservations,
+      services: exportServices,
+      analytics,
+      caTotal: caData.mois.total,
+      clientsTotal: stats.clientsTotal,
+      rdvCount: stats.rdvCount,
+    });
+  };
+
   return (
     <>
     <CoiffeurScreen active="dashboard">
       <View style={styles.headerRow}>
         <Text style={styles.title}>Aperçu</Text>
-        <TouchableOpacity style={styles.reportBtn} onPress={handleGenererRapport}>
-          <DownloadIcon color={CC.black} size={13} />
-          <Text style={styles.reportBtnText}>Rapport</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.reportBtn} onPress={handleGenererRapport}>
+            <DownloadIcon color={CC.black} size={13} />
+            <Text style={styles.reportBtnText}>Rapport</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.reportBtn} onPress={handleExporterExcel}>
+            <Text style={styles.reportBtnText}>📊 Excel</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.statsGrid}>
@@ -605,6 +774,40 @@ export default function CoiffeurDashboardScreen() {
         </View>
       </View>
 
+      <View style={styles.statsGrid}>
+        <View style={[styles.statCard, isTablet && styles.statCardTablet]}>
+          <CalendarIcon color={CC.black} size={18} />
+          <Text style={styles.statLabel}>Heure de pointe</Text>
+          <Text style={styles.analyticsValue}>
+            {analytics.peakHour.label} — {analytics.peakHour.count} RDV
+          </Text>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${analytics.peakHour.pct}%` }]} />
+          </View>
+        </View>
+        <View style={[styles.statCard, isTablet && styles.statCardTablet]}>
+          <ListIcon color={CC.black} size={18} />
+          <Text style={styles.statLabel}>Jour le plus rentable</Text>
+          <Text style={styles.analyticsValue}>
+            {analytics.bestDay.label} — {fmtEuro(analytics.bestDay.total)}
+          </Text>
+        </View>
+        <View style={[styles.statCard, isTablet && styles.statCardTablet]}>
+          <PersonIcon color={CC.black} size={18} />
+          <Text style={styles.statLabel}>Barbier top performer</Text>
+          <Text style={styles.analyticsValue}>
+            {analytics.topBarber.name} — {analytics.topBarber.count} RDV — {fmtEuro(analytics.topBarber.revenue)}
+          </Text>
+        </View>
+        <View style={[styles.statCard, isTablet && styles.statCardTablet]}>
+          <UsersIcon color={CC.black} size={18} />
+          <Text style={styles.statLabel}>Client le plus fidèle</Text>
+          <Text style={styles.analyticsValue}>
+            {analytics.topClient.name} — {analytics.topClient.count} visites
+          </Text>
+        </View>
+      </View>
+
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
           <Text style={styles.cardTitle}>Prochains clients</Text>
@@ -660,6 +863,11 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: CC.black,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   reportBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -700,6 +908,12 @@ const styles = StyleSheet.create({
   statLabelDark: {
     fontSize: 12.5,
     color: 'rgba(255,255,255,0.6)',
+  },
+  analyticsValue: {
+    fontFamily: SERIF,
+    fontWeight: '700',
+    fontSize: 17,
+    color: CC.goldDark,
   },
   statValue: {
     fontFamily: SERIF,
