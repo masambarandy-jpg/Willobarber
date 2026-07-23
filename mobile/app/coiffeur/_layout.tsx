@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { Stack, useSegments } from 'expo-router';
 import { CC } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
@@ -33,9 +34,15 @@ export default function CoiffeurLayout() {
       <Stack.Screen
         name="index"
         options={{
-          presentation: 'transparentModal',
+          // 'transparentModal' assume un écran précédent visible en dessous (flux
+          // "espace gérant" ouvert depuis le menu client). En navigation directe
+          // sur /coiffeur (ex. accès web par URL), il n'y a rien derrière : on
+          // retombe sur une présentation pleine page classique pour garder le
+          // fond noir de styles.root au lieu du contentStyle crème du Stack.
+          presentation: Platform.OS === 'web' ? 'card' : 'transparentModal',
           headerShown: false,
           animation: 'fade',
+          contentStyle: { backgroundColor: '#0D0C0A' },
         }}
       />
       <Stack.Screen name="dashboard" />
