@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Modal, Pressable, StyleSheet, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import {
   ChevronLeftIcon,
@@ -17,6 +18,7 @@ import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 const HOUR_HEIGHT = 66;
 const START_HOUR = 11;
 const END_HOUR = 19;
+const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app';
 
 type Barber = 'Willo' | 'Malik' | 'Idris';
 
@@ -32,24 +34,38 @@ const BARBER_STYLE: Record<Barber, { bg: string; border: string }> = {
   Idris: { bg: '#1d3328', border: '#2D6A4F' },
 };
 
-type Event = { time: string; service: string; client: string; barber: Barber };
+type PaymentStatus = 'unpaid' | 'paid_onsite' | 'paid_online';
+type PaymentMethodType = 'cash' | 'card' | '';
 
-const TODAY_EVENTS: Event[] = [
-  { time: '11:00', service: 'Signature', client: 'Antoine R.', barber: 'Willo' },
-  { time: '12:00', service: 'Barbe', client: 'Karim B.', barber: 'Willo' },
-  { time: '13:30', service: 'Camouflage', client: 'Noé V.', barber: 'Idris' },
-  { time: '15:00', service: 'Le Rituel', client: 'Léo M.', barber: 'Willo' },
-  { time: '16:00', service: 'Rasage', client: 'Thomas L.', barber: 'Malik' },
-  { time: '17:30', service: 'Soin', client: 'Marc D.', barber: 'Idris' },
-  { time: '18:00', service: 'Signature', client: 'Hugo P.', barber: 'Willo' },
-];
+type Event = {
+  id: number;
+  time: string;
+  date: string; // dateKey() format, matches Date-derived keys used throughout this screen
+  service: string;
+  client: string;
+  barber: Barber;
+  amount: number;
+  paymentStatus: PaymentStatus;
+  paymentMethod: PaymentMethodType;
+};
 
-const MOCK_SERVICES = ['Signature', 'Barbe', 'Camouflage', 'Le Rituel', 'Rasage', 'Soin'];
-const MOCK_CLIENTS = [
-  'Antoine R.', 'Karim B.', 'Noé V.', 'Léo M.', 'Thomas L.', 'Marc D.', 'Hugo P.',
-  'Sami K.', 'Yanis T.', 'Adam B.', 'Nathan G.', 'Rayan F.',
-];
-const MOCK_BARBERS: Barber[] = ['Willo', 'Malik', 'Idris'];
+// Réel : /api/reservations/ → id, user, user_username, service, service_name,
+// service_price, date, time, status, payment_intent_id, payment_status,
+// payment_method, amount_paid (pas de champ barbier côté API)
+type ApiReservation = {
+  id: number;
+  user: number;
+  user_username: string;
+  service: number;
+  service_name: string;
+  service_price: string;
+  date: string;
+  time: string;
+  status: string;
+  payment_status: PaymentStatus;
+  payment_method: PaymentMethodType;
+  amount_paid: string | null;
+};
 
 function dateKey(d: Date) {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
@@ -59,42 +75,13 @@ function isSameDay(a: Date, b: Date) {
   return dateKey(a) === dateKey(b);
 }
 
-function seededRandom(seed: string) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
-  return () => {
-    h = Math.imul(h ^ (h >>> 15), 1 | h);
-    h = (h + Math.imul(h ^ (h >>> 7), 61 | h)) ^ h;
-    return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
-  };
+function parseApiDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
 }
 
-function getEventsForDate(date: Date): Event[] {
-  if (isSameDay(date, new Date())) return TODAY_EVENTS;
-
-  const rand = seededRandom(dateKey(date));
-  const count = Math.floor(rand() * 4);
-  const usedHours = new Set<number>();
-  const events: Event[] = [];
-
-  for (let i = 0; i < count; i++) {
-    let hour = START_HOUR + Math.floor(rand() * (END_HOUR - START_HOUR));
-    let guard = 0;
-    while (usedHours.has(hour) && guard < 10) {
-      hour = START_HOUR + Math.floor(rand() * (END_HOUR - START_HOUR));
-      guard++;
-    }
-    usedHours.add(hour);
-    const minute = rand() > 0.5 ? '30' : '00';
-    events.push({
-      time: `${hour.toString().padStart(2, '0')}:${minute}`,
-      service: MOCK_SERVICES[Math.floor(rand() * MOCK_SERVICES.length)],
-      client: MOCK_CLIENTS[Math.floor(rand() * MOCK_CLIENTS.length)],
-      barber: MOCK_BARBERS[Math.floor(rand() * MOCK_BARBERS.length)],
-    });
-  }
-
-  return events.sort((a, b) => a.time.localeCompare(b.time));
+function fmtEuro(n: number): string {
+  return `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 }
 
 function timeOffset(time: string) {
@@ -161,6 +148,90 @@ function getNowPosition() {
   return (totalMinutes / 60) * HOUR_HEIGHT;
 }
 
+// ─── Fallback démo ──────────────────────────────────────────────────────────
+// Utilisé uniquement quand l'API est injoignable/vide (ex. pendant la défense),
+// pour que le planning ne soit jamais vide. Les RDV mock ont un id négatif afin
+// de pouvoir être reconnus et traités "hors-ligne" par confirmPayment().
+
+const MOCK_SERVICE_PRICES: Record<string, number> = {
+  'Signature WilloBarber': 45,
+  'Taille & rasage': 28,
+  'Camouflage gris': 35,
+  'Le Rituel': 75,
+  'Coupe express': 28,
+  'Soin du visage': 32,
+};
+const MOCK_SERVICES = Object.keys(MOCK_SERVICE_PRICES);
+const MOCK_CLIENTS = ['Antoine R.', 'Karim B.', 'Noé V.', 'Léo M.', 'Thomas L.', 'Marc D.', 'Hugo P.'];
+const MOCK_BARBERS: Barber[] = ['Willo', 'Malik', 'Idris'];
+
+function seededRandom(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 1 | h);
+    h = (h + Math.imul(h ^ (h >>> 7), 61 | h)) ^ h;
+    return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function buildMockEventsByDate(): Record<string, Event[]> {
+  const today = new Date();
+  const map: Record<string, Event[]> = {};
+  let mockId = -1;
+
+  // Le jour courant est toujours peuplé, pour que Jour/Semaine/Mois montrent
+  // tous quelque chose sans dépendre de la date à laquelle on regarde la démo.
+  const todaySlots = ['11:00', '12:00', '13:30', '15:00', '16:00', '17:30', '18:00'];
+  const todayKey = dateKey(today);
+  map[todayKey] = todaySlots.map((time, i) => {
+    const service = MOCK_SERVICES[i % MOCK_SERVICES.length];
+    const paid = i % 3 === 0;
+    return {
+      id: mockId--,
+      time,
+      date: todayKey,
+      service,
+      client: MOCK_CLIENTS[i % MOCK_CLIENTS.length],
+      barber: MOCK_BARBERS[i % MOCK_BARBERS.length],
+      amount: MOCK_SERVICE_PRICES[service],
+      paymentStatus: paid ? 'paid_onsite' : 'unpaid',
+      paymentMethod: paid ? (i % 2 === 0 ? 'cash' : 'card') : '',
+    } as Event;
+  });
+
+  // Quelques RDV sur le reste du mois pour que les vues Semaine/Mois ne soient
+  // pas vides non plus (grille déterministe via seededRandom, pas de flicker).
+  for (let offset = -14; offset <= 14; offset++) {
+    if (offset === 0) continue;
+    const d = new Date(today);
+    d.setDate(d.getDate() + offset);
+    const rand = seededRandom(dateKey(d));
+    if (rand() > 0.55) continue;
+
+    const key = dateKey(d);
+    const count = 1 + Math.floor(rand() * 2);
+    map[key] = Array.from({ length: count }, () => {
+      const service = MOCK_SERVICES[Math.floor(rand() * MOCK_SERVICES.length)];
+      const hour = START_HOUR + Math.floor(rand() * (END_HOUR - START_HOUR));
+      const paid = rand() > 0.5;
+      return {
+        id: mockId--,
+        time: `${hour.toString().padStart(2, '0')}:${rand() > 0.5 ? '30' : '00'}`,
+        date: key,
+        service,
+        client: MOCK_CLIENTS[Math.floor(rand() * MOCK_CLIENTS.length)],
+        barber: MOCK_BARBERS[Math.floor(rand() * MOCK_BARBERS.length)],
+        amount: MOCK_SERVICE_PRICES[service],
+        paymentStatus: paid ? 'paid_onsite' : 'unpaid',
+        paymentMethod: paid ? (rand() > 0.5 ? 'cash' : 'card') : '',
+      } as Event;
+    }).sort((a, b) => a.time.localeCompare(b.time));
+  }
+
+  return map;
+}
+
 const VIEW_MODES = ['Jour', 'Semaine', 'Mois'] as const;
 const WEEKDAY_LABELS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
@@ -173,9 +244,229 @@ export default function CoiffeurPlanningScreen() {
   const [selectedRdv, setSelectedRdv] = useState<Event | null>(null);
   const [rdvDetailVisible, setRdvDetailVisible] = useState(false);
 
+  // undefined = pas encore lu dans AsyncStorage, null = lu mais absent, string = token trouvé
+  const [token, setToken] = useState<string | null | undefined>(undefined);
+  const [eventsByDate, setEventsByDate] = useState<Record<string, Event[]>>({});
+  const [usingMockData, setUsingMockData] = useState(false);
+
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'card' | null>(null);
+  const [cashAmountInput, setCashAmountInput] = useState('');
+  const [submittingPayment, setSubmittingPayment] = useState(false);
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const ouvrirDetailRdv = (event: Event) => {
     setSelectedRdv(event);
     setRdvDetailVisible(true);
+    setPaymentMode(null);
+    setCashAmountInput(event.amount.toFixed(2));
+  };
+
+  const fermerDetailRdv = () => {
+    setRdvDetailVisible(false);
+    setPaymentMode(null);
+  };
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  // Le token du gérant est stocké sous 'coiffeur_token' (cf. app/coiffeur/index.tsx)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const t = await AsyncStorage.getItem('coiffeur_token');
+      console.log('TOKEN PLANNING:', t);
+      if (!cancelled) setToken(t);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (token === undefined) return;
+    let cancelled = false;
+
+    // 'ok' = données réelles chargées, 'empty' = API répond mais 0 réservation,
+    // 'error' = échec réseau/HTTP (401 compris). 'empty' et 'error' déclenchent
+    // le fallback mock plus bas pour que le planning ne soit jamais vide.
+    const attemptFetch = async (): Promise<'ok' | 'empty' | 'error'> => {
+      try {
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+        console.log('TOKEN PLANNING:', token);
+
+        const res = await fetch(`${API_BASE_URL}/api/reservations/`, { headers });
+        console.log('RESERVATIONS STATUS:', res.status);
+
+        const raw = await res.json().catch(() => null);
+        console.log('RESERVATIONS DATA:', JSON.stringify(raw));
+
+        if (!res.ok) return 'error';
+
+        const reservations: ApiReservation[] = Array.isArray(raw) ? raw : (raw?.results ?? []);
+        if (reservations.length === 0) return 'empty';
+
+        const map: Record<string, Event[]> = {};
+        reservations
+          .filter((r) => r.status !== 'cancelled')
+          .forEach((r) => {
+            const key = dateKey(parseApiDate(r.date));
+            const event: Event = {
+              id: r.id,
+              time: r.time.slice(0, 5),
+              date: key,
+              service: r.service_name,
+              client: r.user_username,
+              barber: 'Willo', // pas d'endpoint équipe/affectation barbier : fallback
+              amount: parseFloat(r.service_price) || 0,
+              paymentStatus: r.payment_status,
+              paymentMethod: r.payment_method,
+            };
+            if (!map[key]) map[key] = [];
+            map[key].push(event);
+          });
+        Object.values(map).forEach((list) => list.sort((a, b) => a.time.localeCompare(b.time)));
+
+        if (cancelled) return 'ok';
+        setEventsByDate(map);
+        setUsingMockData(false);
+        return 'ok';
+      } catch (error) {
+        console.log('ERREUR PLANNING:', error);
+        return 'error';
+      }
+    };
+
+    (async () => {
+      let result = await attemptFetch();
+      if (result === 'error' && !cancelled) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (!cancelled) result = await attemptFetch();
+      }
+      if (!cancelled && result !== 'ok') {
+        console.log('PLANNING: fallback données mock —', result);
+        setEventsByDate(buildMockEventsByDate());
+        setUsingMockData(true);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const confirmPayment = async (method: 'cash' | 'card', amount: number) => {
+    if (!selectedRdv) return;
+    setSubmittingPayment(true);
+    try {
+      if (selectedRdv.id < 0) {
+        // RDV de démonstration (fallback hors-ligne, id négatif) : on simule
+        // l'encaissement localement plutôt que d'appeler un backend qui ne
+        // connaît pas cet id, pour que la démo reste utilisable sans API.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const updated: Event = { ...selectedRdv, paymentStatus: 'paid_onsite', paymentMethod: method };
+        setSelectedRdv(updated);
+        setEventsByDate((prev) => {
+          const list = prev[updated.date] ?? [];
+          return { ...prev, [updated.date]: list.map((e) => (e.id === updated.id ? updated : e)) };
+        });
+        setPaymentMode(null);
+        showToast(`Paiement ${method === 'cash' ? 'espèces' : 'carte'} enregistré ✅ (démo)`);
+        return;
+      }
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE_URL}/api/reservations/${selectedRdv.id}/`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          payment_status: 'paid_onsite',
+          payment_method: method,
+          amount_paid: amount,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`payment-update-failed-${res.status}`);
+
+      const updated: Event = { ...selectedRdv, paymentStatus: 'paid_onsite', paymentMethod: method };
+      setSelectedRdv(updated);
+      setEventsByDate((prev) => {
+        const list = prev[updated.date] ?? [];
+        return { ...prev, [updated.date]: list.map((e) => (e.id === updated.id ? updated : e)) };
+      });
+      setPaymentMode(null);
+
+      // Encaissement enregistré : on génère et envoie la facture finale par email
+      // (endpoint SendGrid côté backend — voir send_final_invoice).
+      let invoiceSent = false;
+      try {
+        const invoiceRes = await fetch(`${API_BASE_URL}/api/reservations/${selectedRdv.id}/send-final-invoice/`, {
+          method: 'POST',
+          headers,
+        });
+        invoiceSent = invoiceRes.ok;
+        if (!invoiceRes.ok) console.log('ERREUR ENVOI FACTURE:', invoiceRes.status);
+      } catch (invoiceError) {
+        console.log('ERREUR ENVOI FACTURE:', invoiceError);
+      }
+
+      const methodLabel = method === 'cash' ? 'espèces' : 'carte';
+      showToast(
+        invoiceSent
+          ? `Paiement ${methodLabel} enregistré ✅ · Facture envoyée`
+          : `Paiement ${methodLabel} enregistré ✅ (facture non envoyée)`
+      );
+    } catch (error) {
+      console.log('ERREUR ENCAISSEMENT:', error);
+      showToast("Erreur lors de l'encaissement");
+    } finally {
+      setSubmittingPayment(false);
+    }
+  };
+
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
+
+  const telechargerFacture = async () => {
+    if (!selectedRdv) return;
+
+    if (selectedRdv.id < 0) {
+      showToast('Facture indisponible en mode démonstration.');
+      return;
+    }
+    if (Platform.OS !== 'web') {
+      showToast('Le téléchargement de la facture est disponible sur la version web.');
+      return;
+    }
+
+    setDownloadingInvoice(true);
+    try {
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE_URL}/api/reservations/${selectedRdv.id}/invoice/`, { headers });
+      if (!res.ok) throw new Error(`invoice-download-failed-${res.status}`);
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `facture-WB-${selectedRdv.id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.log('ERREUR TELECHARGEMENT FACTURE:', error);
+      showToast('Erreur lors du téléchargement de la facture');
+    } finally {
+      setDownloadingInvoice(false);
+    }
   };
 
   useEffect(() => {
@@ -213,8 +504,8 @@ export default function CoiffeurPlanningScreen() {
   const showNowLine = isToday && new Date().getHours() >= START_HOUR && new Date().getHours() < END_HOUR;
 
   const dayEvents = useMemo(
-    () => getEventsForDate(currentDate).filter((e) => selectedBarbers.includes(e.barber)),
-    [currentDate, selectedBarbers]
+    () => (eventsByDate[dateKey(currentDate)] ?? []).filter((e) => selectedBarbers.includes(e.barber)),
+    [eventsByDate, currentDate, selectedBarbers]
   );
 
   const weekDays = useMemo(() => {
@@ -237,6 +528,14 @@ export default function CoiffeurPlanningScreen() {
     <>
     <CoiffeurScreen active="planning">
       <Text style={styles.title}>Planning</Text>
+
+      {usingMockData && (
+        <View style={styles.mockBanner}>
+          <Text style={styles.mockBannerText}>
+            ⚠️ Aperçu de démonstration — API indisponible ou sans réservation, données fictives affichées.
+          </Text>
+        </View>
+      )}
 
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
@@ -368,7 +667,7 @@ export default function CoiffeurPlanningScreen() {
             const style = BARBER_STYLE[e.barber];
             return (
               <TouchableOpacity
-                key={e.time + e.client}
+                key={e.id}
                 activeOpacity={0.8}
                 onPress={() => ouvrirDetailRdv(e)}
                 style={[
@@ -381,7 +680,7 @@ export default function CoiffeurPlanningScreen() {
                 ]}
               >
                 <Text style={[styles.eventText, { color: style.border }]}>
-                  {e.time} · {e.service}
+                  {e.time} · {e.service}{e.paymentStatus !== 'unpaid' ? ' ✅' : ''}
                 </Text>
                 <Text style={styles.eventClient}>{e.client}</Text>
               </TouchableOpacity>
@@ -394,7 +693,7 @@ export default function CoiffeurPlanningScreen() {
         <View style={styles.weekGrid}>
           {weekDays.map((d) => {
             const today = isSameDay(d, new Date());
-            const events = getEventsForDate(d).filter((e) => selectedBarbers.includes(e.barber));
+            const events = (eventsByDate[dateKey(d)] ?? []).filter((e) => selectedBarbers.includes(e.barber));
             return (
               <TouchableOpacity
                 key={dateKey(d)}
@@ -408,13 +707,13 @@ export default function CoiffeurPlanningScreen() {
                   const style = BARBER_STYLE[e.barber];
                   return (
                     <TouchableOpacity
-                      key={e.time + e.client}
+                      key={e.id}
                       activeOpacity={0.8}
                       onPress={() => ouvrirDetailRdv(e)}
                       style={[styles.weekEventCard, { backgroundColor: style.bg, borderLeftColor: style.border }]}
                     >
                       <Text style={[styles.weekEventText, { color: style.border }]} numberOfLines={1}>
-                        {e.time}
+                        {e.time}{e.paymentStatus !== 'unpaid' ? ' ✅' : ''}
                       </Text>
                       <Text style={styles.weekEventClient} numberOfLines={1}>
                         {e.client}
@@ -442,7 +741,7 @@ export default function CoiffeurPlanningScreen() {
               {week.map((d) => {
                 const inMonth = d.getMonth() === currentDate.getMonth();
                 const today = isSameDay(d, new Date());
-                const hasEvents = getEventsForDate(d).length > 0;
+                const hasEvents = (eventsByDate[dateKey(d)] ?? []).length > 0;
                 return (
                   <TouchableOpacity
                     key={dateKey(d)}
@@ -466,11 +765,11 @@ export default function CoiffeurPlanningScreen() {
       visible={rdvDetailVisible}
       transparent
       animationType="fade"
-      onRequestClose={() => setRdvDetailVisible(false)}
+      onRequestClose={fermerDetailRdv}
     >
-      <Pressable style={styles.rdvOverlay} onPress={() => setRdvDetailVisible(false)}>
+      <Pressable style={styles.rdvOverlay} onPress={fermerDetailRdv}>
         <Pressable style={styles.rdvCard} onPress={(e) => e.stopPropagation()}>
-          <TouchableOpacity style={styles.rdvCloseBtn} onPress={() => setRdvDetailVisible(false)}>
+          <TouchableOpacity style={styles.rdvCloseBtn} onPress={fermerDetailRdv}>
             <CloseIcon size={13} />
           </TouchableOpacity>
 
@@ -499,13 +798,6 @@ export default function CoiffeurPlanningScreen() {
                   </View>
                 </View>
                 <View style={styles.rdvDetailRow}>
-                  <ClockIcon size={16} color={CC.textSecondary} />
-                  <View>
-                    <Text style={styles.rdvDetailLabel}>DURÉE</Text>
-                    <Text style={styles.rdvDetailValue}>45 min</Text>
-                  </View>
-                </View>
-                <View style={styles.rdvDetailRow}>
                   <ScissorsIcon size={16} color={CC.textSecondary} />
                   <View>
                     <Text style={styles.rdvDetailLabel}>PRESTATION</Text>
@@ -519,12 +811,91 @@ export default function CoiffeurPlanningScreen() {
                     <Text style={styles.rdvDetailValue}>{selectedRdv.barber}</Text>
                   </View>
                 </View>
+                <View style={styles.rdvDetailRow}>
+                  <Text style={styles.rdvAmountIcon}>€</Text>
+                  <View>
+                    <Text style={styles.rdvDetailLabel}>MONTANT</Text>
+                    <Text style={styles.rdvDetailValue}>{fmtEuro(selectedRdv.amount)}</Text>
+                  </View>
+                </View>
               </View>
+
+              <View style={styles.paymentStatusRow}>
+                <Text style={styles.rdvDetailLabel}>STATUT PAIEMENT</Text>
+                {selectedRdv.paymentStatus !== 'unpaid' ? (
+                  <View style={styles.paidBadge}>
+                    <Text style={styles.paidBadgeText}>Payé ✅</Text>
+                  </View>
+                ) : (
+                  <View style={styles.unpaidBadge}>
+                    <Text style={styles.unpaidBadgeText}>Non payé</Text>
+                  </View>
+                )}
+              </View>
+
+              {selectedRdv.paymentStatus !== 'unpaid' && (
+                <TouchableOpacity
+                  style={[styles.downloadInvoiceBtn, downloadingInvoice && styles.btnDisabled]}
+                  onPress={telechargerFacture}
+                  disabled={downloadingInvoice}
+                >
+                  <Text style={styles.downloadInvoiceBtnText}>
+                    {downloadingInvoice ? 'Téléchargement…' : '📄 Télécharger la facture'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {selectedRdv.paymentStatus === 'unpaid' && (
+                <View style={styles.paymentActionsBlock}>
+                  {paymentMode === null && (
+                    <View style={styles.paymentMethodRow}>
+                      <TouchableOpacity
+                        style={styles.paymentMethodBtn}
+                        onPress={() => setPaymentMode('cash')}
+                        disabled={submittingPayment}
+                      >
+                        <Text style={styles.paymentMethodBtnText}>💵 Cash</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.paymentMethodBtn}
+                        onPress={() => confirmPayment('card', selectedRdv.amount)}
+                        disabled={submittingPayment}
+                      >
+                        <Text style={styles.paymentMethodBtnText}>💳 Carte</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {paymentMode === 'cash' && (
+                    <View style={styles.cashBlock}>
+                      <Text style={styles.rdvDetailLabel}>MONTANT REÇU</Text>
+                      <TextInput
+                        style={styles.cashInput}
+                        value={cashAmountInput}
+                        onChangeText={setCashAmountInput}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor={CC.textSecondary}
+                        editable={!submittingPayment}
+                      />
+                      <TouchableOpacity
+                        style={[styles.validateBtn, submittingPayment && styles.btnDisabled]}
+                        disabled={submittingPayment}
+                        onPress={() => confirmPayment('cash', parseFloat(cashAmountInput.replace(',', '.')) || 0)}
+                      >
+                        <Text style={styles.validateBtnText}>
+                          {submittingPayment ? 'Validation…' : "Valider l'encaissement"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
 
               <View style={styles.rdvDivider} />
 
               <View style={styles.rdvActionsRow}>
-                <TouchableOpacity style={styles.rdvCancelBtn} onPress={() => setRdvDetailVisible(false)}>
+                <TouchableOpacity style={styles.rdvCancelBtn} onPress={fermerDetailRdv}>
                   <Text style={styles.rdvCancelBtnText}>Fermer</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.rdvCallBtn}>
@@ -536,6 +907,14 @@ export default function CoiffeurPlanningScreen() {
         </Pressable>
       </Pressable>
     </Modal>
+
+    {toastMessage && (
+      <View style={styles.toastContainer} pointerEvents="none">
+        <View style={styles.toast}>
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </View>
+      </View>
+    )}
     </>
   );
 }
@@ -547,6 +926,18 @@ const styles = StyleSheet.create({
     fontSize: 30,
     color: CC.black,
     marginBottom: 18,
+  },
+  mockBanner: {
+    backgroundColor: CC.errorBg,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  mockBannerText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: CC.errorText,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -903,6 +1294,13 @@ const styles = StyleSheet.create({
     color: CC.black,
     marginTop: 1,
   },
+  rdvAmountIcon: {
+    width: 16,
+    fontSize: 15,
+    fontWeight: '700',
+    color: CC.textSecondary,
+    textAlign: 'center',
+  },
   rdvDivider: {
     height: 1,
     backgroundColor: CC.trackBg,
@@ -934,5 +1332,123 @@ const styles = StyleSheet.create({
   rdvCallBtnText: {
     fontWeight: '700',
     color: CC.black,
+  },
+
+  paymentStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: CC.trackBg,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  paidBadge: {
+    backgroundColor: CC.successBg,
+    borderRadius: 100,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  paidBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: CC.successText,
+  },
+  unpaidBadge: {
+    backgroundColor: CC.errorBg,
+    borderRadius: 100,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  unpaidBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: CC.errorText,
+  },
+
+  downloadInvoiceBtn: {
+    paddingVertical: 12,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: CC.inputBorder,
+    backgroundColor: CC.cream,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  downloadInvoiceBtnText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: CC.black,
+  },
+
+  paymentActionsBlock: {
+    marginBottom: 16,
+  },
+  paymentMethodRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  paymentMethodBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: CC.inputBorder,
+    backgroundColor: CC.cream,
+    alignItems: 'center',
+  },
+  paymentMethodBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: CC.black,
+  },
+  cashBlock: {
+    gap: 8,
+  },
+  cashInput: {
+    borderWidth: 1,
+    borderColor: CC.inputBorder,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontWeight: '600',
+    color: CC.black,
+    backgroundColor: CC.cream,
+  },
+  validateBtn: {
+    paddingVertical: 13,
+    borderRadius: 100,
+    backgroundColor: CC.gold,
+    alignItems: 'center',
+  },
+  validateBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: CC.black,
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+
+  toastContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 40,
+    alignItems: 'center',
+  },
+  toast: {
+    backgroundColor: CC.black,
+    borderRadius: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    maxWidth: '90%',
+  },
+  toastText: {
+    color: CC.white,
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
