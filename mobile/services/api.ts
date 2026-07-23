@@ -96,12 +96,20 @@ http.interceptors.response.use(
       }
 
       original._retry = true;
+
+      const refresh = await TokenStorage.getRefresh();
+      if (!refresh) {
+        // Pas de refresh token (jamais connecté, ou session déjà nettoyée) :
+        // on ne tente rien, on nettoie et on rejette silencieusement — pas
+        // d'Error levée, rien à afficher à l'utilisateur.
+        await TokenStorage.clear();
+        processQueue('no_refresh_token', null);
+        return Promise.reject('no_refresh_token');
+      }
+
       isRefreshing = true;
 
       try {
-        const refresh = await TokenStorage.getRefresh();
-        if (!refresh) return Promise.reject('no_refresh_token');
-
         const { data } = await axios.post<{ access: string }>(
           `${API_BASE_URL}/auth/token/refresh/`,
           { refresh },
@@ -265,16 +273,27 @@ export type ClientMedia = {
 };
 
 export const mediaApi = {
-  // Ces deux appels sont faits depuis l'espace coiffeur : le token client géré
-  // par l'instance axios `http` n'est pas le bon JWT (rôle admin/staff requis
-  // par le backend), d'où le fetch direct avec le token coiffeur dédié.
+  // L'upload se fait depuis l'espace coiffeur : le token client géré par
+  // l'instance axios `http` n'est pas le bon JWT (rôle admin/staff requis par
+  // le backend), d'où le fetch direct avec le token coiffeur dédié.
+  //
+  // La lecture (listForClient), elle, est appelée à la fois côté coiffeur
+  // (galerie d'un client depuis /coiffeur/clients) et côté client (onglet
+  // "Mes coupes") — le backend autorise le staff/admin OU le client lui-même
+  // (voir client_media_list). On tente donc le token coiffeur en priorité,
+  // et on retombe sur le JWT du client connecté (TokenStorage) sinon.
   listForClient: async (clientId: number): Promise<ClientMedia[]> => {
-    const token = await AsyncStorage.getItem('coiffeur_token');
-    if (!token) return [];
+    const token = (await AsyncStorage.getItem('coiffeur_token')) || (await TokenStorage.getAccess());
+    if (!token) {
+      console.log('[MEDIA] listForClient: aucun token disponible pour client', clientId);
+      return [];
+    }
 
-    const res = await fetch(`${API_BASE_URL}/clients/${clientId}/media/`, {
+    const url = `${API_BASE_URL}/clients/${clientId}/media/`;
+    const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    console.log('[MEDIA] GET', url, '→', res.status);
     if (!res.ok) return [];
     return res.json() as Promise<ClientMedia[]>;
   },

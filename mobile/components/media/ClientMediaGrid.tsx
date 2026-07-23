@@ -1,6 +1,15 @@
-import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { format, isToday, isYesterday } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import type { ClientMedia } from '@/services/api';
+
+function formatMediaDate(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (isToday(date)) return "Aujourd'hui";
+  if (isYesterday(date)) return 'Hier';
+  return format(date, 'd MMMM yyyy', { locale: fr });
+}
 
 function VideoThumb({ uri }: { uri: string }) {
   const player = useVideoPlayer(uri, (p) => {
@@ -44,7 +53,10 @@ export default function ClientMediaGrid({ media, isLoading, emptyLabel, mutedCol
       {photos.length > 0 && (
         <View style={styles.photoGrid}>
           {photos.map((item) => (
-            <Image key={item.id} source={{ uri: item.cloudinary_url }} style={styles.photoTile} />
+            <View key={item.id} style={styles.photoCell}>
+              <Image source={{ uri: item.cloudinary_url }} style={styles.photoTile} resizeMode="cover" />
+              <Text style={styles.dateLabel}>{formatMediaDate(item.created_at)}</Text>
+            </View>
           ))}
         </View>
       )}
@@ -61,12 +73,22 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: '2%',
   },
-  photoTile: {
+  photoCell: {
     width: '32%',
-    aspectRatio: 1,
-    borderRadius: 10,
     marginBottom: 8,
+  },
+  photoTile: {
+    width: '100%',
+    aspectRatio: 1,
+    minHeight: Platform.OS === 'web' ? 200 : undefined,
+    borderRadius: 10,
     backgroundColor: '#0002',
+  },
+  dateLabel: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 4,
   },
   videoTile: {
     width: '100%',

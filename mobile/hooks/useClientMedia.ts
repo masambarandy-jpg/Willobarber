@@ -12,6 +12,10 @@ export function useClientMedia(clientId: number | null | undefined) {
     try {
       const data = await mediaApi.listForClient(clientId);
       setMedia(data);
+    } catch {
+      // Jamais d'erreur (401, refresh manquant, réseau...) ne doit remonter
+      // jusqu'à l'UI de "Mes coupes" — galerie vide plutôt qu'un toast.
+      setMedia([]);
     } finally {
       setIsLoading(false);
     }
@@ -28,6 +32,9 @@ export function useClientMedia(clientId: number | null | undefined) {
       try {
         const created = await mediaApi.upload(clientId, file, caption);
         if (created) setMedia((prev) => [created, ...prev]);
+      } catch {
+        // Échec silencieux : pas de toast, l'appelant peut se fier à isUploading
+        // qui retombe à false pour savoir que l'upload n'a pas abouti.
       } finally {
         setIsUploading(false);
       }
