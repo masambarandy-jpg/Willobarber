@@ -250,4 +250,34 @@ export const waitingListApi = {
     http.post<WaitingListEntry>('/waiting-list/', payload).then((r) => r.data),
 };
 
+// ─── Client media API (photos/vidéos avant/après) ────────────────────────────
+
+export type ClientMedia = {
+  id: number;
+  client: number;
+  reservation: number | null;
+  media_type: 'photo' | 'video';
+  cloudinary_url: string;
+  cloudinary_public_id: string;
+  caption: string;
+  created_at: string;
+};
+
+export const mediaApi = {
+  listForClient: (clientId: number) =>
+    http.get<ClientMedia[]>(`/clients/${clientId}/media/`).then((r) => r.data),
+
+  upload: (clientId: number, file: File | { uri: string; name: string; type: string }, caption?: string) => {
+    const form = new FormData();
+    form.append('client', String(clientId));
+    if (caption) form.append('caption', caption);
+    form.append('file', file as unknown as Blob);
+    return http
+      .post<ClientMedia>('/media/upload/', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data);
+  },
+};
+
 export default http;

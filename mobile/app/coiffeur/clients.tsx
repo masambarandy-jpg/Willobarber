@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { EditIcon, MailIcon, PhoneIcon, PersonIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
+import { useClientMedia } from '@/hooks/useClientMedia';
+import ClientMediaGrid from '@/components/media/ClientMediaGrid';
+import AddMediaButton from '@/components/media/AddMediaButton';
 
 type Badge = 'VIP' | 'Nouveau' | 'Inactif' | null;
 
 type Client = {
+  id: number;
   letter: string;
   name: string;
   badge: Badge;
@@ -20,12 +24,12 @@ type Client = {
 };
 
 const INITIAL_CLIENTS: Client[] = [
-  { letter: 'A', name: 'Antoine Rivière', badge: 'VIP', email: 'antoine.r@gmail.com', phone: '06 12 34 56 78', rdv: 12, last: '28 avr.', total: '540€' },
-  { letter: 'K', name: 'Karim Benali', badge: 'VIP', email: 'karim.b@gmail.com', phone: '06 22 11 88 04', rdv: 18, last: '2 mai', total: '720€' },
-  { letter: 'L', name: 'Léo Martin', badge: 'Nouveau', email: 'leo.martin@gmail.com', phone: '06 78 45 12 33', rdv: 1, last: '30 mai', total: '45€' },
-  { letter: 'N', name: 'Noé Vasseur', badge: 'Nouveau', email: 'noe.v@gmail.com', phone: '06 90 34 22 18', rdv: 2, last: '21 mai', total: '63€' },
-  { letter: 'T', name: 'Thomas Leroy', badge: 'Inactif', email: 'thomas.l@gmail.com', phone: '06 12 78 90 11', rdv: 6, last: '12 nov.', total: '310€' },
-  { letter: 'M', name: 'Marc Dubois', badge: null, email: 'marc.d@gmail.com', phone: '06 55 33 22 11', rdv: 4, last: '8 avr.', total: '180€' },
+  { id: 1, letter: 'A', name: 'Antoine Rivière', badge: 'VIP', email: 'antoine.r@gmail.com', phone: '06 12 34 56 78', rdv: 12, last: '28 avr.', total: '540€' },
+  { id: 2, letter: 'K', name: 'Karim Benali', badge: 'VIP', email: 'karim.b@gmail.com', phone: '06 22 11 88 04', rdv: 18, last: '2 mai', total: '720€' },
+  { id: 3, letter: 'L', name: 'Léo Martin', badge: 'Nouveau', email: 'leo.martin@gmail.com', phone: '06 78 45 12 33', rdv: 1, last: '30 mai', total: '45€' },
+  { id: 4, letter: 'N', name: 'Noé Vasseur', badge: 'Nouveau', email: 'noe.v@gmail.com', phone: '06 90 34 22 18', rdv: 2, last: '21 mai', total: '63€' },
+  { id: 5, letter: 'T', name: 'Thomas Leroy', badge: 'Inactif', email: 'thomas.l@gmail.com', phone: '06 12 78 90 11', rdv: 6, last: '12 nov.', total: '310€' },
+  { id: 6, letter: 'M', name: 'Marc Dubois', badge: null, email: 'marc.d@gmail.com', phone: '06 55 33 22 11', rdv: 4, last: '8 avr.', total: '180€' },
 ];
 
 const TABS = ['Tous', 'VIP', 'Nouveaux', 'Inactifs'] as const;
@@ -53,6 +57,9 @@ export default function CoiffeurClientsScreen() {
   const [clientEnEdition, setClientEnEdition] = useState<Client | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const [panelEditing, setPanelEditing] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const { media, isLoading: mediaLoading, isUploading, upload } = useClientMedia(clientEnEdition?.id ?? null);
 
   const filter = TAB_TO_BADGE[activeTab];
   const filtered = filter === 'ALL' ? clients : clients.filter((c) => c.badge === filter);
@@ -70,6 +77,7 @@ export default function CoiffeurClientsScreen() {
     if (!form.firstName.trim() || !form.lastName.trim()) return;
 
     const newClient: Client = {
+      id: Date.now(),
       letter: (form.firstName ?? '').trim().charAt(0).toUpperCase(),
       name: `${form.firstName.trim()} ${form.lastName.trim()}`,
       badge: 'Nouveau',
@@ -92,6 +100,7 @@ export default function CoiffeurClientsScreen() {
   const selectClient = (client: Client) => {
     fillEditForm(client);
     setPanelEditing(false);
+    if (!isTablet) setDetailModalVisible(true);
   };
 
   const ouvrirEdition = (client: Client) => {
@@ -129,7 +138,7 @@ export default function CoiffeurClientsScreen() {
       badge: editForm.badge || null,
     };
 
-    setClients((prev) => prev.map((c) => (c.name === clientEnEdition.name ? updated : c)));
+    setClients((prev) => prev.map((c) => (c.id === clientEnEdition.id ? updated : c)));
 
     if (isTablet) {
       setClientEnEdition(updated);
@@ -145,6 +154,32 @@ export default function CoiffeurClientsScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTablet]);
+
+  const handlePickMedia = async (file: any) => {
+    await upload(file);
+  };
+
+  const mediaSection = (
+    <>
+      <View style={styles.detailDivider} />
+      <View style={styles.mediaHeaderRow}>
+        <Text style={styles.mediaTitle}>Photos & vidéos</Text>
+        <AddMediaButton
+          label="📸 Ajouter photo/vidéo"
+          busy={isUploading}
+          onPick={handlePickMedia}
+          style={styles.addMediaBtn}
+          textStyle={styles.addMediaBtnText}
+        />
+      </View>
+      <ClientMediaGrid
+        media={media}
+        isLoading={mediaLoading}
+        emptyLabel="Aucune photo ou vidéo pour ce client."
+        mutedColor={CC.textSecondary}
+      />
+    </>
+  );
 
   const editFields = (
     <>
@@ -246,8 +281,8 @@ export default function CoiffeurClientsScreen() {
           return (
           <TouchableOpacity
             key={`${c.name}-${i}`}
-            activeOpacity={isTablet ? 0.6 : 1}
-            onPress={() => isTablet && selectClient(c)}
+            activeOpacity={0.6}
+            onPress={() => selectClient(c)}
             style={[styles.clientCard, selected && styles.clientCardSelected]}
           >
             <View style={styles.clientTopRow}>
@@ -361,6 +396,8 @@ export default function CoiffeurClientsScreen() {
                         <PhoneIcon size={18} color={CC.black} />
                       </TouchableOpacity>
                     </View>
+
+                    {mediaSection}
                   </>
                 )}
               </View>
@@ -454,6 +491,55 @@ export default function CoiffeurClientsScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={detailModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDetailModalVisible(false)}
+      >
+        <View style={styles.editOverlay}>
+          <ScrollView style={[styles.editCard, { maxHeight: '85%' }]}>
+            {clientEnEdition && (
+              <>
+                <View style={styles.editAvatarWrap}>
+                  <Avatar letter={clientEnEdition.letter} size={56} />
+                </View>
+                <Text style={[styles.detailName, { marginBottom: 4 }]}>{clientEnEdition.name}</Text>
+                {clientEnEdition.badge && (
+                  <View style={[styles.badge, badgeStyle(clientEnEdition.badge), styles.detailBadge]}>
+                    <Text style={[styles.badgeText, badgeTextStyle(clientEnEdition.badge)]}>
+                      {clientEnEdition.badge}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.detailDivider} />
+
+                <View style={styles.detailContactBlock}>
+                  <View style={styles.detailContactRow}>
+                    <MailIcon size={16} color={CC.textSecondary} />
+                    <Text style={styles.detailContactText}>{clientEnEdition.email}</Text>
+                  </View>
+                  <View style={styles.detailContactRow}>
+                    <PhoneIcon size={16} color={CC.textSecondary} />
+                    <Text style={styles.detailContactText}>{clientEnEdition.phone}</Text>
+                  </View>
+                </View>
+
+                {mediaSection}
+
+                <TouchableOpacity
+                  style={[styles.cancelBtn, { marginTop: 18 }]}
+                  onPress={() => setDetailModalVisible(false)}
+                >
+                  <Text style={styles.cancelBtnText}>Fermer</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </ScrollView>
         </View>
       </Modal>
     </>
@@ -887,5 +973,29 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '700',
     color: CC.textSecondary,
+  },
+  mediaHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    gap: 10,
+  },
+  mediaTitle: {
+    fontFamily: SERIF,
+    fontWeight: '700',
+    fontSize: 16,
+    color: CC.black,
+  },
+  addMediaBtn: {
+    backgroundColor: CC.gold,
+    borderRadius: 100,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
+  addMediaBtnText: {
+    color: CC.white,
+    fontWeight: '600',
+    fontSize: 12.5,
   },
 });

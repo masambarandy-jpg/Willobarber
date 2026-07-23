@@ -28,6 +28,8 @@ import { useIsTablet } from '@/components/client/useIsTablet';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
 import { fmtPrice } from '@/components/booking/data';
+import { useClientMedia } from '@/hooks/useClientMedia';
+import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 
 const MOIS_ABBR_FR = ['JANV', 'FÉVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOÛT', 'SEPT', 'OCT', 'NOV', 'DÉC'];
 const MOIS_FR_FULL = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -167,7 +169,9 @@ export default function ReservationsScreen() {
   const [selectedHistIndex, setSelectedHistIndex] = useState(0);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [mainTab, setMainTab] = useState<'apercu' | 'coupes'>('apercu');
   const barAnim = useRef(new Animated.Value(0)).current;
+  const { media: myMedia, isLoading: myMediaLoading } = useClientMedia(user?.id ?? null);
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   useEffect(() => {
@@ -281,6 +285,38 @@ export default function ReservationsScreen() {
   const username = user?.username || user?.first_name || 'Client';
   const nextTarget  = getNextTarget(MOCK_LOYALTY.points);
   const ptsRestants = nextTarget - MOCK_LOYALTY.points;
+
+  const mainTabsRow = (
+    <View style={styles.mainTabsRow}>
+      <Pressable
+        style={[styles.mainTabPill, mainTab === 'apercu' && styles.mainTabPillActive]}
+        onPress={() => setMainTab('apercu')}
+      >
+        <Text style={[styles.mainTabText, mainTab === 'apercu' && styles.mainTabTextActive]}>Aperçu</Text>
+      </Pressable>
+      <Pressable
+        style={[styles.mainTabPill, mainTab === 'coupes' && styles.mainTabPillActive]}
+        onPress={() => setMainTab('coupes')}
+      >
+        <Text style={[styles.mainTabText, mainTab === 'coupes' && styles.mainTabTextActive]}>✂️ Mes coupes</Text>
+      </Pressable>
+    </View>
+  );
+
+  const mesCoupesGallery = (
+    <View style={{ marginTop: 8 }}>
+      <Text style={styles.sectionTitle}>Mes coupes</Text>
+      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13.5, marginTop: -6, marginBottom: 16 }}>
+        Les photos et vidéos avant/après partagées par votre coiffeur.
+      </Text>
+      <ClientMediaGrid
+        media={myMedia}
+        isLoading={myMediaLoading}
+        emptyLabel="Aucune photo ou vidéo pour le moment."
+        mutedColor="rgba(255,255,255,0.5)"
+      />
+    </View>
+  );
 
   const filteredHist = histFilter === 'Tous'
     ? HISTORIQUE
@@ -419,6 +455,11 @@ export default function ReservationsScreen() {
             <Text style={styles.newRdvBtnText}>{t('reservations.newRdvBtn')}</Text>
           </TouchableOpacity>
 
+          {mainTabsRow}
+
+          {mainTab === 'coupes' && mesCoupesGallery}
+
+          {mainTab === 'apercu' && (
           <View style={styles.tabletRow}>
             {/* ═══ COLONNE GAUCHE (40%) ═══════════════════════════════ */}
             <ScrollView
@@ -760,6 +801,7 @@ export default function ReservationsScreen() {
               })}
             </ScrollView>
           </View>
+          )}
         </View>
       ) : (
       <ScrollView
@@ -778,6 +820,12 @@ export default function ReservationsScreen() {
           <Text style={styles.newRdvBtnText}>{t('reservations.newRdvBtn')}</Text>
         </TouchableOpacity>
 
+        {mainTabsRow}
+
+        {mainTab === 'coupes' && mesCoupesGallery}
+
+        {mainTab === 'apercu' && (
+        <>
         {/* ── 2. GRILLE STATS ───────────────────────────────────────── */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
@@ -1151,6 +1199,8 @@ export default function ReservationsScreen() {
             </View>
           );
         })}
+        </>
+        )}
       </ScrollView>
       )}
 
@@ -1184,6 +1234,31 @@ const styles = StyleSheet.create({
 
   scroll:        { flex: 1 },
   scrollContent: { padding: 22, paddingBottom: 56 },
+
+  mainTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 22,
+  },
+  mainTabPill: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 100,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+  },
+  mainTabPillActive: {
+    backgroundColor: '#C9A84C',
+    borderColor: '#C9A84C',
+  },
+  mainTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  mainTabTextActive: {
+    color: '#1A1208',
+  },
 
   // ── iPad — layout 2 colonnes ────────────────────────────────────────────────
   tabletContainer: {

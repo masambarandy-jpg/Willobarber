@@ -43,7 +43,8 @@
           "merchantIdentifier": "merchant.fr.willobarber",
           "enableGooglePay": false
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

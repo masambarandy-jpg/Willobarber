@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Barbershop, Service, Reservation
+from .models import User, Barbershop, Service, Reservation, ClientMedia
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -62,3 +62,19 @@ class ReservationSerializer(serializers.ModelSerializer):
             'payment_method',
             'amount_paid',
         ]
+
+
+class ClientMediaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClientMedia
+        fields = [
+            'id',
+            'client',
+            'reservation',
+            'media_type',
+            'cloudinary_url',
+            'cloudinary_public_id',
+            'caption',
+            'created_at',
+        ]
+        read_only_fields = ['cloudinary_url', 'cloudinary_public_id']
