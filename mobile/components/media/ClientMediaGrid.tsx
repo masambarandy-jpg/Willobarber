@@ -55,7 +55,9 @@ export default function ClientMediaGrid({ media, isLoading, emptyLabel, mutedCol
           {photos.map((item) => (
             <View key={item.id} style={styles.photoCell}>
               <Image source={{ uri: item.cloudinary_url }} style={styles.photoTile} resizeMode="cover" />
-              <Text style={styles.dateLabel}>{formatMediaDate(item.created_at)}</Text>
+              <Text style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>
+                {formatMediaDate(item.created_at)}
+              </Text>
             </View>
           ))}
         </View>
@@ -83,12 +85,6 @@ const styles = StyleSheet.create({
     minHeight: Platform.OS === 'web' ? 200 : undefined,
     borderRadius: 10,
     backgroundColor: '#0002',
-  },
-  dateLabel: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 4,
   },
   videoTile: {
     width: '100%',

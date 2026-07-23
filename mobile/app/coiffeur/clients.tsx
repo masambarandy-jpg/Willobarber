@@ -101,20 +101,22 @@ export default function CoiffeurClientsScreen() {
     try {
       const token = await AsyncStorage.getItem('coiffeur_token');
       if (!token) {
+        console.log('[CLIENTS] aucun coiffeur_token en AsyncStorage');
         setLoadError('Impossible de charger les clients');
         return;
       }
 
       const url = `${API_BASE_URL}/clients/`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      console.log('[CLIENTS] GET', url, '→', res.status);
+      const bodyText = await res.text();
+      console.log('[CLIENTS] GET', url, '→', res.status, bodyText);
 
       if (!res.ok) {
         setLoadError('Impossible de charger les clients');
         return;
       }
 
-      const data: ApiClient[] = await res.json();
+      const data: ApiClient[] = JSON.parse(bodyText);
       setClients(data.map(mapApiClient));
     } catch (e) {
       console.log('[CLIENTS] fetch error', e);
