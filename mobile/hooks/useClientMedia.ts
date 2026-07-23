@@ -27,7 +27,7 @@ export function useClientMedia(clientId: number | null | undefined) {
       setIsUploading(true);
       try {
         const created = await mediaApi.upload(clientId, file, caption);
-        setMedia((prev) => [created, ...prev]);
+        if (created) setMedia((prev) => [created, ...prev]);
       } finally {
         setIsUploading(false);
       }

@@ -733,9 +733,10 @@ def upload_client_media(request):
             resource_type='video' if media_type == 'video' else 'image',
             folder='willobarber/client_media',
         )
+        logger.info(f"[CLOUDINARY UPLOAD SUCCESS] public_id={result.get('public_id')} url={result.get('secure_url')}")
     except Exception as e:
         logger.error(f"[CLOUDINARY UPLOAD ERROR] {e}")
-        return Response({'error': "Échec de l'upload vers Cloudinary."}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     media = ClientMedia.objects.create(
         client=client,

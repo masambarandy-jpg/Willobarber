@@ -268,17 +268,26 @@ export const mediaApi = {
   // Ces deux appels sont faits depuis l'espace coiffeur : le token client géré
   // par l'instance axios `http` n'est pas le bon JWT (rôle admin/staff requis
   // par le backend), d'où le fetch direct avec le token coiffeur dédié.
-  listForClient: async (clientId: number) => {
+  listForClient: async (clientId: number): Promise<ClientMedia[]> => {
     const token = await AsyncStorage.getItem('coiffeur_token');
+    if (!token) return [];
+
     const res = await fetch(`${API_BASE_URL}/clients/${clientId}/media/`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) throw new Error(`Erreur ${res.status} lors du chargement de la galerie.`);
+    if (!res.ok) return [];
     return res.json() as Promise<ClientMedia[]>;
   },
 
-  upload: async (clientId: number, file: File | { uri: string; name: string; type: string }, caption?: string) => {
+  upload: async (
+    clientId: number,
+    file: File | { uri: string; name: string; type: string },
+    caption?: string
+  ): Promise<ClientMedia | null> => {
     const token = await AsyncStorage.getItem('coiffeur_token');
+    console.log('MEDIA UPLOAD TOKEN:', token ? token.substring(0, 20) + '...' : 'NULL');
+    if (!token) return null;
+
     const form = new FormData();
     form.append('client', String(clientId));
     if (caption) form.append('caption', caption);
@@ -289,7 +298,7 @@ export const mediaApi = {
       headers: { Authorization: `Bearer ${token}` },
       body: form,
     });
-    if (!res.ok) throw new Error(`Erreur ${res.status} lors de l'upload.`);
+    if (!res.ok) return null;
     return res.json() as Promise<ClientMedia>;
   },
 };
