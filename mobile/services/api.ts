@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { API_BASE_URL } from '@/constants';
@@ -99,7 +100,7 @@ http.interceptors.response.use(
 
       try {
         const refresh = await TokenStorage.getRefresh();
-        if (!refresh) throw new Error('No refresh token');
+        if (!refresh) return Promise.reject('no_refresh_token');
 
         const { data } = await axios.post<{ access: string }>(
           `${API_BASE_URL}/auth/token/refresh/`,
@@ -264,19 +265,32 @@ export type ClientMedia = {
 };
 
 export const mediaApi = {
-  listForClient: (clientId: number) =>
-    http.get<ClientMedia[]>(`/clients/${clientId}/media/`).then((r) => r.data),
+  // Ces deux appels sont faits depuis l'espace coiffeur : le token client géré
+  // par l'instance axios `http` n'est pas le bon JWT (rôle admin/staff requis
+  // par le backend), d'où le fetch direct avec le token coiffeur dédié.
+  listForClient: async (clientId: number) => {
+    const token = await AsyncStorage.getItem('coiffeur_token');
+    const res = await fetch(`${API_BASE_URL}/clients/${clientId}/media/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Erreur ${res.status} lors du chargement de la galerie.`);
+    return res.json() as Promise<ClientMedia[]>;
+  },
 
-  upload: (clientId: number, file: File | { uri: string; name: string; type: string }, caption?: string) => {
+  upload: async (clientId: number, file: File | { uri: string; name: string; type: string }, caption?: string) => {
+    const token = await AsyncStorage.getItem('coiffeur_token');
     const form = new FormData();
     form.append('client', String(clientId));
     if (caption) form.append('caption', caption);
     form.append('file', file as unknown as Blob);
-    return http
-      .post<ClientMedia>('/media/upload/', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((r) => r.data);
+
+    const res = await fetch(`${API_BASE_URL}/media/upload/`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) throw new Error(`Erreur ${res.status} lors de l'upload.`);
+    return res.json() as Promise<ClientMedia>;
   },
 };
 
