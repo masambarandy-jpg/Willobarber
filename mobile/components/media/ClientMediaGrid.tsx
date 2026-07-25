@@ -7,6 +7,12 @@ import { File, Paths } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import type { ClientMedia } from '@/services/api';
 
+function cloudinaryThumb(url: string, width = 400, height = 180): string {
+  // Transforme https://res.cloudinary.com/zfswtrqx/image/upload/v.../photo.jpg
+  // en        https://res.cloudinary.com/zfswtrqx/image/upload/c_fill,w_400,h_180/v.../photo.jpg
+  return url.replace('/upload/', `/upload/c_fill,w_${width},h_${height}/`);
+}
+
 function formatMediaDate(createdAt: string): string {
   const date = new Date(createdAt);
   if (isToday(date)) return "Aujourd'hui";
@@ -127,7 +133,7 @@ export default function ClientMediaGrid({ media, isLoading, emptyLabel, mutedCol
                 }}
               >
                 <img
-                  src={item.cloudinary_url}
+                  src={cloudinaryThumb(item.cloudinary_url)}
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 />
               </div>
