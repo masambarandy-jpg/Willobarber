@@ -304,7 +304,7 @@ export default function ReservationsScreen() {
   );
 
   const mesCoupesGallery = (
-    <View style={{ marginTop: 8 }}>
+    <View style={{ marginTop: 8, overflow: 'visible' }}>
       <Text style={styles.sectionTitle}>Mes coupes</Text>
       <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13.5, marginTop: -6, marginBottom: 16 }}>
         Les photos et vidéos avant/après partagées par votre coiffeur.
@@ -457,7 +457,11 @@ export default function ReservationsScreen() {
 
           {mainTabsRow}
 
-          {mainTab === 'coupes' && mesCoupesGallery}
+          {mainTab === 'coupes' && (
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+              {mesCoupesGallery}
+            </ScrollView>
+          )}
 
           {mainTab === 'apercu' && (
           <View style={styles.tabletRow}>

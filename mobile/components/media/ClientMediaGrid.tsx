@@ -114,7 +114,18 @@ export default function ClientMediaGrid({ media, isLoading, emptyLabel, mutedCol
         >
           {photos.map((item) => (
             <div key={item.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ width: '100%', height: '180px', overflow: 'hidden', borderRadius: '12px', background: '#0002' }}>
+              <div
+                style={{
+                  width: '100%',
+                  height: '180px',
+                  maxHeight: '180px',
+                  minHeight: '180px',
+                  overflow: 'hidden',
+                  borderRadius: '12px',
+                  flexShrink: 0,
+                  background: '#0002',
+                }}
+              >
                 <img
                   src={item.cloudinary_url}
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
