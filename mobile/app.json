@@ -44,7 +44,14 @@
           "enableGooglePay": false
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "WilloBarber a besoin d'accéder à vos photos pour sauvegarder vos coupes téléchargées.",
+          "savePhotosPermission": "WilloBarber a besoin d'enregistrer vos photos et vidéos dans votre galerie."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

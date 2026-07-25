@@ -75,6 +75,7 @@ class ClientMediaSerializer(serializers.ModelSerializer):
             'cloudinary_url',
             'cloudinary_public_id',
             'caption',
+            'shared_with_client',
             'created_at',
         ]
-        read_only_fields = ['cloudinary_url', 'cloudinary_public_id']
+        read_only_fields = ['cloudinary_url', 'cloudinary_public_id', 'shared_with_client']

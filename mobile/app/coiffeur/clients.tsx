@@ -93,7 +93,7 @@ export default function CoiffeurClientsScreen() {
   const [panelEditing, setPanelEditing] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
-  const { media, isLoading: mediaLoading, isUploading, upload } = useClientMedia(clientEnEdition?.id ?? null);
+  const { media, isLoading: mediaLoading, isUploading, sharingId, upload, share } = useClientMedia(clientEnEdition?.id ?? null);
 
   const fetchClients = useCallback(async () => {
     setIsLoadingClients(true);
@@ -246,6 +246,8 @@ export default function CoiffeurClientsScreen() {
         isLoading={mediaLoading}
         emptyLabel="Aucune photo ou vidéo pour ce client."
         mutedColor={CC.textSecondary}
+        onShare={(item) => share(item.id)}
+        sharingId={sharingId}
       />
     </>
   );

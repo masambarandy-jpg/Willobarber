@@ -759,7 +759,22 @@ def client_media_list(request, pk):
         return Response({'error': "Vous n'avez pas accès à cette galerie."}, status=status.HTTP_403_FORBIDDEN)
 
     media = ClientMedia.objects.filter(client_id=pk)
+    if not is_staff:
+        media = media.filter(shared_with_client=True)
     return Response(ClientMediaSerializer(media, many=True).data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsStaffRole])
+def share_client_media(request, pk):
+    try:
+        media = ClientMedia.objects.get(pk=pk)
+    except ClientMedia.DoesNotExist:
+        return Response({'error': 'Media introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    media.shared_with_client = True
+    media.save(update_fields=['shared_with_client'])
+    return Response(ClientMediaSerializer(media).data)
 
 
 @api_view(['GET'])
