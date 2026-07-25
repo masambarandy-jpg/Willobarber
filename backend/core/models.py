@@ -81,6 +81,7 @@ class ClientMedia(models.Model):
     cloudinary_url = models.URLField(max_length=500)
     cloudinary_public_id = models.CharField(max_length=255)
     caption = models.CharField(max_length=255, blank=True, default='')
+    shared_with_client = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

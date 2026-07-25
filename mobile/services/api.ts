@@ -269,6 +269,7 @@ export type ClientMedia = {
   cloudinary_url: string;
   cloudinary_public_id: string;
   caption: string;
+  shared_with_client: boolean;
   created_at: string;
 };
 
@@ -317,6 +318,22 @@ export const mediaApi = {
       headers: { Authorization: `Bearer ${token}` },
       body: form,
     });
+    if (!res.ok) return null;
+    return res.json() as Promise<ClientMedia>;
+  },
+
+  // Partage d'une photo/vidéo avec le client (staff only) — le token coiffeur
+  // est requis, comme pour l'upload.
+  share: async (id: number): Promise<ClientMedia | null> => {
+    const token = await AsyncStorage.getItem('coiffeur_token');
+    if (!token) return null;
+
+    const url = `${API_BASE_URL}/media/${id}/share/`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    console.log('[MEDIA] PATCH', url, '→', res.status);
     if (!res.ok) return null;
     return res.json() as Promise<ClientMedia>;
   },

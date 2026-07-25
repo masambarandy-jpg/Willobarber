@@ -5,6 +5,7 @@ export function useClientMedia(clientId: number | null | undefined) {
   const [media, setMedia] = useState<ClientMedia[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [sharingId, setSharingId] = useState<number | null>(null);
 
   const refetch = useCallback(async () => {
     if (!clientId) return;
@@ -42,5 +43,18 @@ export function useClientMedia(clientId: number | null | undefined) {
     [clientId]
   );
 
-  return { media, isLoading, isUploading, refetch, upload };
+  const share = useCallback(async (id: number) => {
+    setSharingId(id);
+    try {
+      const updated = await mediaApi.share(id);
+      if (updated) setMedia((prev) => prev.map((m) => (m.id === id ? updated : m)));
+    } catch {
+      // Échec silencieux, cohérent avec upload : le bouton reste sur
+      // "Envoyer au client" si le partage n'a pas abouti.
+    } finally {
+      setSharingId(null);
+    }
+  }, []);
+
+  return { media, isLoading, isUploading, sharingId, refetch, upload, share };
 }
