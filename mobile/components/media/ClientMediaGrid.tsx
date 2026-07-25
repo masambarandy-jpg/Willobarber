@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { format, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -70,6 +70,7 @@ interface ClientMediaGridProps {
 }
 
 export default function ClientMediaGrid({ media, isLoading, emptyLabel, mutedColor, onShare, sharingId }: ClientMediaGridProps) {
+  const { width } = useWindowDimensions();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -96,14 +97,124 @@ export default function ClientMediaGrid({ media, isLoading, emptyLabel, mutedCol
   const photos = media.filter((m) => m.media_type === 'photo');
   const videos = media.filter((m) => m.media_type === 'video');
 
+  // Web : rendu 100% HTML/CSS. Le <div> wrapper à hauteur fixe (180px) +
+  // overflow: hidden est ce qui contraint réellement l'image — un <Image>
+  // RN (ou un <img> sans ce wrapper) laisse le conteneur parent s'étirer et
+  // ignore la hauteur fixée par react-native-web.
+  if (Platform.OS === 'web') {
+    return (
+      <div style={{ position: 'relative' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: width > 600 ? '1fr 1fr' : '1fr',
+            gap: '16px',
+            padding: '8px',
+          }}
+        >
+          {photos.map((item) => (
+            <div key={item.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ width: '100%', height: '180px', overflow: 'hidden', borderRadius: '12px', background: '#0002' }}>
+                <img
+                  src={item.cloudinary_url}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              </div>
+              <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: '12px', margin: 0 }}>
+                {formatMediaDate(item.created_at)}
+              </p>
+              <button
+                onClick={() => downloadMedia(item, showToast)}
+                style={{
+                  padding: '8px',
+                  borderRadius: '100px',
+                  background: '#ECE9E3',
+                  color: '#4A4640',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '10.5px',
+                  fontWeight: 600,
+                }}
+              >
+                ⬇️ Télécharger
+              </button>
+              {onShare && (
+                <button
+                  onClick={() => onShare(item)}
+                  disabled={item.shared_with_client || sharingId === item.id}
+                  style={{
+                    padding: '8px',
+                    borderRadius: '100px',
+                    border: 'none',
+                    cursor: item.shared_with_client ? 'default' : 'pointer',
+                    background: item.shared_with_client ? '#D4EDDA' : '#C9A84C',
+                    color: item.shared_with_client ? '#1E7045' : '#FFFFFF',
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {item.shared_with_client
+                    ? '✅ Envoyé'
+                    : sharingId === item.id
+                      ? 'Envoi…'
+                      : '📤 Envoyer au client'}
+                </button>
+              )}
+            </div>
+          ))}
+
+          {videos.map((item) => (
+            <div key={item.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ width: '100%', aspectRatio: '16 / 9', overflow: 'hidden', borderRadius: '12px', background: '#000' }}>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video
+                  src={item.cloudinary_url}
+                  controls
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              </div>
+              <button
+                onClick={() => downloadMedia(item, showToast)}
+                style={{
+                  padding: '8px',
+                  borderRadius: '100px',
+                  background: '#ECE9E3',
+                  color: '#4A4640',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '10.5px',
+                  fontWeight: 600,
+                }}
+              >
+                ⬇️ Télécharger
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {toastMessage && (
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: -8, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ background: '#161512', borderRadius: '100px', padding: '10px 18px', maxWidth: '90%' }}>
+              <p style={{ color: '#FFFFFF', fontSize: '12.5px', fontWeight: 600, margin: 0 }}>{toastMessage}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <View style={{ gap: 16, position: 'relative' }}>
       {photos.length > 0 && (
-        <View style={styles.photoGrid}>
+        <View style={{ flexDirection: 'column', gap: 16 }}>
           {photos.map((item) => (
             <View key={item.id} style={styles.photoCell}>
-              <Image source={{ uri: item.cloudinary_url }} style={styles.photoTile} resizeMode="cover" />
-              <Text style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>
+              <Image
+                source={{ uri: item.cloudinary_url }}
+                style={{ width: '100%', height: 180, borderRadius: 12 }}
+                resizeMode="cover"
+              />
+              <Text style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 8 }}>
                 {formatMediaDate(item.created_at)}
               </Text>
 
@@ -152,21 +263,8 @@ export default function ClientMediaGrid({ media, isLoading, emptyLabel, mutedCol
 }
 
 const styles = StyleSheet.create({
-  photoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: '2%',
-  },
   photoCell: {
-    width: '32%',
     marginBottom: 8,
-  },
-  photoTile: {
-    width: '100%',
-    aspectRatio: 1,
-    minHeight: Platform.OS === 'web' ? 200 : undefined,
-    borderRadius: 10,
-    backgroundColor: '#0002',
   },
   videoTile: {
     width: '100%',
@@ -179,7 +277,7 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     paddingVertical: 6,
     paddingHorizontal: 8,
-    marginTop: 6,
+    marginTop: 8,
     alignItems: 'center',
   },
   downloadBtnText: {
@@ -192,7 +290,7 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     paddingVertical: 6,
     paddingHorizontal: 8,
-    marginTop: 6,
+    marginTop: 8,
     alignItems: 'center',
   },
   shareBtnSent: {
