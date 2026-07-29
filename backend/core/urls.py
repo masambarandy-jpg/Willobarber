@@ -28,4 +28,5 @@ urlpatterns = [
     path('media/<int:pk>/share/', views.share_client_media, name='media-share'),
     path('clients/', views.client_list, name='client-list'),
     path('clients/<int:pk>/media/', views.client_media_list, name='client-media-list'),
+    path('reminders/send/', views.send_reminders, name='reminders-send'),
 ]

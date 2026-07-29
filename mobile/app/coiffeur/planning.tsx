@@ -256,6 +256,8 @@ export default function CoiffeurPlanningScreen() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [sendingReminders, setSendingReminders] = useState(false);
+
   const ouvrirDetailRdv = (event: Event) => {
     setSelectedRdv(event);
     setRdvDetailVisible(true);
@@ -469,6 +471,30 @@ export default function CoiffeurPlanningScreen() {
     }
   };
 
+  const envoyerRappelsSms = async () => {
+    if (!token) {
+      showToast('Impossible d\'envoyer les rappels (non authentifié).');
+      return;
+    }
+
+    setSendingReminders(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/reminders/send/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(`reminders-send-failed-${res.status}`);
+
+      showToast(`${data?.sent ?? 0} rappels envoyés !`);
+    } catch (error) {
+      console.log('ERREUR RAPPELS SMS:', error);
+      showToast("Erreur lors de l'envoi des rappels.");
+    } finally {
+      setSendingReminders(false);
+    }
+  };
+
   useEffect(() => {
     const interval = setInterval(() => setNowPosition(getNowPosition()), 60000);
     return () => clearInterval(interval);
@@ -527,7 +553,18 @@ export default function CoiffeurPlanningScreen() {
   return (
     <>
     <CoiffeurScreen active="planning">
-      <Text style={styles.title}>Planning</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Planning</Text>
+        <TouchableOpacity
+          style={[styles.remindersBtn, sendingReminders && styles.remindersBtnDisabled]}
+          onPress={envoyerRappelsSms}
+          disabled={sendingReminders}
+        >
+          <Text style={styles.remindersBtnText}>
+            {sendingReminders ? 'Envoi…' : '📱 Envoyer rappels SMS'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {usingMockData && (
         <View style={styles.mockBanner}>
@@ -920,12 +957,32 @@ export default function CoiffeurPlanningScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 18,
+  },
   title: {
     fontFamily: SERIF,
     fontWeight: '600',
     fontSize: 30,
     color: CC.black,
-    marginBottom: 18,
+  },
+  remindersBtn: {
+    backgroundColor: CC.gold,
+    borderRadius: 100,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+  },
+  remindersBtnDisabled: {
+    opacity: 0.6,
+  },
+  remindersBtnText: {
+    color: CC.white,
+    fontWeight: '600',
+    fontSize: 13,
   },
   mockBanner: {
     backgroundColor: CC.errorBg,

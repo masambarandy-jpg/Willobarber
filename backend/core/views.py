@@ -33,6 +33,7 @@ from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
 from .models import Barbershop, Service, Reservation, User, ClientMedia
 from .permissions import IsStaffRole
+from .sms import send_reminders_for_tomorrow
 from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
@@ -805,3 +806,10 @@ def client_list(request):
         for c in clients
     ]
     return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsStaffRole])
+def send_reminders(request):
+    result = send_reminders_for_tomorrow()
+    return Response(result)
