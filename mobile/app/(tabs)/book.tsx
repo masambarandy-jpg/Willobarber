@@ -387,6 +387,7 @@ export default function BookScreen() {
       <BookingConfirmation
         booking={booking}
         reservationId={createdReservationId}
+        amountChoice={amountChoice}
         onGoHome={handleGoHome}
         onReschedule={handleReschedule}
       />

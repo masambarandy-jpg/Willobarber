@@ -23,6 +23,7 @@ import {
   formatDateShortFr,
   formatSlot,
   getServiceDurationMinutes,
+  type AmountChoice,
   type BookingState,
 } from './data';
 
@@ -38,6 +39,7 @@ const BOOKING_NUMBER = 'WB-2026-08471';
 interface Props {
   booking: BookingState;
   reservationId: number | null;
+  amountChoice: AmountChoice;
   onGoHome: () => void;
   onReschedule: () => void;
 }
@@ -69,7 +71,7 @@ function RecapLine({
   );
 }
 
-export function BookingConfirmation({ booking, reservationId, onGoHome, onReschedule }: Props) {
+export function BookingConfirmation({ booking, reservationId, amountChoice, onGoHome, onReschedule }: Props) {
   const router = useRouter();
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -80,9 +82,11 @@ export function BookingConfirmation({ booking, reservationId, onGoHome, onResche
     console.log('[CONFIRMATION] reservationId reçu:', reservationId);
   }, [reservationId]);
 
+  const isFullyPaid = amountChoice === 'full';
   const price   = service ? service.price : 0;
-  const deposit = ACOMPTE_FIXE;
-  const solde   = price - deposit;
+  const deposit = isFullyPaid ? price : ACOMPTE_FIXE;
+  const solde   = isFullyPaid ? 0 : price - deposit;
+  const paidLabel = isFullyPaid ? t('bookingConfirm.fullyPaid') : t('bookingConfirm.depositPaid');
 
   const smsDate    = date ? dayBeforeLabel(date) : '';
   const dateStr    = date ? formatDateShortFr(date) : '—';
@@ -242,7 +246,7 @@ export function BookingConfirmation({ booking, reservationId, onGoHome, onResche
           </View>
 
           <RecapLine label={serviceName ?? '—'} value={fmtPrice(price)} />
-          <RecapLine label={t('bookingConfirm.depositPaid')} value={`-${fmtPrice(deposit)}`} negative />
+          <RecapLine label={paidLabel} value={`-${fmtPrice(deposit)}`} negative />
 
           <View style={styles.recapSep} />
 
