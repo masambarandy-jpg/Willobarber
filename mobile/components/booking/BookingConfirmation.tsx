@@ -132,6 +132,7 @@ export function BookingConfirmation({ booking, reservationId, onGoHome, onResche
 
     try {
       const token = await TokenStorage.getAccess();
+      console.log('[FACTURE] Téléchargement pour reservationId:', reservationId, 'URL:', `/api/reservations/${reservationId}/acompte-invoice/`);
       const response = await fetch(`${API_BASE_URL}/reservations/${reservationId}/acompte-invoice/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
