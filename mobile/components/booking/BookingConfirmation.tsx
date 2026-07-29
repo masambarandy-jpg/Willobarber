@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Alert,
   Linking,
@@ -75,6 +75,10 @@ export function BookingConfirmation({ booking, reservationId, onGoHome, onResche
   const { t } = useLanguage();
   const { service, barber, date, time } = booking;
   const serviceName = service ? t(`services.svc.${service.id}.name` as TranslationKey) : null;
+
+  useEffect(() => {
+    console.log('[CONFIRMATION] reservationId reçu:', reservationId);
+  }, [reservationId]);
 
   const price   = service ? service.price : 0;
   const deposit = ACOMPTE_FIXE;
