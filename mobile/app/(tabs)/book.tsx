@@ -277,12 +277,15 @@ export default function BookScreen() {
       try {
         const d = booking.date;
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const servicePrice = booking.service?.price ?? 0;
+        const amountPaid = amountChoice === 'full' ? servicePrice : ACOMPTE_FIXE;
         const created = await reservationsApi.create({
           service: serviceIdMap[booking.service?.id ?? ''] || 1,
           date: dateStr,
           time: booking.time,
           notes: `Barbier: ${booking.barber?.name || 'Willo'}`,
           payment_intent_id: paymentIntentId,
+          amount_paid: amountPaid,
         });
         setCreatedReservationId(created.id);
       } catch (e) {
