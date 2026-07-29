@@ -187,8 +187,16 @@ export default function BookScreen() {
     3: t('book.cta.toPayment'),
   };
   const prefilled = useRef(false);
+  // Distingue "on vient d'arriver sur la confirmation" (ne pas reset) de
+  // "on revient sur cet onglet après l'avoir quitté" (reset autorisé) —
+  // sans ça, useFocusEffect reset confirmed dès le premier affichage.
+  const hasSeenConfirmation = useRef(false);
   const [step,          setStep]          = useState(isQuickbook ? 4 : 1);
   const [confirmed,     setConfirmed]     = useState(false);
+  // useFocusEffect ci-dessous doit lire la valeur la plus récente de `confirmed`
+  // sans que son callback change d'identité (voir commentaire plus bas) — d'où
+  // ce ref tenu à jour en parallèle de l'état.
+  const confirmedRef = useRef(confirmed);
   const [booking,       setBooking]       = useState<BookingState>(() => {
     if (isQuickbook) {
       const service = SERVICES.find(s => s.name === prestation) ?? null;
@@ -298,10 +306,12 @@ export default function BookScreen() {
         return;
       }
     }
+    hasSeenConfirmation.current = false;
     setConfirmed(true);
   };
 
   const resetBookingState = () => {
+    hasSeenConfirmation.current = true;
     setStep(1);
     setConfirmed(false);
     setBooking(INITIAL_BOOKING);
@@ -321,16 +331,35 @@ export default function BookScreen() {
     router.replace('/(tabs)');
   };
 
-  // Si l'utilisateur quitte l'onglet "Réserver" juste après une confirmation
-  // puis y revient depuis le menu, on ne veut pas le laisser bloqué sur l'écran
-  // de confirmation — on réinitialise dès que l'écran reprend le focus.
+  useEffect(() => {
+    confirmedRef.current = confirmed;
+  }, [confirmed]);
+
+  // Si l'utilisateur quitte l'onglet "Réserver" après avoir vu la confirmation
+  // puis y revient depuis le menu, on ne veut pas le laisser bloqué sur cet
+  // écran — on réinitialise au retour de focus.
+  //
+  // Le callback ci-dessous DOIT garder une identité stable (deps: []). Si on
+  // y mettait `confirmed` en dépendance, useFocusEffect ré-exécute son effet
+  // interne à chaque changement d'identité — pas seulement sur un vrai
+  // focus/blur de navigation — et son cleanup (qui met hasSeenConfirmation à
+  // true) se déclenche donc immédiatement quand `confirmed` passe à true,
+  // juste après le paiement : la confirmation se resetait avant même d'être
+  // affichée. En lisant `confirmed` via un ref, le callback reste stable et
+  // ce cleanup ne s'exécute plus que lors d'un vrai blur de l'onglet.
   useFocusEffect(
     React.useCallback(() => {
-      if (confirmed) {
+      if (confirmedRef.current && hasSeenConfirmation.current) {
         resetBookingState();
       }
+
+      return () => {
+        // On quitte l'onglet : si on y revient plus tard avec confirmed
+        // toujours à true, ce sera un vrai retour et le reset sera légitime.
+        hasSeenConfirmation.current = true;
+      };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [confirmed])
+    }, [])
   );
 
   // ── State setters ─────────────────────────────────────────────────────────
