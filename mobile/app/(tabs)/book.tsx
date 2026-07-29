@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
@@ -300,22 +301,37 @@ export default function BookScreen() {
     setConfirmed(true);
   };
 
-  const handleReschedule = () => {
+  const resetBookingState = () => {
     setStep(1);
     setConfirmed(false);
     setBooking(INITIAL_BOOKING);
     prefilled.current = false;
     setCardForm(EMPTY_CARD);
+    setPaymentMethod('card');
+    setAmountChoice('deposit');
+    setCreatedReservationId(null);
+  };
+
+  const handleReschedule = () => {
+    resetBookingState();
   };
 
   const handleGoHome = () => {
-    setStep(1);
-    setConfirmed(false);
-    setBooking(INITIAL_BOOKING);
-    prefilled.current = false;
-    setCardForm(EMPTY_CARD);
+    resetBookingState();
     router.replace('/(tabs)');
   };
+
+  // Si l'utilisateur quitte l'onglet "Réserver" juste après une confirmation
+  // puis y revient depuis le menu, on ne veut pas le laisser bloqué sur l'écran
+  // de confirmation — on réinitialise dès que l'écran reprend le focus.
+  useFocusEffect(
+    React.useCallback(() => {
+      if (confirmed) {
+        resetBookingState();
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [confirmed])
+  );
 
   // ── State setters ─────────────────────────────────────────────────────────
 
