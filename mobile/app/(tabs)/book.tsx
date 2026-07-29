@@ -284,8 +284,12 @@ export default function BookScreen() {
           payment_intent_id: paymentIntentId,
         });
       } catch (e) {
-        console.log('[RESERVATION] Erreur création:', e);
-        // Continue quand même vers la confirmation
+        console.error('[RESERVATION] Erreur création après paiement Stripe:', e);
+        Alert.alert(
+          'Erreur de réservation',
+          'Paiement reçu mais erreur lors de la réservation. Contactez WilloBarber.'
+        );
+        return;
       }
     }
     setConfirmed(true);

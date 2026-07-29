@@ -131,10 +131,12 @@ def send_confirmation_email(to_email, first_name, service_name, date, time, barb
             subject=f'✂️ Confirmation — {service_name} le {date_fr}',
             html_content=Content('text/html', html_content)
         )
-        sg.send(message)
-        print(f"[EMAIL] Confirmation envoyée à {to_email}")
+        response = sg.send(message)
+        print(f"[EMAIL] Confirmation envoyée à {to_email} — SendGrid status={response.status_code}")
+        return True
     except Exception as e:
-        print(f"[EMAIL ERROR] {str(e)}")
+        print(f"[EMAIL ERROR] Échec envoi confirmation à {to_email}: {e}")
+        return False
 
 
 class ReservationViewSet(viewsets.ModelViewSet):
@@ -163,8 +165,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
         print(f"[RESERVATION] sauvegardée: id={reservation.id}")
 
         try:
-            print(f"[EMAIL] Tentative envoi à {self.request.user.email}")
-            send_confirmation_email(
+            print(f"[EMAIL] Envoi à {self.request.user.email} pour réservation {reservation.id}")
+            email_sent = send_confirmation_email(
                 to_email=self.request.user.email,
                 first_name=self.request.user.first_name or self.request.user.username,
                 service_name=reservation.service.name,
@@ -174,7 +176,10 @@ class ReservationViewSet(viewsets.ModelViewSet):
                 total_price=float(reservation.service.price),
                 acompte=5
             )
-            print(f"[EMAIL] Envoyé avec succès à {self.request.user.email}")
+            if email_sent:
+                print(f"[EMAIL] Envoyé avec succès à {self.request.user.email} pour réservation {reservation.id}")
+            else:
+                print(f"[EMAIL] Échec de l'envoi à {self.request.user.email} pour réservation {reservation.id} (voir [EMAIL ERROR] ci-dessus)")
         except Exception as e:
             import traceback
             print(f"[EMAIL ERROR] {str(e)}")
