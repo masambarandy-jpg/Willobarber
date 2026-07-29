@@ -297,6 +297,7 @@ export default function BookScreen() {
           amount_paid: amountPaid,
         });
         setCreatedReservationId(created.id);
+        console.log('[BOOKING] Nouvelle réservation créée, id:', created.id);
       } catch (e) {
         console.error('[RESERVATION] Erreur création après paiement Stripe:', e);
         Alert.alert(
