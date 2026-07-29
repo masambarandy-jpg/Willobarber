@@ -208,6 +208,7 @@ export default function BookScreen() {
   const [amountChoice,  setAmountChoice]  = useState<AmountChoice>('deposit');
   const [serviceIdMap,  setServiceIdMap]  = useState<Record<string, number>>({});
   const [isPaying,      setIsPaying]      = useState(false);
+  const [createdReservationId, setCreatedReservationId] = useState<number | null>(null);
   const step4Ref = useRef<Step4PaymentHandle>(null);
 
   // Map slugs statiques → vrais IDs Django (/api/services/)
@@ -276,13 +277,14 @@ export default function BookScreen() {
       try {
         const d = booking.date;
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        await reservationsApi.create({
+        const created = await reservationsApi.create({
           service: serviceIdMap[booking.service?.id ?? ''] || 1,
           date: dateStr,
           time: booking.time,
           notes: `Barbier: ${booking.barber?.name || 'Willo'}`,
           payment_intent_id: paymentIntentId,
         });
+        setCreatedReservationId(created.id);
       } catch (e) {
         console.error('[RESERVATION] Erreur création après paiement Stripe:', e);
         Alert.alert(
@@ -335,6 +337,7 @@ export default function BookScreen() {
     return (
       <BookingConfirmation
         booking={booking}
+        reservationId={createdReservationId}
         onGoHome={handleGoHome}
         onReschedule={handleReschedule}
       />
