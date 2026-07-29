@@ -32,7 +32,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
 from .models import Barbershop, Service, Reservation, User, ClientMedia
-from .emails import format_date_fr, format_heure_fr
+from .emails import format_date_fr, format_date_fr_short, format_heure_fr
 from .permissions import IsStaffRole
 from .sms import send_reminders_for_tomorrow
 from .serializers import (
@@ -47,6 +47,10 @@ ACOMPTE_FIXE = 5
 
 
 class PayeStamp(Flowable):
+    def __init__(self, label='PAYÉ'):
+        super().__init__()
+        self.label = label
+
     def draw(self):
         self.canv.saveState()
         self.canv.translate(60, 30)
@@ -57,7 +61,7 @@ class PayeStamp(Flowable):
         self.canv.setLineWidth(2)
         self.canv.roundRect(-45, -18, 90, 36, 4, stroke=1, fill=0)
         self.canv.setFont('Helvetica-Bold', 22)
-        self.canv.drawCentredString(0, -8, 'PAYÉ')
+        self.canv.drawCentredString(0, -8, self.label)
         self.canv.restoreState()
 
     def wrap(self, *args):
@@ -415,7 +419,7 @@ def generate_invoice(request, pk):
     print(f"[FACTURE] Génération pour réservation {reservation.id} - {service.name} - {service.price}€")
 
     invoice_number = f"WB-2026-{random.randint(10000, 99999)}"
-    today = datetime.now().strftime("%d %B %Y")
+    today = format_date_fr_short(datetime.now().date())
 
     total_ttc = float(service.price)
     acompte = float(reservation.amount_paid) if reservation.amount_paid is not None else ACOMPTE_FIXE
@@ -458,7 +462,7 @@ def generate_invoice(request, pk):
         Paragraph(f'<font size=9 color=grey>ÉMETTEUR</font><br/><b>WilloBarber SRL</b><br/>78 rue Auguste van Zande<br/>1082 Bruxelles · Belgique<br/>contact@willobarber.be<br/>+32 2 555 04 04<br/><font size=9 color=grey>TVA BE 0789.123.456</font>', styles['Normal']),
         [
             Paragraph(f'<font size=9 color=grey>FACTURÉ À</font><br/><b>{first_name} {last_name}</b><br/>{user.email}', ParagraphStyle('right', alignment=TA_RIGHT)),
-            PayeStamp(),
+            PayeStamp(label='RÉGLÉ' if is_fully_paid else 'PAYÉ'),
         ]
     ]]
     parties_table = Table(parties_data, colWidths=[90*mm, 90*mm])
@@ -579,7 +583,7 @@ def build_final_invoice_pdf(reservation):
     user = reservation.user
     service = reservation.service
     invoice_number = f"WB-FINAL-{reservation.id}"
-    today = datetime.now().strftime("%d %B %Y")
+    today = format_date_fr_short(datetime.now().date())
 
     total_ttc = float(service.price)
     acompte = ACOMPTE_FIXE

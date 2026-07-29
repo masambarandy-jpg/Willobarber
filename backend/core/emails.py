@@ -10,6 +10,11 @@ def format_date_fr(date):
     return f"{JOURS_FR[date.weekday()]} {date.day} {MOIS_FR[date.month - 1]} {date.year}"
 
 
+def format_date_fr_short(date):
+    """Ex: "29 juillet 2026\" (sans le jour de la semaine)"""
+    return f"{date.day} {MOIS_FR[date.month - 1]} {date.year}"
+
+
 def format_heure_fr(time):
     """Ex: "10h30\""""
     return f"{time.hour}h{str(time.minute).zfill(2)}"
