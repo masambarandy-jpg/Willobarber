@@ -5,6 +5,8 @@ from django.conf import settings
 from django.utils import timezone
 from twilio.rest import Client
 
+from .emails import format_heure_fr
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,7 +20,7 @@ def send_sms_reminder(reservation) -> bool:
 
     message_body = (
         f"Bonjour {client_user.first_name} ! \U0001F44B\n"
-        f"Rappel : vous avez un RDV demain à {reservation.time.strftime('%H:%M')} chez WilloBarber.\n"
+        f"Rappel : vous avez un RDV demain à {format_heure_fr(reservation.time)} chez WilloBarber.\n"
         f"Service : {reservation.service.name}\n"
         f"À demain ! \U0001F4AA"
     )
