@@ -418,10 +418,11 @@ def generate_invoice(request, pk):
     today = datetime.now().strftime("%d %B %Y")
 
     total_ttc = float(service.price)
-    acompte = ACOMPTE_FIXE
+    acompte = float(reservation.amount_paid) if reservation.amount_paid is not None else ACOMPTE_FIXE
+    is_fully_paid = acompte >= total_ttc
     sous_total_ht = total_ttc / 1.21
     tva = total_ttc - sous_total_ht
-    solde = max(total_ttc - acompte, 0)
+    solde = 0 if is_fully_paid else max(total_ttc - acompte, 0)
     methode_label = reservation.get_payment_method_display() or 'Carte'
 
     buffer = io.BytesIO()
@@ -492,7 +493,7 @@ def generate_invoice(request, pk):
         ['Sous-total HT', fmt_eur(sous_total_ht)],
         ['TVA 21%', fmt_eur(tva)],
         ['Total TTC', fmt_eur(total_ttc)],
-        ['Acompte réglé', f'-{fmt_eur(acompte)}'],
+        ['INTÉGRALEMENT RÉGLÉ' if is_fully_paid else 'Acompte réglé', f'-{fmt_eur(acompte)}'],
         ['Solde dû au salon', fmt_eur(solde)],
     ]
     recap_table = Table(recap_data, colWidths=[80*mm, 40*mm], hAlign='RIGHT')
@@ -511,7 +512,8 @@ def generate_invoice(request, pk):
     elements.append(Spacer(1, 6*mm))
 
     # Bloc RÉGLÉ CE JOUR
-    regle_data = [['RÉGLÉ CE JOUR · Acompte de réservation', fmt_eur(acompte)]]
+    regle_label = 'RÉGLÉ CE JOUR · Paiement intégral' if is_fully_paid else 'RÉGLÉ CE JOUR · Acompte de réservation'
+    regle_data = [[regle_label, fmt_eur(acompte)]]
     regle_table = Table(regle_data, colWidths=[120*mm, 40*mm], hAlign='RIGHT')
     regle_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), dark),
@@ -527,8 +529,13 @@ def generate_invoice(request, pk):
     elements.append(Spacer(1, 6*mm))
     elements.append(HRFlowable(width="100%", thickness=0.5, color=grey))
     elements.append(Spacer(1, 4*mm))
+    note_text = (
+        f"Cette prestation a été réglée intégralement en ligne ({fmt_eur(acompte)}). Aucun solde ne reste dû au salon."
+        if is_fully_paid else
+        f"Cette facture concerne uniquement l'acompte de {fmt_eur(acompte)} encaissé pour sécuriser la réservation. Une facture finale sera émise à l'issue du rendez-vous."
+    )
     elements.append(Paragraph(
-        f"Cette facture concerne uniquement l'acompte de {fmt_eur(acompte)} encaissé pour sécuriser la réservation. Une facture finale sera émise à l'issue du rendez-vous.",
+        note_text,
         ParagraphStyle('note', fontSize=9, textColor=grey)
     ))
 

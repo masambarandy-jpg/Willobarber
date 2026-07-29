@@ -128,6 +128,7 @@ export interface CreateReservationPayload {
   time: string;
   notes?: string;
   payment_intent_id?: string;
+  amount_paid?: number;
 }
 
 // ─── Review ──────────────────────────────────────────────────────────────────
