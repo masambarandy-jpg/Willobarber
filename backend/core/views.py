@@ -400,10 +400,29 @@ def recommendations(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def generate_invoice(request):
-    user = request.user
+def generate_invoice(request, pk):
+    try:
+        reservation = Reservation.objects.get(pk=pk)
+    except Reservation.DoesNotExist:
+        return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff = request.user.is_superuser or getattr(request.user, 'role', None) == 'admin'
+    if not is_staff and reservation.user_id != request.user.id:
+        return Response({'error': "Vous n'avez pas accès à cette facture."}, status=status.HTTP_403_FORBIDDEN)
+
+    user = reservation.user
+    service = reservation.service
+    print(f"[FACTURE] Génération pour réservation {reservation.id} - {service.name} - {service.price}€")
+
     invoice_number = f"WB-2026-{random.randint(10000, 99999)}"
     today = datetime.now().strftime("%d %B %Y")
+
+    total_ttc = float(service.price)
+    acompte = ACOMPTE_FIXE
+    sous_total_ht = total_ttc / 1.21
+    tva = total_ttc - sous_total_ht
+    solde = max(total_ttc - acompte, 0)
+    methode_label = reservation.get_payment_method_display() or 'Carte'
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
@@ -452,7 +471,7 @@ def generate_invoice(request):
     # Tableau prestations
     data = [
         ['DESCRIPTION', 'QTÉ', 'P.U. HT', 'TVA', 'TOTAL TTC'],
-        ['Signature WilloBarber', '1', '37,19 €', '21%', '45,00 €'],
+        [service.name, '1', fmt_eur(sous_total_ht), '21%', fmt_eur(total_ttc)],
     ]
     t = Table(data, colWidths=[80*mm, 20*mm, 30*mm, 20*mm, 30*mm])
     t.setStyle(TableStyle([
@@ -469,12 +488,12 @@ def generate_invoice(request):
 
     # Récap
     recap_data = [
-        ['Méthode', 'Carte ····4242'],
-        ['Sous-total HT', '37,19 €'],
-        ['TVA 21%', '7,81 €'],
-        ['Total TTC', '45,00 €'],
-        ['Acompte réglé', '-5,00 €'],
-        ['Solde dû au salon', '40,00 €'],
+        ['Méthode', methode_label],
+        ['Sous-total HT', fmt_eur(sous_total_ht)],
+        ['TVA 21%', fmt_eur(tva)],
+        ['Total TTC', fmt_eur(total_ttc)],
+        ['Acompte réglé', f'-{fmt_eur(acompte)}'],
+        ['Solde dû au salon', fmt_eur(solde)],
     ]
     recap_table = Table(recap_data, colWidths=[80*mm, 40*mm], hAlign='RIGHT')
     recap_table.setStyle(TableStyle([
@@ -492,7 +511,7 @@ def generate_invoice(request):
     elements.append(Spacer(1, 6*mm))
 
     # Bloc RÉGLÉ CE JOUR
-    regle_data = [['RÉGLÉ CE JOUR · Acompte de réservation', '5,00 €']]
+    regle_data = [['RÉGLÉ CE JOUR · Acompte de réservation', fmt_eur(acompte)]]
     regle_table = Table(regle_data, colWidths=[120*mm, 40*mm], hAlign='RIGHT')
     regle_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), dark),
@@ -509,7 +528,7 @@ def generate_invoice(request):
     elements.append(HRFlowable(width="100%", thickness=0.5, color=grey))
     elements.append(Spacer(1, 4*mm))
     elements.append(Paragraph(
-        "Cette facture concerne uniquement l'acompte de 5,00 € encaissé pour sécuriser la réservation. Une facture finale sera émise à l'issue du rendez-vous.",
+        f"Cette facture concerne uniquement l'acompte de {fmt_eur(acompte)} encaissé pour sécuriser la réservation. Une facture finale sera émise à l'issue du rendez-vous.",
         ParagraphStyle('note', fontSize=9, textColor=grey)
     ))
 

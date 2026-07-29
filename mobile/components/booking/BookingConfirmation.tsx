@@ -37,6 +37,7 @@ const BOOKING_NUMBER = 'WB-2026-08471';
 
 interface Props {
   booking: BookingState;
+  reservationId: number | null;
   onGoHome: () => void;
   onReschedule: () => void;
 }
@@ -68,7 +69,7 @@ function RecapLine({
   );
 }
 
-export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) {
+export function BookingConfirmation({ booking, reservationId, onGoHome, onReschedule }: Props) {
   const router = useRouter();
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -120,20 +121,31 @@ export function BookingConfirmation({ booking, onGoHome, onReschedule }: Props) 
       Alert.alert(t('bookingConfirm.invoiceWebOnlyTitle'), t('bookingConfirm.invoiceWebOnlyMsg'));
       return;
     }
+    if (!reservationId) {
+      Alert.alert('Facture indisponible', "Impossible d'identifier la réservation pour générer la facture.");
+      return;
+    }
 
-    const token = await TokenStorage.getAccess();
-    const response = await fetch(`${API_BASE_URL}/reservations/invoice/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const blob = await response.blob();
-    const url  = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'Facture_WilloBarber.pdf';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    try {
+      const token = await TokenStorage.getAccess();
+      const response = await fetch(`${API_BASE_URL}/reservations/${reservationId}/acompte-invoice/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(`invoice-fetch-failed-${response.status}`);
+
+      const blob = await response.blob();
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Facture_WilloBarber_${reservationId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('[FACTURE] Erreur téléchargement:', e);
+      Alert.alert('Erreur', "Impossible de télécharger la facture pour le moment.");
+    }
   };
 
   const handleCancelAppointment = () => {

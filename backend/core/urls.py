@@ -10,7 +10,7 @@ router.register(r'services', ServiceViewSet)
 router.register(r'reservations', ReservationViewSet)
 
 urlpatterns = [
-    path('reservations/invoice/', views.generate_invoice, name='invoice'),
+    path('reservations/<int:pk>/acompte-invoice/', views.generate_invoice, name='invoice'),
     path('', include(router.urls)),
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/login/', views.LoginView.as_view(), name='login'),
