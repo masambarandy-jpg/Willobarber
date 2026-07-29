@@ -32,6 +32,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
 from .models import Barbershop, Service, Reservation, User, ClientMedia
+from .emails import format_date_fr, format_heure_fr
 from .permissions import IsStaffRole
 from .sms import send_reminders_for_tomorrow
 from .serializers import (
@@ -99,6 +100,8 @@ def send_confirmation_email(to_email, first_name, service_name, date, time, barb
     try:
         sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
         solde = total_price - acompte
+        date_fr = format_date_fr(date)
+        heure_fr = format_heure_fr(time)
         html_content = f"""
         <div style="font-family: Georgia, serif; background-color: #0D0C0A; color: #FFFFFF; padding: 40px; max-width: 600px; margin: auto;">
             <h1 style="color: #C9A84C; font-size: 32px; margin-bottom: 4px;">WilloBarber</h1>
@@ -109,8 +112,8 @@ def send_confirmation_email(to_email, first_name, service_name, date, time, barb
             <div style="background: #1A1814; border-radius: 12px; padding: 24px; margin: 24px 0;">
                 <table style="width: 100%; color: #FFFFFF;">
                     <tr><td style="color: #6B6560; padding: 6px 0;">Prestation</td><td style="text-align:right; font-weight:bold;">{service_name}</td></tr>
-                    <tr><td style="color: #6B6560; padding: 6px 0;">Date</td><td style="text-align:right;">{date}</td></tr>
-                    <tr><td style="color: #6B6560; padding: 6px 0;">Heure</td><td style="text-align:right;">{time}</td></tr>
+                    <tr><td style="color: #6B6560; padding: 6px 0;">Date</td><td style="text-align:right;">{date_fr}</td></tr>
+                    <tr><td style="color: #6B6560; padding: 6px 0;">Heure</td><td style="text-align:right;">{heure_fr}</td></tr>
                     <tr><td style="color: #6B6560; padding: 6px 0;">Barbier</td><td style="text-align:right;">{barber}</td></tr>
                     <tr><td style="color: #6B6560; padding: 6px 0;">Acompte réglé</td><td style="text-align:right; color: #2D6A4F;">-{acompte}€</td></tr>
                     <tr><td style="color: #6B6560; padding: 6px 0; font-weight:bold;">Solde au salon</td><td style="text-align:right; color: #C9A84C; font-weight:bold;">{solde}€</td></tr>
@@ -125,7 +128,7 @@ def send_confirmation_email(to_email, first_name, service_name, date, time, barb
         message = Mail(
             from_email=Email('masamba.randy@gmail.com', 'WilloBarber'),
             to_emails=To(to_email),
-            subject=f'✂️ Confirmation — {service_name} le {date}',
+            subject=f'✂️ Confirmation — {service_name} le {date_fr}',
             html_content=Content('text/html', html_content)
         )
         sg.send(message)
@@ -165,8 +168,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
                 to_email=self.request.user.email,
                 first_name=self.request.user.first_name or self.request.user.username,
                 service_name=reservation.service.name,
-                date=str(reservation.date),
-                time=str(reservation.time),
+                date=reservation.date,
+                time=reservation.time,
                 barber="Willo",
                 total_price=float(reservation.service.price),
                 acompte=5
