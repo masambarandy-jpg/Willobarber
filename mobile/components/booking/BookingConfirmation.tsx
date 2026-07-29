@@ -327,6 +327,14 @@ export function BookingConfirmation({ booking, reservationId, onGoHome, onResche
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={styles.btnDark}
+            onPress={onReschedule}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.btnDarkText}>Faire une nouvelle réservation</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             onPress={handleCancelAppointment}
             activeOpacity={0.7}
             style={styles.btnCancel}
