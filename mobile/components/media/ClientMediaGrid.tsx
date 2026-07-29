@@ -119,14 +119,14 @@ export default function ClientMediaGrid({ media, isLoading, emptyLabel, mutedCol
                 height: '300px',
                 overflow: 'hidden',
                 borderRadius: '12px',
-                backgroundColor: '#000',
+                backgroundColor: onShare ? '#000' : '#111',
               }}>
                 <img
                   src={item.cloudinary_url}
                   style={{
                     width: '100%',
                     height: '100%',
-                    objectFit: 'cover',
+                    objectFit: onShare ? 'cover' : 'contain',
                     display: 'block',
                   }}
                 />
