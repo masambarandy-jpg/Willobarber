@@ -58,29 +58,36 @@ class Command(BaseCommand):
         reservations_created = 0
 
         for email, first_name, last_name in FAKE_CLIENTS:
-            if User.objects.filter(email=email).exists():
-                self.stdout.write(self.style.WARNING(f"Déjà existant, ignoré : {email}"))
-                continue
+            user = User.objects.filter(email=email).first()
 
-            user = User.objects.create_user(
-                username=email,
-                email=email,
-                password=PASSWORD,
-                first_name=first_name,
-                last_name=last_name,
-                phone=random_phone(),
-                role="client",
-            )
-            clients_created += 1
+            if user is None:
+                user = User.objects.create_user(
+                    username=email,
+                    email=email,
+                    password=PASSWORD,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=random_phone(),
+                    role="client",
+                )
+                clients_created += 1
+            else:
+                deleted, _ = Reservation.objects.filter(user=user, status="completed").delete()
+                self.stdout.write(self.style.WARNING(
+                    f"Déjà existant : {email} — {deleted} réservation(s) recréée(s)."
+                ))
 
             nb_reservations = random.randint(3, 8)
             for _ in range(nb_reservations):
+                service = random.choice(services)
                 Reservation.objects.create(
                     user=user,
-                    service=random.choice(services),
+                    service=service,
                     date=random_past_date(),
                     time=random_slot_time(),
                     status="completed",
+                    payment_status="paid_onsite",
+                    amount_paid=service.price,
                 )
                 reservations_created += 1
 
