@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Barbershop, Service, Reservation, ClientMedia, ClosedPeriod
+from .models import User, Barbershop, Service, Reservation, ClientMedia, ClosedPeriod, Review
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -78,6 +78,25 @@ class ClosedPeriodSerializer(serializers.ModelSerializer):
         if start and end and end < start:
             raise serializers.ValidationError({'end_date': 'La date de fin doit être après la date de début.'})
         return attrs
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    client_name = serializers.SerializerMethodField()
+    service_name = serializers.SerializerMethodField()
+    reservation_date = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Review
+        fields = ['id', 'rating', 'comment', 'created_at', 'client_name', 'service_name', 'reservation_date', 'reservation']
+
+    def get_client_name(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
+
+    def get_service_name(self, obj):
+        return obj.reservation.service.name if obj.reservation and obj.reservation.service else ""
+
+    def get_reservation_date(self, obj):
+        return obj.reservation.date if obj.reservation else None
 
 
 class ClientMediaSerializer(serializers.ModelSerializer):
