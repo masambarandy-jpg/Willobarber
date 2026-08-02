@@ -34,6 +34,13 @@ type AnalyticsData = {
 
 type ExportReservation = ApiReservation & { price: number };
 
+type ApiProduct = {
+  id: number;
+  nom: string;
+  stock: number;
+  stock_alert: number;
+};
+
 // Réel : /api/reservations/ → {id, user, user_username, service, service_name, date, time,
 // status, payment_status} (pas de champ barber_name / client_name côté API)
 type ApiReservation = {
@@ -383,6 +390,64 @@ function useDashboardData() {
   };
 }
 
+function useProductStock() {
+  const [token, setToken] = useState<string | null | undefined>(undefined);
+  const [products, setProducts] = useState<ApiProduct[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [updatingProductId, setUpdatingProductId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const t = await AsyncStorage.getItem('coiffeur_token');
+      if (!cancelled) setToken(t);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (token === undefined) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/boutique/produits/`);
+        if (!res.ok) throw new Error(`products-fetch-failed-${res.status}`);
+        const data: ApiProduct[] = await res.json();
+        if (!cancelled) setProducts(data);
+      } catch (error) {
+        console.log('ERREUR STOCK PRODUITS:', error);
+      } finally {
+        if (!cancelled) setLoadingProducts(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const ajusterStock = async (product: ApiProduct, delta: number) => {
+    if (!token) return;
+    const nextStock = Math.max(0, product.stock + delta);
+    if (nextStock === product.stock) return;
+
+    setUpdatingProductId(product.id);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/boutique/produits/${product.id}/stock/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ stock: nextStock }),
+      });
+      if (!res.ok) throw new Error(`stock-update-failed-${res.status}`);
+      const updated: ApiProduct = await res.json();
+      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (error) {
+      console.log('ERREUR MISE À JOUR STOCK:', error);
+    } finally {
+      setUpdatingProductId(null);
+    }
+  };
+
+  return { products, loadingProducts, updatingProductId, ajusterStock };
+}
+
 type RapportData = {
   clientsTotal: number;
   prestationsCount: number;
@@ -627,6 +692,7 @@ export default function CoiffeurDashboardScreen() {
     exportReservations,
     exportServices,
   } = useDashboardData();
+  const { products, loadingProducts, updatingProductId, ajusterStock } = useProductStock();
 
   const periodData = caData[period];
   const maxValue = Math.max(...periodData.bars.map((b) => b.v), 1);
@@ -828,6 +894,57 @@ export default function CoiffeurDashboardScreen() {
             <Text style={styles.clientTime}>{c.time}</Text>
           </View>
         ))}
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <Text style={styles.cardTitle}>🛍️ Stock Produits</Text>
+        </View>
+
+        {loadingProducts ? (
+          <Text style={styles.stockEmpty}>Chargement…</Text>
+        ) : products.length === 0 ? (
+          <Text style={styles.stockEmpty}>Aucun produit.</Text>
+        ) : (
+          products.map((p, i) => {
+            const outOfStock = p.stock === 0;
+            const lowStock = !outOfStock && p.stock <= p.stock_alert;
+            const updating = updatingProductId === p.id;
+            return (
+              <View key={p.id} style={[styles.stockRow, i === products.length - 1 && styles.clientRowLast]}>
+                <View style={styles.stockInfo}>
+                  <Text style={styles.stockName}>{p.nom}</Text>
+                  {outOfStock ? (
+                    <View style={styles.stockBadgeOut}>
+                      <Text style={styles.stockBadgeOutText}>Rupture</Text>
+                    </View>
+                  ) : lowStock ? (
+                    <View style={styles.stockBadgeLow}>
+                      <Text style={styles.stockBadgeLowText}>Stock faible !</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <View style={styles.stockControls}>
+                  <TouchableOpacity
+                    style={[styles.stockBtn, (updating || p.stock === 0) && styles.stockBtnDisabled]}
+                    onPress={() => ajusterStock(p, -1)}
+                    disabled={updating || p.stock === 0}
+                  >
+                    <Text style={styles.stockBtnText}>−</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.stockValue}>{p.stock}</Text>
+                  <TouchableOpacity
+                    style={[styles.stockBtn, updating && styles.stockBtnDisabled]}
+                    onPress={() => ajusterStock(p, 1)}
+                    disabled={updating}
+                  >
+                    <Text style={styles.stockBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })
+        )}
       </View>
     </CoiffeurScreen>
 
@@ -1118,5 +1235,84 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: CC.black,
+  },
+
+  stockEmpty: {
+    fontSize: 13,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  stockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0eadf',
+  },
+  stockInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stockName: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: CC.black,
+  },
+  stockBadgeLow: {
+    backgroundColor: CC.errorBg,
+    borderRadius: 100,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+  },
+  stockBadgeLowText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: CC.errorText,
+  },
+  stockBadgeOut: {
+    backgroundColor: CC.grayBg,
+    borderRadius: 100,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+  },
+  stockBadgeOutText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: CC.grayText,
+  },
+  stockControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stockBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: CC.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: CC.white,
+  },
+  stockBtnDisabled: {
+    opacity: 0.4,
+  },
+  stockBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: CC.black,
+  },
+  stockValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: CC.black,
+    minWidth: 24,
+    textAlign: 'center',
   },
 });

@@ -54,6 +54,10 @@ const fr = {
   'home.productsTitleGold': 'prolongé chez vous.',
   'home.productsSub': 'Les soins que nous utilisons au salon, sélectionnés pour durer.',
 
+  'product.stockLeftPrefix': 'Plus que ',
+  'product.stockLeftSuffix': ' en stock',
+  'product.outOfStock': 'Rupture de stock',
+
   'home.teamKicker': "L'ÉQUIPE",
   'home.teamTitle1': 'Trois mains,',
   'home.teamTitleGold': 'une même école.',
@@ -570,6 +574,10 @@ const nl: Record<TranslationKey, string> = {
   'home.productsTitleGold': 'verlengd bij u thuis.',
   'home.productsSub': 'De verzorgingsproducten die we in de salon gebruiken, geselecteerd om lang mee te gaan.',
 
+  'product.stockLeftPrefix': 'Nog maar ',
+  'product.stockLeftSuffix': ' op voorraad',
+  'product.outOfStock': 'Niet op voorraad',
+
   'home.teamKicker': 'HET TEAM',
   'home.teamTitle1': 'Drie handen,',
   'home.teamTitleGold': 'dezelfde school.',
@@ -1078,6 +1086,10 @@ const en: Record<TranslationKey, string> = {
   'home.productsTitle1': 'The care,',
   'home.productsTitleGold': 'extended at home.',
   'home.productsSub': 'The products we use in the salon, selected to last.',
+
+  'product.stockLeftPrefix': 'Only ',
+  'product.stockLeftSuffix': ' left in stock',
+  'product.outOfStock': 'Out of stock',
 
   'home.teamKicker': 'THE TEAM',
   'home.teamTitle1': 'Three hands,',

@@ -15,6 +15,7 @@ class Product(models.Model):
     contenance = models.CharField(max_length=50, blank=True)
     photo_url = models.URLField(blank=True)
     stock = models.IntegerField(default=0)
+    stock_alert = models.IntegerField(default=5)
     actif = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
