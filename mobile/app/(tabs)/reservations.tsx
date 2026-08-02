@@ -22,7 +22,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useReservations } from '@/hooks/useReservations';
-import type { Reservation } from '@/types';
+import type { Reservation, Review } from '@/types';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -30,6 +30,8 @@ import type { TranslationKey } from '@/i18n/translations';
 import { fmtPrice } from '@/components/booking/data';
 import { useClientMedia } from '@/hooks/useClientMedia';
 import ClientMediaGrid from '@/components/media/ClientMediaGrid';
+import ReviewCard from '@/components/client/ReviewCard';
+import { reviewsApi } from '@/services/api';
 
 const MOIS_ABBR_FR = ['JANV', 'FÉVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOÛT', 'SEPT', 'OCT', 'NOV', 'DÉC'];
 const MOIS_FR_FULL = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -192,6 +194,19 @@ export default function ReservationsScreen() {
     `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
   );
 
+  const [myReviews, setMyReviews] = useState<Review[]>([]);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    reviewsApi.mine().then(setMyReviews).catch(() => {});
+  }, [isAuthenticated]);
+
+  const reviewForReservation = (reservationId: number) =>
+    myReviews.find((rv) => rv.reservation === reservationId) ?? null;
+
+  const handleReviewSubmitted = (review: Review) => {
+    setMyReviews((prev) => [...prev, review]);
+  };
+
   const nextRdvView = nextReservation ? (() => {
     const d = parseApiDate(nextReservation.date);
     return {
@@ -232,7 +247,7 @@ export default function ReservationsScreen() {
   }));
 
   const HISTORIQUE = error
-    ? HISTORIQUE_META.map(h => ({ ...h, service: t(h.serviceKey) }))
+    ? HISTORIQUE_META.map(h => ({ ...h, service: t(h.serviceKey), id: null as number | null, status: null as string | null }))
     : pastSorted.map(r => {
         const d = parseApiDate(r.date);
         return {
@@ -244,6 +259,8 @@ export default function ReservationsScreen() {
           couleur: '#C9A84C',
           prix: fmtPrice(PRICE_BY_SERVICE_NAME[r.service_name] ?? 0),
           annee: r.date.slice(0, 4),
+          id: r.id as number | null,
+          status: r.status as string | null,
         };
       });
 
@@ -694,6 +711,16 @@ export default function ReservationsScreen() {
                             <Text style={styles.btnOutlineText}>{t('reservations.receipt')}</Text>
                           </TouchableOpacity>
                         </View>
+                        {h.status === 'completed' && h.id != null && (
+                          <View style={{ marginTop: 18 }}>
+                            <ReviewCard
+                              reservationId={h.id}
+                              serviceName={h.service}
+                              existingReview={reviewForReservation(h.id)}
+                              onSubmitted={handleReviewSubmitted}
+                            />
+                          </View>
+                        )}
                       </View>
                     );
                   })()}
@@ -1070,33 +1097,45 @@ export default function ReservationsScreen() {
             })()}
           </View>
         ) : filteredHist.map((h, i) => (
-            <View key={i} style={styles.histCard}>
-              <View style={styles.histDateBox}>
-                <Text style={styles.histDateNum}>{h.jour}</Text>
-                <Text style={styles.histDateMon}>{h.mois}</Text>
-              </View>
-              <View style={{ flex: 1, gap: 5 }}>
-                <Text style={styles.histService}>{h.service}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-                  <View style={[
-                    styles.avatar,
-                    { width: 28, height: 28, borderRadius: 14, backgroundColor: h.couleur + '33', borderColor: h.couleur },
-                  ]}>
-                    <Text style={[styles.avatarText, { fontSize: 11, color: h.couleur }]}>{h.barbier}</Text>
+            <React.Fragment key={i}>
+              <View style={styles.histCard}>
+                <View style={styles.histDateBox}>
+                  <Text style={styles.histDateNum}>{h.jour}</Text>
+                  <Text style={styles.histDateMon}>{h.mois}</Text>
+                </View>
+                <View style={{ flex: 1, gap: 5 }}>
+                  <Text style={styles.histService}>{h.service}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                    <View style={[
+                      styles.avatar,
+                      { width: 28, height: 28, borderRadius: 14, backgroundColor: h.couleur + '33', borderColor: h.couleur },
+                    ]}>
+                      <Text style={[styles.avatarText, { fontSize: 11, color: h.couleur }]}>{h.barbier}</Text>
+                    </View>
+                    <Text style={styles.histMeta}>{h.barbierNom}</Text>
+                    <Text style={{ color: '#C9A84C', fontSize: 13, fontWeight: '600' }}>{h.prix}</Text>
                   </View>
-                  <Text style={styles.histMeta}>{h.barbierNom}</Text>
-                  <Text style={{ color: '#C9A84C', fontSize: 13, fontWeight: '600' }}>{h.prix}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <TouchableOpacity testID={`btn-rebook-${i}`} style={styles.iconBtn} onPress={() => handleRebook(h)}>
+                    <Text style={{ color: '#C9A84C', fontSize: 15 }}>↺</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity testID={`btn-receipt-${i}`} style={styles.iconBtn} onPress={() => handleReceipt(h, i)}>
+                    <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15 }}>↓</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <TouchableOpacity testID={`btn-rebook-${i}`} style={styles.iconBtn} onPress={() => handleRebook(h)}>
-                  <Text style={{ color: '#C9A84C', fontSize: 15 }}>↺</Text>
-                </TouchableOpacity>
-                <TouchableOpacity testID={`btn-receipt-${i}`} style={styles.iconBtn} onPress={() => handleReceipt(h, i)}>
-                  <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15 }}>↓</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+              {h.status === 'completed' && h.id != null && (
+                <View style={{ marginBottom: 10 }}>
+                  <ReviewCard
+                    reservationId={h.id}
+                    serviceName={h.service}
+                    existingReview={reviewForReservation(h.id)}
+                    onSubmitted={handleReviewSubmitted}
+                  />
+                </View>
+              )}
+            </React.Fragment>
           ))
         }
 

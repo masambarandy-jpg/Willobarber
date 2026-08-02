@@ -31,14 +31,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
-from .models import Barbershop, Service, Reservation, User, ClientMedia, ClosedPeriod
+from .models import Barbershop, Service, Reservation, User, ClientMedia, ClosedPeriod, Review
 from .emails import format_date_fr, format_date_fr_short, format_heure_fr
 from .permissions import IsStaffRole
 from .sms import send_reminders_for_tomorrow
 from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
-    ClosedPeriodSerializer,
+    ClosedPeriodSerializer, ReviewSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -867,3 +867,60 @@ def client_list(request):
 def send_reminders(request):
     result = send_reminders_for_tomorrow()
     return Response(result)
+
+
+class ReviewListCreateView(APIView):
+    """GET (Willo) liste tous les avis · POST (client) soumet un avis sur son RDV terminé."""
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated()]
+        return [IsStaffRole()]
+
+    def get(self, request):
+        reviews = Review.objects.select_related('user', 'reservation__service').all()
+        return Response(ReviewSerializer(reviews, many=True).data)
+
+    def post(self, request):
+        reservation_id = request.data.get('reservation')
+        try:
+            reservation = Reservation.objects.get(pk=reservation_id)
+        except (Reservation.DoesNotExist, TypeError, ValueError):
+            return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if reservation.user_id != request.user.id:
+            return Response({'error': "Cette réservation ne vous appartient pas."}, status=status.HTTP_403_FORBIDDEN)
+
+        if reservation.status != 'completed':
+            return Response(
+                {'error': 'Seule une réservation terminée peut être notée.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if Review.objects.filter(reservation=reservation).exists():
+            return Response(
+                {'error': 'Un avis a déjà été soumis pour cette réservation.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            rating = int(request.data.get('rating'))
+        except (TypeError, ValueError):
+            return Response({'error': 'Note invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+        if rating < 1 or rating > 5:
+            return Response({'error': 'La note doit être comprise entre 1 et 5.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        review = Review.objects.create(
+            user=request.user,
+            reservation=reservation,
+            rating=rating,
+            comment=request.data.get('comment') or '',
+        )
+        return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_reviews(request):
+    reviews = Review.objects.filter(user=request.user).select_related('reservation__service')
+    return Response(ReviewSerializer(reviews, many=True).data)
