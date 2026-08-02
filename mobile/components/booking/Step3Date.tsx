@@ -107,8 +107,8 @@ function Calendar({ selectedDate, onSelect, closedPeriods }: CalendarProps) {
     return d < t;
   };
 
-  // col 0 = lundi = fermé, col 6 = dimanche = fermé
-  const isWeekdayClosed = (col: number) => col === 0 || col === 6;
+  // col 0 = lundi = fermé (dimanche = ouvert)
+  const isWeekdayClosed = (col: number) => col === 0;
 
   const isPeriodClosed = (day: number) =>
     findClosedPeriod(new Date(viewYear, viewMonth, day), closedPeriods) !== null;
