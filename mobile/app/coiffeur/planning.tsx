@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Modal, Pressable, StyleSheet, Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import {
@@ -570,6 +570,17 @@ export default function CoiffeurPlanningScreen() {
     }
   };
 
+  const confirmerSuppressionConge = (id: number) => {
+    Alert.alert(
+      'Supprimer ce congé ?',
+      'Cette action est irréversible.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', style: 'destructive', onPress: () => supprimerConge(id) },
+      ],
+    );
+  };
+
   const supprimerConge = async (id: number) => {
     if (!token) {
       showToast('Impossible de supprimer (non authentifié).');
@@ -960,7 +971,7 @@ export default function CoiffeurPlanningScreen() {
                 </View>
                 <TouchableOpacity
                   style={styles.congeDeleteBtn}
-                  onPress={() => supprimerConge(p.id)}
+                  onPress={() => confirmerSuppressionConge(p.id)}
                   disabled={deletingCongeId === p.id}
                 >
                   <Text style={styles.congeDeleteBtnText}>
