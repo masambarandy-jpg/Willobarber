@@ -183,6 +183,10 @@ export default function ReservationsScreen() {
 
   // L'API /reservations/ retourne un champ 'time', absent du type Reservation partagé
   // (utilisé ailleurs avec un shape différent) — on type le réel localement ici.
+  // Le scoping par client connecté est géré côté backend (ReservationViewSet.get_queryset).
+  if (__DEV__ && (upcoming[0] || past[0])) {
+    console.log('[RESERVATIONS] Réservation brute reçue de l\'API:', JSON.stringify(upcoming[0] ?? past[0]));
+  }
   const upcomingList = upcoming as (Reservation & { time: string })[];
   const pastList = past as (Reservation & { time: string })[];
 
