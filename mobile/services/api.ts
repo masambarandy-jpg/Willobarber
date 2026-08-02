@@ -258,6 +258,26 @@ export const closedPeriodsApi = {
   list: () => http.get<ClosedPeriod[]>('/closed-periods/').then((r) => r.data),
 };
 
+// ─── Boutique API (produits — stock) ─────────────────────────────────────────
+
+export type BoutiqueProduct = {
+  id: number;
+  nom: string;
+  categorie: string;
+  description: string;
+  prix: string;
+  contenance: string;
+  photo_url: string;
+  stock: number;
+  stock_alert: number;
+  actif: boolean;
+  created_at: string;
+};
+
+export const boutiqueApi = {
+  products: () => http.get<BoutiqueProduct[]>('/boutique/produits/').then((r) => r.data),
+};
+
 // ─── Waiting list API ────────────────────────────────────────────────────────
 
 export const waitingListApi = {

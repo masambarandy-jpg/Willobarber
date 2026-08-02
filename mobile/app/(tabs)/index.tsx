@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -23,6 +23,7 @@ import { HamburgerMenu } from '@/components/HamburgerMenu';
 import { LanguagePicker } from '@/components/ui/LanguagePicker';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { Fonts } from '@/constants';
+import { boutiqueApi } from '@/services/api';
 import type { TranslationKey } from '@/i18n/translations';
 
 const CONTENT_MAX_W = 1100;
@@ -113,6 +114,20 @@ export default function HomeScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [produitsIndex, setProduitsIndex] = useState(0);
+  const [stockByProductId, setStockByProductId] = useState<Record<number, { stock: number; stock_alert: number }>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    boutiqueApi.products()
+      .then((products) => {
+        if (cancelled) return;
+        const map: Record<number, { stock: number; stock_alert: number }> = {};
+        products.forEach((p) => { map[p.id] = { stock: p.stock, stock_alert: p.stock_alert }; });
+        setStockByProductId(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const BARBERS = BARBERS_META.map(b => ({
     ...b,
@@ -293,8 +308,11 @@ export default function HomeScreen() {
             scrollEventThrottle={16}
             onScroll={handleProduitsScroll}
           >
-            {NOS_PRODUITS.map((prod) => {
+            {NOS_PRODUITS.map((prod, i) => {
               const added = addedIds.has(prod.id);
+              const stockInfo = stockByProductId[i + 1];
+              const outOfStock = stockInfo?.stock === 0;
+              const lowStock = !!stockInfo && stockInfo.stock > 0 && stockInfo.stock <= stockInfo.stock_alert;
               return (
                 <View key={prod.id} style={styles.prodCard2}>
                   <View style={styles.prodPhotoZone2}>
@@ -327,13 +345,21 @@ export default function HomeScreen() {
                         <Text style={styles.prodPriceUnit2}> €</Text>
                       </Text>
                     </View>
+                    {outOfStock ? (
+                      <Text style={styles.stockOut2}>{t('product.outOfStock')}</Text>
+                    ) : lowStock ? (
+                      <Text style={styles.stockLow2}>
+                        {t('product.stockLeftPrefix')}{stockInfo!.stock}{t('product.stockLeftSuffix')}
+                      </Text>
+                    ) : null}
                     <TouchableOpacity
-                      style={[styles.cartBtn2, added && styles.cartBtnAdded]}
+                      style={[styles.cartBtn2, added && styles.cartBtnAdded, outOfStock && styles.cartBtnDisabled2]}
                       activeOpacity={0.85}
                       onPress={() => handleAddToCart(prod)}
+                      disabled={outOfStock}
                     >
                       <Text style={styles.cartBtnText2}>
-                        {added ? t('common.added') : t('common.addToCart')}
+                        {outOfStock ? t('product.outOfStock') : added ? t('common.added') : t('common.addToCart')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -759,6 +785,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  stockLow2: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#C9822C',
+    marginTop: 10,
+  },
+  stockOut2: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#C0392B',
+    marginTop: 10,
+  },
   cartBtn2: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
@@ -768,6 +806,9 @@ const styles = StyleSheet.create({
   },
   cartBtnAdded: {
     backgroundColor: '#4CAF50',
+  },
+  cartBtnDisabled2: {
+    backgroundColor: '#D9D2C4',
   },
   cartBtnText2: {
     fontFamily: Fonts.semiBold,

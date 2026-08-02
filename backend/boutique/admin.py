@@ -10,7 +10,7 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ['nom', 'categorie', 'prix', 'stock', 'actif']
+    list_display = ['nom', 'categorie', 'prix', 'stock', 'stock_alert', 'actif']
     list_filter = ['categorie', 'actif']
     search_fields = ['nom']
 
