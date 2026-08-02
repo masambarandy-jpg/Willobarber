@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
@@ -25,6 +25,7 @@ type Client = {
   rdv: number;
   last: string;
   total: string;
+  dateJoined: string;
 };
 
 type ApiClient = {
@@ -37,6 +38,7 @@ type ApiClient = {
   last_visit: string | null;
   total_spent: number;
   status: string;
+  date_joined: string;
 };
 
 function badgeFromReservations(count: number): Badge {
@@ -60,6 +62,7 @@ function mapApiClient(c: ApiClient): Client {
     rdv: c.total_reservations,
     last: c.last_visit ? format(new Date(c.last_visit), 'd MMM', { locale: fr }) : '—',
     total: `${Math.round(c.total_spent)}€`,
+    dateJoined: c.date_joined,
   };
 }
 
@@ -133,6 +136,19 @@ export default function CoiffeurClientsScreen() {
   const filter = TAB_TO_BADGE[activeTab];
   const filtered = filter === 'ALL' ? clients : clients.filter((c) => c.badge === filter);
 
+  const stats = useMemo(() => {
+    const now = new Date();
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const totalClients = clients.length;
+    const vipCount = clients.filter((c) => c.badge === 'VIP').length;
+    const newThisMonth = clients.filter((c) => new Date(c.dateJoined) >= startOfThisMonth).length;
+    const totalLastMonth = clients.filter((c) => new Date(c.dateJoined) < startOfThisMonth).length;
+    const growthPercent = totalLastMonth > 0 ? Math.round((newThisMonth / totalLastMonth) * 100) : 0;
+
+    return { totalClients, vipCount, newThisMonth, growthPercent };
+  }, [clients]);
+
   const updateField = (key: keyof typeof EMPTY_FORM, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -155,6 +171,7 @@ export default function CoiffeurClientsScreen() {
       rdv: 0,
       last: '—',
       total: '0€',
+      dateJoined: new Date().toISOString(),
     };
 
     setClients((prev) => [newClient, ...prev]);
@@ -315,17 +332,17 @@ export default function CoiffeurClientsScreen() {
         <View style={styles.statsGrid}>
           <View style={[styles.statCard, styles.statCardDark]}>
             <Text style={styles.statLabelDark}>CLIENTS TOTAUX</Text>
-            <Text style={styles.statValueDark}>2 412</Text>
-            <Text style={styles.statDeltaGreen}>+12% ce mois</Text>
+            <Text style={styles.statValueDark}>{stats.totalClients.toLocaleString('fr-FR')}</Text>
+            <Text style={styles.statDeltaGreen}>+{stats.growthPercent}% ce mois</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>NOUVEAUX</Text>
-            <Text style={styles.statValue}>+38</Text>
+            <Text style={styles.statValue}>+{stats.newThisMonth}</Text>
             <Text style={styles.statSub}>ce mois</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>VIP</Text>
-            <Text style={styles.statValue}>124</Text>
+            <Text style={styles.statValue}>{stats.vipCount}</Text>
             <Text style={styles.statSub}>clients fidèles</Text>
           </View>
         </View>
