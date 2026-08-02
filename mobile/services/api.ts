@@ -17,6 +17,7 @@ import type {
   SalonSettingsPublic,
   WaitingListEntry,
   AiRecommendationResponse,
+  ClosedPeriod,
 } from '@/types';
 
 const SECURE_KEY_ACCESS = 'wb_access_token';
@@ -249,6 +250,12 @@ export const appointmentsApi = {
     http
       .post<{ status: 'exists' | 'new'; first_name?: string }>('/appointments/check-client/', { identifier })
       .then((r) => r.data),
+};
+
+// ─── Closed periods API (congés / fermetures) ────────────────────────────────
+
+export const closedPeriodsApi = {
+  list: () => http.get<ClosedPeriod[]>('/closed-periods/').then((r) => r.data),
 };
 
 // ─── Waiting list API ────────────────────────────────────────────────────────

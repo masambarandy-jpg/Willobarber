@@ -2,12 +2,13 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
-from .views import BarbershopViewSet, ServiceViewSet, ReservationViewSet
+from .views import BarbershopViewSet, ServiceViewSet, ReservationViewSet, ClosedPeriodViewSet
 
 router = DefaultRouter()
 router.register(r'barbershops', BarbershopViewSet)
 router.register(r'services', ServiceViewSet)
 router.register(r'reservations', ReservationViewSet)
+router.register(r'closed-periods', ClosedPeriodViewSet)
 
 urlpatterns = [
     path('reservations/<int:pk>/acompte-invoice/', views.generate_invoice, name='invoice'),

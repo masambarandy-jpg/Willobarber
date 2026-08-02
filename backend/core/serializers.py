@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Barbershop, Service, Reservation, ClientMedia
+from .models import User, Barbershop, Service, Reservation, ClientMedia, ClosedPeriod
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -62,6 +62,22 @@ class ReservationSerializer(serializers.ModelSerializer):
             'payment_method',
             'amount_paid',
         ]
+
+
+class ClosedPeriodSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+
+    class Meta:
+        model = ClosedPeriod
+        fields = ['id', 'start_date', 'end_date', 'reason', 'created_by', 'created_by_username', 'created_at']
+        read_only_fields = ['created_by']
+
+    def validate(self, attrs):
+        start = attrs.get('start_date', getattr(self.instance, 'start_date', None))
+        end = attrs.get('end_date', getattr(self.instance, 'end_date', None))
+        if start and end and end < start:
+            raise serializers.ValidationError({'end_date': 'La date de fin doit être après la date de début.'})
+        return attrs
 
 
 class ClientMediaSerializer(serializers.ModelSerializer):
