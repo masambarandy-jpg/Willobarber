@@ -187,6 +187,18 @@ export interface WaitingListEntry {
   created_at: string;
 }
 
+// ─── Closed periods (congés / fermetures) ────────────────────────────────────
+
+export interface ClosedPeriod {
+  id: number;
+  start_date: string;
+  end_date: string;
+  reason: string;
+  created_by: number | null;
+  created_by_username: string | null;
+  created_at: string;
+}
+
 // ─── AI Recommendations ───────────────────────────────────────────────────────
 
 export interface AiRecommendationResponse {

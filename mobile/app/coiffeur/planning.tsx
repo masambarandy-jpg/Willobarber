@@ -67,6 +67,16 @@ type ApiReservation = {
   amount_paid: string | null;
 };
 
+type ClosedPeriod = {
+  id: number;
+  start_date: string;
+  end_date: string;
+  reason: string;
+  created_by: number | null;
+  created_by_username: string | null;
+  created_at: string;
+};
+
 function dateKey(d: Date) {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
@@ -257,6 +267,14 @@ export default function CoiffeurPlanningScreen() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [sendingReminders, setSendingReminders] = useState(false);
+
+  const [closedPeriods, setClosedPeriods] = useState<ClosedPeriod[]>([]);
+  const [loadingClosedPeriods, setLoadingClosedPeriods] = useState(false);
+  const [congeStartInput, setCongeStartInput] = useState('');
+  const [congeEndInput, setCongeEndInput] = useState('');
+  const [congeReasonInput, setCongeReasonInput] = useState('');
+  const [submittingConge, setSubmittingConge] = useState(false);
+  const [deletingCongeId, setDeletingCongeId] = useState<number | null>(null);
 
   const ouvrirDetailRdv = (event: Event) => {
     setSelectedRdv(event);
@@ -492,6 +510,85 @@ export default function CoiffeurPlanningScreen() {
       showToast("Erreur lors de l'envoi des rappels.");
     } finally {
       setSendingReminders(false);
+    }
+  };
+
+  const fetchClosedPeriods = async () => {
+    setLoadingClosedPeriods(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/closed-periods/`);
+      if (!res.ok) throw new Error(`closed-periods-fetch-failed-${res.status}`);
+      const data: ClosedPeriod[] = await res.json();
+      setClosedPeriods(data);
+    } catch (error) {
+      console.log('ERREUR CONGÉS:', error);
+    } finally {
+      setLoadingClosedPeriods(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClosedPeriods();
+  }, []);
+
+  const ajouterConge = async () => {
+    if (!congeStartInput || !congeEndInput || !congeReasonInput.trim()) {
+      showToast('Merci de remplir date début, date fin et raison.');
+      return;
+    }
+    if (!token) {
+      showToast('Impossible d\'ajouter un congé (non authentifié).');
+      return;
+    }
+
+    setSubmittingConge(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/closed-periods/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          start_date: congeStartInput,
+          end_date: congeEndInput,
+          reason: congeReasonInput.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const message = data ? Object.values(data).flat().join(' ') : `Erreur ${res.status}`;
+        throw new Error(message);
+      }
+      setClosedPeriods((prev) => [...prev, data].sort((a, b) => a.start_date.localeCompare(b.start_date)));
+      setCongeStartInput('');
+      setCongeEndInput('');
+      setCongeReasonInput('');
+      showToast('Congé ajouté ✅');
+    } catch (error) {
+      console.log('ERREUR AJOUT CONGÉ:', error);
+      showToast(error instanceof Error ? error.message : "Erreur lors de l'ajout du congé.");
+    } finally {
+      setSubmittingConge(false);
+    }
+  };
+
+  const supprimerConge = async (id: number) => {
+    if (!token) {
+      showToast('Impossible de supprimer (non authentifié).');
+      return;
+    }
+    setDeletingCongeId(id);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/closed-periods/${id}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`closed-period-delete-failed-${res.status}`);
+      setClosedPeriods((prev) => prev.filter((p) => p.id !== id));
+      showToast('Congé supprimé.');
+    } catch (error) {
+      console.log('ERREUR SUPPRESSION CONGÉ:', error);
+      showToast('Erreur lors de la suppression du congé.');
+    } finally {
+      setDeletingCongeId(null);
     }
   };
 
@@ -796,6 +893,85 @@ export default function CoiffeurPlanningScreen() {
           ))}
         </View>
       )}
+
+      <View style={styles.congesSection}>
+        <Text style={styles.congesTitle}>🏖️ Congés & Fermetures</Text>
+
+        <View style={styles.congesForm}>
+          <View style={styles.congesFormRow}>
+            <View style={styles.congesFormField}>
+              <Text style={styles.congesFieldLabel}>DÉBUT</Text>
+              <TextInput
+                style={styles.congesInput}
+                value={congeStartInput}
+                onChangeText={setCongeStartInput}
+                placeholder="AAAA-MM-JJ"
+                placeholderTextColor={CC.textSecondary}
+                editable={!submittingConge}
+              />
+            </View>
+            <View style={styles.congesFormField}>
+              <Text style={styles.congesFieldLabel}>FIN</Text>
+              <TextInput
+                style={styles.congesInput}
+                value={congeEndInput}
+                onChangeText={setCongeEndInput}
+                placeholder="AAAA-MM-JJ"
+                placeholderTextColor={CC.textSecondary}
+                editable={!submittingConge}
+              />
+            </View>
+          </View>
+          <View style={styles.congesFormField}>
+            <Text style={styles.congesFieldLabel}>RAISON</Text>
+            <TextInput
+              style={styles.congesInput}
+              value={congeReasonInput}
+              onChangeText={setCongeReasonInput}
+              placeholder="Ex : Vacances, Jour férié…"
+              placeholderTextColor={CC.textSecondary}
+              editable={!submittingConge}
+            />
+          </View>
+          <TouchableOpacity
+            style={[styles.congesAddBtn, submittingConge && styles.btnDisabled]}
+            onPress={ajouterConge}
+            disabled={submittingConge}
+          >
+            <Text style={styles.congesAddBtnText}>
+              {submittingConge ? 'Ajout…' : '+ Ajouter un congé'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {loadingClosedPeriods ? (
+          <Text style={styles.congesEmpty}>Chargement…</Text>
+        ) : closedPeriods.length === 0 ? (
+          <Text style={styles.congesEmpty}>Aucun congé ou fermeture enregistré.</Text>
+        ) : (
+          <View style={styles.congesList}>
+            {closedPeriods.map((p) => (
+              <View key={p.id} style={styles.congeItem}>
+                <View style={styles.congeItemInfo}>
+                  <Text style={styles.congeItemDates}>
+                    {p.start_date === p.end_date ? p.start_date : `${p.start_date} → ${p.end_date}`}
+                  </Text>
+                  <Text style={styles.congeItemReason}>{p.reason}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.congeDeleteBtn}
+                  onPress={() => supprimerConge(p.id)}
+                  disabled={deletingCongeId === p.id}
+                >
+                  <Text style={styles.congeDeleteBtnText}>
+                    {deletingCongeId === p.id ? '…' : 'Supprimer'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
     </CoiffeurScreen>
 
     <Modal
@@ -1507,5 +1683,103 @@ const styles = StyleSheet.create({
     color: CC.white,
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  congesSection: {
+    marginTop: 28,
+    backgroundColor: CC.white,
+    borderRadius: 16,
+    padding: 18,
+  },
+  congesTitle: {
+    fontFamily: SERIF,
+    fontWeight: '700',
+    fontSize: 18,
+    color: CC.black,
+    marginBottom: 16,
+  },
+  congesForm: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  congesFormRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  congesFormField: {
+    flex: 1,
+    gap: 6,
+  },
+  congesFieldLabel: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: CC.textSecondary,
+    letterSpacing: 0.5,
+  },
+  congesInput: {
+    borderWidth: 1,
+    borderColor: CC.inputBorder,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: '500',
+    color: CC.black,
+    backgroundColor: CC.cream,
+  },
+  congesAddBtn: {
+    paddingVertical: 13,
+    borderRadius: 100,
+    backgroundColor: CC.gold,
+    alignItems: 'center',
+  },
+  congesAddBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: CC.white,
+  },
+  congesEmpty: {
+    fontSize: 13,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  congesList: {
+    gap: 10,
+  },
+  congeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: CC.trackBg,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  congeItemInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  congeItemDates: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: CC.black,
+  },
+  congeItemReason: {
+    fontSize: 12,
+    color: CC.textSecondary,
+    marginTop: 2,
+  },
+  congeDeleteBtn: {
+    borderWidth: 1,
+    borderColor: CC.errorText,
+    borderRadius: 100,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  congeDeleteBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: CC.errorText,
   },
 });

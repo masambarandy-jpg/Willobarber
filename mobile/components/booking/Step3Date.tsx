@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dimensions,
   ScrollView,
@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { closedPeriodsApi } from '@/services/api';
+import type { ClosedPeriod } from '@/types';
 import { SLOT_GROUPS, isSlotAvailable, type BookingState } from './data';
 import type { TranslationKey } from '@/i18n/translations';
 
@@ -21,6 +23,20 @@ const BORDER_MED = 'rgba(255,255,255,0.16)';
 const { width: SCREEN_W } = Dimensions.get('window');
 // 3 columns, 2 gaps of 9, 20px padding each side
 const SLOT_W = Math.floor((SCREEN_W - 40 - 18) / 3);
+
+function parseIsoDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function findClosedPeriod(date: Date, closedPeriods: ClosedPeriod[]): ClosedPeriod | null {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return closedPeriods.find((p) => {
+    const start = parseIsoDate(p.start_date);
+    const end = parseIsoDate(p.end_date);
+    return d >= start && d <= end;
+  }) ?? null;
+}
 
 type Cell = { day: number; prev: boolean } | null;
 
@@ -44,9 +60,10 @@ function buildCells(year: number, month: number): Cell[] {
 interface CalendarProps {
   selectedDate: Date | null;
   onSelect: (d: Date) => void;
+  closedPeriods: ClosedPeriod[];
 }
 
-function Calendar({ selectedDate, onSelect }: CalendarProps) {
+function Calendar({ selectedDate, onSelect, closedPeriods }: CalendarProps) {
   const { t } = useLanguage();
   const MONTH_LABELS = Array.from({ length: 12 }, (_, i) => t(`step3.month.${i}` as TranslationKey));
   const DAY_LABELS = Array.from({ length: 7 }, (_, i) => t(`step3.day.${i}` as TranslationKey));
@@ -91,10 +108,13 @@ function Calendar({ selectedDate, onSelect }: CalendarProps) {
   };
 
   // col 0 = lundi = fermé, col 6 = dimanche = fermé
-  const isClosed = (col: number) => col === 0 || col === 6;
+  const isWeekdayClosed = (col: number) => col === 0 || col === 6;
+
+  const isPeriodClosed = (day: number) =>
+    findClosedPeriod(new Date(viewYear, viewMonth, day), closedPeriods) !== null;
 
   const handleDay = (day: number, col: number) => {
-    if (isClosed(col) || isPast(day)) return;
+    if (isWeekdayClosed(col) || isPeriodClosed(day) || isPast(day)) return;
     onSelect(new Date(viewYear, viewMonth, day));
   };
 
@@ -154,7 +174,7 @@ function Calendar({ selectedDate, onSelect }: CalendarProps) {
             const sel      = isSelected(day);
             const today    = isToday(day);
             const past     = isPast(day);
-            const closed   = isClosed(col);
+            const closed   = isWeekdayClosed(col) || isPeriodClosed(day);
             const disabled = past || closed;
 
             return (
@@ -198,6 +218,18 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
   const { date: selectedDate, time: selectedTime, service } = booking;
   const { t } = useLanguage();
 
+  const [closedPeriods, setClosedPeriods] = useState<ClosedPeriod[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    closedPeriodsApi.list()
+      .then((periods) => { if (!cancelled) setClosedPeriods(periods); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const closedPeriod = selectedDate ? findClosedPeriod(selectedDate, closedPeriods) : null;
+
   return (
     <ScrollView
       style={styles.scroll}
@@ -211,7 +243,7 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
 
       {/* Calendar card */}
       <View style={styles.calCard}>
-        <Calendar selectedDate={selectedDate} onSelect={onDateSelect} />
+        <Calendar selectedDate={selectedDate} onSelect={onDateSelect} closedPeriods={closedPeriods} />
       </View>
 
       {/* Hours badge */}
@@ -222,8 +254,18 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
         </Text>
       </View>
 
+      {/* Closed day warning */}
+      {closedPeriod && (
+        <View style={styles.closedBadge}>
+          <Text style={styles.closedBadgeIcon}>🏖️</Text>
+          <Text style={styles.closedBadgeText}>
+            Le salon est fermé ce jour ({closedPeriod.reason}) — choisissez une autre date.
+          </Text>
+        </View>
+      )}
+
       {/* Slot groups */}
-      {selectedDate && (
+      {selectedDate && !closedPeriod && (
         <View style={styles.slotsWrap}>
           {SLOT_GROUPS.map((group) => (
             <View key={group.label} style={styles.slotGroup}>
@@ -410,6 +452,29 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: GOLD,
     lineHeight: 18,
+  },
+
+  closedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(192,57,43,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(192,57,43,0.3)',
+    borderRadius: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    marginBottom: 24,
+  },
+  closedBadgeIcon: {
+    fontSize: 14,
+  },
+  closedBadgeText: {
+    flex: 1,
+    fontSize: 12.5,
+    color: '#C0392B',
+    lineHeight: 18,
+    fontWeight: '600',
   },
 
   slotsWrap: {

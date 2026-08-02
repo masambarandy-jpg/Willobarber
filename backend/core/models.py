@@ -69,6 +69,22 @@ class Reservation(models.Model):
         return f"{self.user} - {self.date} {self.time}"
 
 
+class ClosedPeriod(models.Model):
+    start_date = models.DateField()
+    end_date = models.DateField()
+    reason = models.CharField(max_length=255)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['start_date']
+
+    def __str__(self):
+        return f"{self.reason} ({self.start_date} → {self.end_date})"
+
+
 class ClientMedia(models.Model):
     MEDIA_TYPE_CHOICES = [
         ('photo', 'Photo'),

@@ -31,13 +31,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
-from .models import Barbershop, Service, Reservation, User, ClientMedia
+from .models import Barbershop, Service, Reservation, User, ClientMedia, ClosedPeriod
 from .emails import format_date_fr, format_date_fr_short, format_heure_fr
 from .permissions import IsStaffRole
 from .sms import send_reminders_for_tomorrow
 from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
+    ClosedPeriodSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,20 @@ class BarbershopViewSet(viewsets.ModelViewSet):
 class ServiceViewSet(viewsets.ModelViewSet):
     queryset = Service.objects.all()
     serializer_class = ServiceSerializer
+
+
+class ClosedPeriodViewSet(viewsets.ModelViewSet):
+    queryset = ClosedPeriod.objects.all()
+    serializer_class = ClosedPeriodSerializer
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [AllowAny()]
+        return [IsStaffRole()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 def send_confirmation_email(to_email, first_name, service_name, date, time, barber, total_price, acompte=5):
