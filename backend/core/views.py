@@ -162,6 +162,13 @@ class ReservationViewSet(viewsets.ModelViewSet):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        is_staff = user.is_superuser or getattr(user, 'role', None) == 'admin'
+        if is_staff:
+            return Reservation.objects.all()
+        return Reservation.objects.filter(user=user)
+
     def get_permissions(self):
         # Marking a reservation as paid (payment_status/payment_method/amount_paid)
         # is a staff-only operation — any authenticated user could otherwise
