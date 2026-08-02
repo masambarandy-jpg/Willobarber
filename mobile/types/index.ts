@@ -135,16 +135,13 @@ export interface CreateReservationPayload {
 
 export interface Review {
   id: number;
-  reservation: number;
-  client: number;
+  user: number;
   client_name: string;
-  barber: number;
-  barber_name: string;
+  reservation: number;
+  service_name: string;
+  reservation_date: string;
   rating: 1 | 2 | 3 | 4 | 5;
   comment: string;
-  reply: string;
-  replied_at: string | null;
-  status: 'pending' | 'published' | 'rejected';
   created_at: string;
 }
 
