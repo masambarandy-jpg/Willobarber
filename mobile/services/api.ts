@@ -223,6 +223,8 @@ export const paymentsApi = {
 export const reviewsApi = {
   list: () => http.get<Review[]>('/reviews/').then((r) => r.data),
 
+  mine: () => http.get<Review[]>('/reviews/client/').then((r) => r.data),
+
   create: (payload: { reservation: number; rating: number; comment?: string }) =>
     http.post<Review>('/reviews/', payload).then((r) => r.data),
 };
