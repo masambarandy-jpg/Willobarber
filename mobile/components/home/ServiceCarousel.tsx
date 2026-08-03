@@ -25,6 +25,8 @@ import { Feather } from '@expo/vector-icons';
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
+import { servicesApi } from '@/services/api';
+import type { Service } from '@/types';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PADDING_H = 22;
@@ -84,6 +86,33 @@ export function ServiceCarousel() {
   const svcShort = (id: string) => t(`services.svc.${id}.short` as TranslationKey);
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 768;
+
+  // GET /services/ est public (pas de token requis) — on l'appelle au montage pour
+  // remplacer les prix/durées figés de SERVICES par les vraies valeurs Railway,
+  // en les recollant via apiId (cf. même mapping dans book.tsx). Si le fetch
+  // échoue, on garde silencieusement les valeurs statiques : cette carousel est
+  // une vitrine décorative sur la landing, elle ne doit jamais bloquer l'affichage.
+  const [apiServicesById, setApiServicesById] = useState<Record<number, Service>>({});
+  useEffect(() => {
+    servicesApi.list()
+      .then(data => {
+        const byId: Record<number, Service> = {};
+        data.forEach(s => { byId[s.id] = s; });
+        setApiServicesById(byId);
+      })
+      .catch(() => {});
+  }, []);
+
+  const services = SERVICES.map(svc => {
+    const live = apiServicesById[svc.apiId];
+    if (!live) return svc;
+    return {
+      ...svc,
+      price: parseFloat(live.price),
+      dur: `${live.duration} min`,
+      popular: live.is_popular ?? svc.popular,
+    };
+  });
 
   // Pour mobile, recalcule la largeur de slide dynamiquement
   const mobileSlideW = windowWidth - PADDING_H * 2 - PEEK;
@@ -161,7 +190,7 @@ export function ServiceCarousel() {
   if (isTablet) {
     return (
       <View style={tabletStyles.grid}>
-        {SERVICES.map((svc) => (
+        {services.map((svc) => (
           <View key={svc.id} style={tabletStyles.card}>
 
             {/* ── Photo zone ── */}
@@ -231,7 +260,7 @@ export function ServiceCarousel() {
         contentContainerStyle={styles.slidesRow}
         style={Platform.OS === 'web' ? ({ cursor: 'grab' } as any) : undefined}
       >
-        {SERVICES.map((svc) => (
+        {services.map((svc) => (
           <View key={svc.id} style={[styles.slide, { width: mobileSlideW }]}>
 
             {/* ── Photo zone ── */}
