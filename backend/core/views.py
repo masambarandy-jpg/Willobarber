@@ -858,6 +858,7 @@ def client_list(request):
             'last_visit': c.last_visit.isoformat() if c.last_visit else None,
             'total_spent': float(c.total_spent or 0),
             'date_joined': c.date_joined.isoformat(),
+            'is_at_risk': c.is_at_risk,
             'status': (
                 'VIP' if c.total_reservations >= 10
                 else 'Nouveau' if c.total_reservations == 1
