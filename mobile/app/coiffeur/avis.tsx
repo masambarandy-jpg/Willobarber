@@ -101,9 +101,16 @@ export default function CoiffeurAvisScreen() {
         body: JSON.stringify({ reply: text }),
       });
       const data = await res.json().catch(() => null);
+      console.log('[AVIS] POST reply status:', res.status, 'réponse serveur:', JSON.stringify(data));
       if (!res.ok) throw new Error(data?.error || `Erreur ${res.status}`);
+      if (!data || !data.reply) throw new Error('Réponse serveur invalide (champ reply manquant).');
 
-      setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, reply: data.reply, replied_at: data.replied_at } : r)));
+      setReviews((prev) => prev.map((r) => {
+        if (r.id !== reviewId) return r;
+        const updated = { ...r, reply: data.reply, replied_at: data.replied_at };
+        console.log('[AVIS] avis mis à jour dans le state:', JSON.stringify(updated));
+        return updated;
+      }));
       setActiveReplyId(null);
       setReplyText('');
     } catch (err) {
