@@ -44,6 +44,7 @@ class ReservationSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     service_name = serializers.CharField(source='service.name', read_only=True)
     service_price = serializers.DecimalField(source='service.price', max_digits=6, decimal_places=2, read_only=True)
+    qr_code = serializers.CharField(read_only=True)
 
     class Meta:
         model = Reservation
@@ -61,7 +62,11 @@ class ReservationSerializer(serializers.ModelSerializer):
             'payment_status',
             'payment_method',
             'amount_paid',
+            'qr_code',
+            'checked_in',
+            'checked_in_at',
         ]
+        read_only_fields = ['qr_code', 'checked_in', 'checked_in_at']
 
 
 class ClosedPeriodSerializer(serializers.ModelSerializer):
