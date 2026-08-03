@@ -122,6 +122,8 @@ class Review(models.Model):
     rating = models.IntegerField()
     comment = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    reply = models.TextField(blank=True, null=True)
+    replied_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']

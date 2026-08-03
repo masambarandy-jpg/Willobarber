@@ -27,6 +27,13 @@ export default function ReviewCard({ reservationId, serviceName, existingReview,
         {!!existingReview.comment && (
           <Text style={styles.commentDisplay}>{existingReview.comment}</Text>
         )}
+        {!!existingReview.reply && (
+          <View style={styles.replyBlock}>
+            <Text style={styles.replyText}>
+              💬 Réponse de Willo : <Text style={styles.replyQuote}>« {existingReview.reply} »</Text>
+            </Text>
+          </View>
+        )}
       </View>
     );
   }
@@ -151,5 +158,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: 'rgba(255,255,255,0.7)',
     marginTop: 10,
+  },
+  replyBlock: {
+    backgroundColor: '#2A2520',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+  },
+  replyText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#C9A84C',
+    fontWeight: '600',
+  },
+  replyQuote: {
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '400',
+    fontStyle: 'italic',
   },
 });

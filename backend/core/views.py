@@ -1031,3 +1031,22 @@ class ReviewListCreateView(APIView):
 def my_reviews(request):
     reviews = Review.objects.filter(user=request.user).select_related('reservation__service')
     return Response(ReviewSerializer(reviews, many=True).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsStaffRole])
+def reply_to_review(request, pk):
+    try:
+        review = Review.objects.get(pk=pk)
+    except Review.DoesNotExist:
+        return Response({'error': 'Avis introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    reply_text = (request.data.get('reply') or '').strip()
+    if not reply_text:
+        return Response({'error': 'La réponse ne peut pas être vide.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    review.reply = reply_text
+    review.replied_at = timezone.now()
+    review.save(update_fields=['reply', 'replied_at'])
+
+    return Response(ReviewSerializer(review).data)
