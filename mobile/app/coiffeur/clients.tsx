@@ -26,6 +26,7 @@ type Client = {
   last: string;
   total: string;
   dateJoined: string;
+  atRisk: boolean;
 };
 
 type ApiClient = {
@@ -39,6 +40,7 @@ type ApiClient = {
   total_spent: number;
   status: string;
   date_joined: string;
+  is_at_risk: boolean;
 };
 
 function badgeFromReservations(count: number): Badge {
@@ -63,6 +65,7 @@ function mapApiClient(c: ApiClient): Client {
     last: c.last_visit ? format(new Date(c.last_visit), 'd MMM', { locale: fr }) : '—',
     total: `${Math.round(c.total_spent)}€`,
     dateJoined: c.date_joined,
+    atRisk: c.is_at_risk,
   };
 }
 
@@ -142,11 +145,12 @@ export default function CoiffeurClientsScreen() {
 
     const totalClients = clients.length;
     const vipCount = clients.filter((c) => c.badge === 'VIP').length;
+    const atRiskCount = clients.filter((c) => c.atRisk).length;
     const newThisMonth = clients.filter((c) => new Date(c.dateJoined) >= startOfThisMonth).length;
     const totalLastMonth = clients.filter((c) => new Date(c.dateJoined) < startOfThisMonth).length;
     const growthPercent = totalLastMonth > 0 ? Math.round((newThisMonth / totalLastMonth) * 100) : 0;
 
-    return { totalClients, vipCount, newThisMonth, growthPercent };
+    return { totalClients, vipCount, atRiskCount, newThisMonth, growthPercent };
   }, [clients]);
 
   const updateField = (key: keyof typeof EMPTY_FORM, value: string) => {
@@ -172,6 +176,7 @@ export default function CoiffeurClientsScreen() {
       last: '—',
       total: '0€',
       dateJoined: new Date().toISOString(),
+      atRisk: false,
     };
 
     setClients((prev) => [newClient, ...prev]);
@@ -345,6 +350,11 @@ export default function CoiffeurClientsScreen() {
             <Text style={styles.statValue}>{stats.vipCount}</Text>
             <Text style={styles.statSub}>clients fidèles</Text>
           </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>À RISQUE</Text>
+            <Text style={[styles.statValue, stats.atRiskCount > 0 && styles.statValueRisk]}>{stats.atRiskCount}</Text>
+            <Text style={styles.statSub}>no-show / annulations</Text>
+          </View>
         </View>
 
         <View style={isTablet && styles.tabletRow}>
@@ -392,6 +402,11 @@ export default function CoiffeurClientsScreen() {
               {c.badge && (
                 <View style={[styles.badge, badgeStyle(c.badge)]}>
                   <Text style={[styles.badgeText, badgeTextStyle(c.badge)]}>{c.badge}</Text>
+                </View>
+              )}
+              {c.atRisk && (
+                <View style={[styles.badge, styles.riskBadge]}>
+                  <Text style={[styles.badgeText, styles.riskBadgeText]}>🚩 À risque</Text>
                 </View>
               )}
               <TouchableOpacity style={styles.editBtn} onPress={() => ouvrirEdition(c)}>
@@ -453,6 +468,11 @@ export default function CoiffeurClientsScreen() {
                         <Text style={[styles.badgeText, badgeTextStyle(clientEnEdition.badge)]}>
                           {clientEnEdition.badge}
                         </Text>
+                      </View>
+                    )}
+                    {clientEnEdition.atRisk && (
+                      <View style={[styles.badge, styles.riskBadge, styles.detailBadge]}>
+                        <Text style={[styles.badgeText, styles.riskBadgeText]}>🚩 À risque</Text>
                       </View>
                     )}
 
@@ -616,6 +636,11 @@ export default function CoiffeurClientsScreen() {
                     </Text>
                   </View>
                 )}
+                {clientEnEdition.atRisk && (
+                  <View style={[styles.badge, styles.riskBadge, styles.detailBadge]}>
+                    <Text style={[styles.badgeText, styles.riskBadgeText]}>🚩 À risque</Text>
+                  </View>
+                )}
 
                 <View style={styles.detailDivider} />
 
@@ -741,6 +766,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 20,
     color: CC.white,
+  },
+  statValueRisk: {
+    color: CC.errorText,
   },
   statSub: {
     fontSize: 11,
@@ -953,6 +981,12 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 10.5,
     fontWeight: '700',
+  },
+  riskBadge: {
+    backgroundColor: CC.errorBg,
+  },
+  riskBadgeText: {
+    color: CC.errorText,
   },
   editBtn: {
     width: 28,
