@@ -89,10 +89,15 @@ class ReviewSerializer(serializers.ModelSerializer):
     client_name = serializers.SerializerMethodField()
     service_name = serializers.SerializerMethodField()
     reservation_date = serializers.SerializerMethodField()
+    reply = serializers.CharField(read_only=True, allow_null=True)
+    replied_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
     class Meta:
         model = Review
-        fields = ['id', 'rating', 'comment', 'created_at', 'client_name', 'service_name', 'reservation_date', 'reservation']
+        fields = [
+            'id', 'rating', 'comment', 'created_at', 'client_name', 'service_name',
+            'reservation_date', 'reservation', 'reply', 'replied_at',
+        ]
 
     def get_client_name(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
