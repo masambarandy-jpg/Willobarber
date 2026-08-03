@@ -36,5 +36,6 @@ urlpatterns = [
     path('clients/<int:pk>/', views.delete_client, name='client-delete'),
     path('reminders/send/', views.send_reminders, name='reminders-send'),
     path('reviews/client/', views.my_reviews, name='reviews-client'),
+    path('reviews/<int:pk>/reply/', views.reply_to_review, name='review-reply'),
     path('reviews/', views.ReviewListCreateView.as_view(), name='reviews'),
 ]
