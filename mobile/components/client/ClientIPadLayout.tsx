@@ -178,7 +178,7 @@ export default function ClientIPadLayout({ active, children }: Props) {
             >
               <Text style={styles.promoKicker}>{t('clientSidebar.nextRdvKicker')}</Text>
               <Text style={styles.promoText}>{formatNextRdvLabel(nextReservation)}</Text>
-              <TouchableOpacity style={styles.promoBtn} onPress={() => go('space')} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.promoBtn} onPress={() => router.push('/(tabs)/reservations')} activeOpacity={0.85}>
                 <Text style={styles.promoBtnText}>{t('clientSidebar.viewDetails')}</Text>
               </TouchableOpacity>
             </LinearGradient>
