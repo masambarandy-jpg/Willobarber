@@ -187,8 +187,20 @@ function QrCodeModal({ reservation, onClose }: QrCodeModalProps) {
             />
           )}
           <Text style={styles.qrModalCaption}>Montrez ce code au salon</Text>
-          <TouchableOpacity style={styles.qrModalCloseBtn} onPress={onClose}>
-            <Text style={styles.qrModalCloseBtnText}>Fermer</Text>
+          <TouchableOpacity
+            onPress={onClose}
+            style={{
+              width: '100%',
+              backgroundColor: '#C9A84C',
+              borderRadius: 50,
+              paddingVertical: 16,
+              alignItems: 'center',
+              marginTop: 16,
+            }}
+          >
+            <Text style={{ color: '#000', fontSize: 16, fontWeight: 'bold' }}>
+              Fermer
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1759,6 +1771,7 @@ const styles = StyleSheet.create({
   qrModalCaption: { fontSize: 13, color: '#888', marginBottom: 20 },
   qrModalCloseBtn: {
     width: '100%',
+    alignSelf: 'stretch',
     backgroundColor: '#C9A84C',
     borderRadius: 50,
     paddingVertical: 16,
