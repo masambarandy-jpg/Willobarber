@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Fonts } from '@/constants';
@@ -41,15 +42,20 @@ const PHOTO_BY_NAME: Record<string, string> = {
   'Coupe enfant +15 ans': 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80',
 };
 
+// Le backend (ServiceSerializer) ne renvoie que id/name/price/duration/barbershop —
+// pas de description, catégorie ou is_popular. On tolère leur absence ici plutôt que
+// de planter : un crash dans ce mapping faisait échouer tout le fetch et retombait
+// silencieusement sur les prix figés de SERVICES (cf. le bug "45€ au lieu de 25€").
 function mapApiService(s: Service): StaticService {
+  const category = s.category ?? '';
   return {
     id: String(s.id),
-    cat: API_CATEGORY_MAP[s.category] ?? s.category.toUpperCase(),
+    cat: API_CATEGORY_MAP[category] ?? (category ? category.toUpperCase() : 'COUPE HOMME'),
     name: s.name,
-    desc: s.description,
+    desc: s.description ?? '',
     dur: `${s.duration} min`,
     price: parseFloat(s.price),
-    popular: s.is_popular,
+    popular: s.is_popular ?? false,
     photo: PHOTO_BY_NAME[s.name],
   };
 }
@@ -83,20 +89,28 @@ export default function CatalogueScreen() {
   const [apiServices, setApiServices] = useState<StaticService[] | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await servicesApi.list();
-        if (!cancelled) setApiServices(data.map(mapApiService));
-      } catch (e) {
-        if (!cancelled) setApiServices(null);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // useFocusEffect (plutôt qu'un useEffect à deps vides) pour refaire le fetch à chaque
+  // fois que cet onglet reprend le focus — un service dont le prix vient d'être modifié
+  // côté Willo ne doit pas rester figé sur l'ancienne valeur tant que l'app n'est pas
+  // relancée.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoading(true);
+      (async () => {
+        try {
+          const data = await servicesApi.list();
+          if (!cancelled) setApiServices(data.map(mapApiService));
+        } catch (e) {
+          console.log('[CATALOGUE] fetch services error, fallback sur les données statiques:', e);
+          if (!cancelled) setApiServices(null);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => { cancelled = true; };
+    }, [])
+  );
 
   const services = apiServices ?? SERVICES;
 
