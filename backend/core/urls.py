@@ -12,6 +12,8 @@ router.register(r'closed-periods', ClosedPeriodViewSet)
 
 urlpatterns = [
     path('reservations/<int:pk>/acompte-invoice/', views.generate_invoice, name='invoice'),
+    path('reservations/<int:pk>/qr/', views.reservation_qr_code, name='reservation-qr'),
+    path('checkin/<uuid:qr_code>/', views.checkin_reservation, name='checkin'),
     path('', include(router.urls)),
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/login/', views.LoginView.as_view(), name='login'),

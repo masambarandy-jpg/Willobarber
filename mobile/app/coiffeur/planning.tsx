@@ -77,6 +77,12 @@ type ClosedPeriod = {
   created_at: string;
 };
 
+type CheckinResult = {
+  clientName: string;
+  serviceName: string;
+  alreadyCheckedIn: boolean;
+};
+
 function dateKey(d: Date) {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
@@ -263,6 +269,13 @@ export default function CoiffeurPlanningScreen() {
   const [cashAmountInput, setCashAmountInput] = useState('');
   const [submittingPayment, setSubmittingPayment] = useState(false);
 
+  const [scanTarget, setScanTarget] = useState<Event | null>(null);
+  const [scanModalVisible, setScanModalVisible] = useState(false);
+  const [scanUuidInput, setScanUuidInput] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<CheckinResult | null>(null);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -286,6 +299,51 @@ export default function CoiffeurPlanningScreen() {
   const fermerDetailRdv = () => {
     setRdvDetailVisible(false);
     setPaymentMode(null);
+  };
+
+  const ouvrirScanQr = (event: Event) => {
+    setScanTarget(event);
+    setScanUuidInput('');
+    setScanError(null);
+    setScanResult(null);
+    setScanModalVisible(true);
+  };
+
+  const fermerScanQr = () => {
+    setScanModalVisible(false);
+    setScanTarget(null);
+  };
+
+  const validerCheckin = async () => {
+    const uuid = scanUuidInput.trim();
+    if (!uuid) {
+      setScanError('Merci de saisir l\'UUID du QR code.');
+      return;
+    }
+    setScanning(true);
+    setScanError(null);
+    try {
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE_URL}/api/checkin/${encodeURIComponent(uuid)}/`, {
+        method: 'POST',
+        headers,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `Erreur ${res.status}`);
+
+      setScanResult({
+        clientName: data.client_name,
+        serviceName: data.service_name,
+        alreadyCheckedIn: Boolean(data.already_checked_in),
+      });
+    } catch (error) {
+      console.log('ERREUR CHECKIN:', error);
+      setScanError(error instanceof Error ? error.message : 'Erreur lors du check-in.');
+    } finally {
+      setScanning(false);
+    }
   };
 
   const showToast = (message: string) => {
@@ -811,10 +869,8 @@ export default function CoiffeurPlanningScreen() {
           {dayEvents.map((e) => {
             const style = BARBER_STYLE[e.barber];
             return (
-              <TouchableOpacity
+              <View
                 key={e.id}
-                activeOpacity={0.8}
-                onPress={() => ouvrirDetailRdv(e)}
                 style={[
                   styles.event,
                   {
@@ -824,11 +880,20 @@ export default function CoiffeurPlanningScreen() {
                   },
                 ]}
               >
-                <Text style={[styles.eventText, { color: style.border }]}>
-                  {e.time} · {e.service}{e.paymentStatus !== 'unpaid' ? ' ✅' : ''}
-                </Text>
-                <Text style={styles.eventClient}>{e.client}</Text>
-              </TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.8} onPress={() => ouvrirDetailRdv(e)}>
+                  <Text style={[styles.eventText, { color: style.border }]}>
+                    {e.time} · {e.service}{e.paymentStatus !== 'unpaid' ? ' ✅' : ''}
+                  </Text>
+                  <Text style={styles.eventClient}>{e.client}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.scanQrBtn}
+                  activeOpacity={0.8}
+                  onPress={() => ouvrirScanQr(e)}
+                >
+                  <Text style={styles.scanQrBtnText}>📱 Scanner QR</Text>
+                </TouchableOpacity>
+              </View>
             );
           })}
         </View>
@@ -1132,6 +1197,68 @@ export default function CoiffeurPlanningScreen() {
       </Pressable>
     </Modal>
 
+    <Modal
+      visible={scanModalVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={fermerScanQr}
+    >
+      <Pressable style={styles.rdvOverlay} onPress={fermerScanQr}>
+        <Pressable style={styles.rdvCard} onPress={(e) => e.stopPropagation()}>
+          <TouchableOpacity style={styles.rdvCloseBtn} onPress={fermerScanQr}>
+            <CloseIcon size={13} />
+          </TouchableOpacity>
+
+          <Text style={styles.rdvTitle}>📱 Scanner QR</Text>
+          {scanTarget && !scanResult && (
+            <Text style={styles.rdvSubtitle}>
+              RDV {scanTarget.time} · {scanTarget.client}
+            </Text>
+          )}
+
+          {scanResult ? (
+            <View style={styles.checkinResultBlock}>
+              <Text style={styles.checkinResultText}>
+                ✅ Check-in confirmé — {scanResult.clientName} · {scanResult.serviceName}
+              </Text>
+              {scanResult.alreadyCheckedIn && (
+                <Text style={styles.checkinResultNote}>Ce client avait déjà été check-in précédemment.</Text>
+              )}
+              <TouchableOpacity style={[styles.rdvCallBtn, { marginTop: 16 }]} onPress={fermerScanQr}>
+                <Text style={styles.rdvCallBtnText}>Fermer</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={[styles.congesFormField, { marginTop: 16, marginBottom: 8 }]}>
+                <Text style={styles.congesFieldLabel}>UUID DU QR CODE</Text>
+                <TextInput
+                  style={styles.congesInput}
+                  value={scanUuidInput}
+                  onChangeText={setScanUuidInput}
+                  placeholder="ex : 497a59df-d625-4321-b2ac-1dc71aa8bb6f"
+                  placeholderTextColor={CC.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!scanning}
+                />
+              </View>
+              {scanError && <Text style={styles.checkinErrorText}>{scanError}</Text>}
+              <TouchableOpacity
+                style={[styles.validateBtn, scanning && styles.btnDisabled, { marginTop: 8 }]}
+                onPress={validerCheckin}
+                disabled={scanning}
+              >
+                <Text style={styles.validateBtnText}>
+                  {scanning ? 'Validation…' : 'Valider check-in'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+
     {toastMessage && (
       <View style={styles.toastContainer} pointerEvents="none">
         <View style={styles.toast}>
@@ -1381,6 +1508,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.85)',
     marginTop: 2,
+  },
+  scanQrBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 100,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginTop: 6,
+  },
+  scanQrBtnText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   weekGrid: {
     flexDirection: 'row',
@@ -1674,6 +1814,30 @@ const styles = StyleSheet.create({
   },
   btnDisabled: {
     opacity: 0.5,
+  },
+
+  checkinResultBlock: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  checkinResultText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: CC.black,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  checkinResultNote: {
+    fontSize: 12,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  checkinErrorText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: CC.errorText,
+    marginBottom: 4,
   },
 
   toastContainer: {
