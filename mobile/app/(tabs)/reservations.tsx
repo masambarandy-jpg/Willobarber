@@ -217,7 +217,10 @@ export default function ReservationsScreen() {
   const { isLoading, refetch, cancel, upcoming, reservations, error } = useReservations();
   const { t } = useLanguage();
   const [histFilter, setHistFilter] = useState('Tous');
-  const [selectedHistIndex, setSelectedHistIndex] = useState(0);
+  // null = aucun RDV sélectionné — le panneau de détail (tablette) affiche alors un
+  // message de sélection par défaut plutôt que le premier élément de la liste.
+  const [selectedHistIndex, setSelectedHistIndex] = useState<number | null>(null);
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [qrTarget, setQrTarget] = useState<(Reservation & { time: string }) | null>(null);
@@ -397,6 +400,11 @@ export default function ReservationsScreen() {
   const filteredHist = histFilter === 'Tous'
     ? HISTORIQUE
     : HISTORIQUE.filter(h => h.annee === histFilter);
+
+  // HISTORIQUE est trié du plus récent au plus ancien (cf. pastSorted) : le premier
+  // élément complété de la liste est donc le dernier RDV honoré par le client.
+  const lastCompletedId = filteredHist.find(h => h.status === 'completed' && h.id != null)?.id ?? null;
+  const visibleHist = showAllHistory ? filteredHist : filteredHist.slice(0, 5);
 
   const handleCancel = async (reason: string) => {
     if (!cancelTarget) return;
@@ -713,7 +721,7 @@ export default function ReservationsScreen() {
                 {['Tous', '2026', '2025'].map(yr => (
                   <Pressable
                     key={yr}
-                    onPress={() => { setHistFilter(yr); setSelectedHistIndex(0); }}
+                    onPress={() => { setHistFilter(yr); setSelectedHistIndex(null); }}
                     style={[styles.filterChip, histFilter === yr && styles.filterChipActive]}
                   >
                     <Text style={[styles.filterChipText, histFilter === yr && styles.filterChipTextActive]}>{yr === 'Tous' ? t('reservations.filter.all') : yr}</Text>
@@ -729,7 +737,7 @@ export default function ReservationsScreen() {
                 <View style={styles.histSplit}>
                   <View style={styles.histSplitList}>
                     {filteredHist.map((h, i) => {
-                      const isSelected = i === Math.min(selectedHistIndex, filteredHist.length - 1);
+                      const isSelected = selectedHistIndex === i;
                       return (
                         <Pressable
                           key={i}
@@ -748,9 +756,13 @@ export default function ReservationsScreen() {
                       );
                     })}
                   </View>
-                  {(() => {
-                    const h = filteredHist[Math.min(selectedHistIndex, filteredHist.length - 1)];
+                  {selectedHistIndex === null ? (
+                    <View style={[styles.histSplitDetail, styles.histSplitDetailEmpty]}>
+                      <Text style={styles.histSplitEmptyText}>Sélectionnez un rendez-vous pour voir les détails</Text>
+                    </View>
+                  ) : (() => {
                     const i = Math.min(selectedHistIndex, filteredHist.length - 1);
+                    const h = filteredHist[i];
                     return (
                       <View style={styles.histSplitDetail}>
                         <View style={styles.histDetailHeader}>
@@ -1105,7 +1117,7 @@ export default function ReservationsScreen() {
           {['Tous', '2026', '2025'].map(yr => (
             <Pressable
               key={yr}
-              onPress={() => { setHistFilter(yr); setSelectedHistIndex(0); }}
+              onPress={() => { setHistFilter(yr); setSelectedHistIndex(null); setShowAllHistory(false); }}
               style={[styles.filterChip, histFilter === yr && styles.filterChipActive]}
             >
               <Text style={[styles.filterChipText, histFilter === yr && styles.filterChipTextActive]}>{yr === 'Tous' ? t('reservations.filter.all') : yr}</Text>
@@ -1117,67 +1129,8 @@ export default function ReservationsScreen() {
           <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
         ) : filteredHist.length === 0 ? (
           <Text style={styles.emptyHist}>{t('reservations.emptyHistory')}</Text>
-        ) : isTablet ? (
-          <View style={styles.histSplit}>
-            <View style={styles.histSplitList}>
-              {filteredHist.map((h, i) => {
-                const isSelected = i === Math.min(selectedHistIndex, filteredHist.length - 1);
-                return (
-                  <Pressable
-                    key={i}
-                    onPress={() => setSelectedHistIndex(i)}
-                    style={[styles.histListRow, isSelected && styles.histListRowActive]}
-                  >
-                    <View style={styles.histDateBox}>
-                      <Text style={styles.histDateNum}>{h.jour}</Text>
-                      <Text style={styles.histDateMon}>{h.mois}</Text>
-                    </View>
-                    <View style={{ flex: 1, gap: 3 }}>
-                      <Text style={styles.histService} numberOfLines={1}>{h.service}</Text>
-                      <Text style={styles.histMeta}>{h.barbierNom} · {h.prix}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {(() => {
-              const h = filteredHist[Math.min(selectedHistIndex, filteredHist.length - 1)];
-              const i = Math.min(selectedHistIndex, filteredHist.length - 1);
-              return (
-                <View style={styles.histSplitDetail}>
-                  <View style={styles.histDetailHeader}>
-                    <View style={[styles.histDateBox, { backgroundColor: '#2A2520' }]}>
-                      <Text style={styles.histDateNum}>{h.jour}</Text>
-                      <Text style={styles.histDateMon}>{h.mois}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.histDetailService}>{h.service}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                        <View style={[
-                          styles.avatar,
-                          { width: 30, height: 30, borderRadius: 15, backgroundColor: h.couleur + '33', borderColor: h.couleur },
-                        ]}>
-                          <Text style={[styles.avatarText, { fontSize: 12, color: h.couleur }]}>{h.barbier}</Text>
-                        </View>
-                        <Text style={styles.histMeta}>{h.barbierNom}</Text>
-                        <Text style={{ color: '#C9A84C', fontSize: 14, fontWeight: '700' }}>{h.prix}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <Text style={styles.histDetailRef}>N° WB-{h.annee}-{String(i + 1).padStart(5, '0')}</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
-                    <TouchableOpacity testID={`btn-rebook-${i}`} style={[styles.btnPrimary, { flex: 1 }]} onPress={() => handleRebook(h)} activeOpacity={0.85}>
-                      <Text style={styles.btnPrimaryText}>{t('reservations.rebook')}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity testID={`btn-receipt-${i}`} style={[styles.btnOutline, { flex: 1 }]} onPress={() => handleReceipt(h, i)} activeOpacity={0.85}>
-                      <Text style={styles.btnOutlineText}>{t('reservations.receipt')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })()}
-          </View>
-        ) : filteredHist.map((h, i) => (
+        ) : (
+          visibleHist.map((h, i) => (
             <React.Fragment key={i}>
               <View style={styles.histCard}>
                 <View style={styles.histDateBox}>
@@ -1206,7 +1159,7 @@ export default function ReservationsScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-              {h.status === 'completed' && h.id != null && (
+              {h.status === 'completed' && h.id != null && h.id === lastCompletedId && (
                 <View style={{ marginBottom: 10 }}>
                   <ReviewCard
                     reservationId={h.id}
@@ -1218,7 +1171,18 @@ export default function ReservationsScreen() {
               )}
             </React.Fragment>
           ))
-        }
+        )}
+
+        {!showInitialLoader && !showAllHistory && filteredHist.length > 5 && (
+          <TouchableOpacity
+            testID="btn-voir-tout-historique"
+            style={styles.voirToutHistBtn}
+            onPress={() => setShowAllHistory(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.voirToutHistBtnText}>Voir tout l'historique</Text>
+          </TouchableOpacity>
+        )}
 
         {/* ── 7. PROGRAMME FIDÉLITÉ ─────────────────────────────────── */}
         <Text style={[styles.sectionKicker, { marginTop: 28 }]}>{t('reservations.loyalty.programTitle')}</Text>
@@ -1587,6 +1551,8 @@ const styles = StyleSheet.create({
   histSplit:       { flexDirection: 'row', gap: 16, marginBottom: 20 },
   histSplitList:   { width: '40%', gap: 8 },
   histSplitDetail: { flex: 1, backgroundColor: '#1A1814', borderRadius: 16, padding: 20 },
+  histSplitDetailEmpty: { alignItems: 'center', justifyContent: 'center', minHeight: 200 },
+  histSplitEmptyText: { fontSize: 13.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', paddingHorizontal: 20 },
   histListRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1609,6 +1575,21 @@ const styles = StyleSheet.create({
   filterChipText:       { fontSize: 12.5, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
   filterChipTextActive: { color: '#1A1208' },
   emptyHist:            { fontSize: 13.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 10, marginBottom: 20 },
+  voirToutHistBtn: {
+    alignSelf: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  voirToutHistBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+  },
 
   histCard: {
     flexDirection: 'row',
