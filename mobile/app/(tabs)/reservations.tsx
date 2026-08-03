@@ -165,7 +165,7 @@ export default function ReservationsScreen() {
   const isTablet = useIsTablet();
   const { user, isAuthenticated } = useAuth();
   const { showLoginModal } = useAuthModal();
-  const { isLoading, refetch, cancel, upcoming, past, error } = useReservations();
+  const { isLoading, refetch, cancel, upcoming, reservations, error } = useReservations();
   const { t } = useLanguage();
   const [histFilter, setHistFilter] = useState('Tous');
   const [selectedHistIndex, setSelectedHistIndex] = useState(0);
@@ -184,11 +184,16 @@ export default function ReservationsScreen() {
   // L'API /reservations/ retourne un champ 'time', absent du type Reservation partagé
   // (utilisé ailleurs avec un shape différent) — on type le réel localement ici.
   // Le scoping par client connecté est géré côté backend (ReservationViewSet.get_queryset).
-  if (__DEV__ && (upcoming[0] || past[0])) {
-    console.log('[RESERVATIONS] Réservation brute reçue de l\'API:', JSON.stringify(upcoming[0] ?? past[0]));
+  const allReservations = reservations as (Reservation & { time: string })[];
+  if (__DEV__ && allReservations[0]) {
+    console.log('[RESERVATIONS] Réservation brute reçue de l\'API:', JSON.stringify(allReservations[0]));
   }
   const upcomingList = upcoming as (Reservation & { time: string })[];
-  const pastList = past as (Reservation & { time: string })[];
+  // L'historique doit montrer tout RDV dont la date est passée, quel que soit son statut
+  // (pending/confirmed oubliés, completed, cancelled...) — pas seulement status === 'completed'.
+  const now = new Date();
+  const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
+  const pastList = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
 
   const nextReservation = [...upcomingList].sort((a, b) =>
     `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)
