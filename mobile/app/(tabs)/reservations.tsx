@@ -119,21 +119,6 @@ function GoldItalic({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Willo scanne ce QR au salon pour valider le check-in (POST /api/checkin/<uuid>/) —
-// généré côté client via l'API publique qrserver.com plutôt qu'une lib native, pour
-// ne pas ajouter de dépendance/rebuild natif juste pour cet écran.
-function ReservationQrBlock({ qrCode }: { qrCode?: string }) {
-  const { t } = useLanguage();
-  if (!qrCode) return null;
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrCode)}`;
-  return (
-    <View style={styles.qrBlock}>
-      <Image source={{ uri: qrImageUrl }} style={styles.qrImage} resizeMode="contain" />
-      <Text style={styles.qrCaption}>{t('reservations.qrCode.caption')}</Text>
-    </View>
-  );
-}
-
 interface CancelModalProps {
   visible: boolean;
   onClose: () => void;
@@ -572,8 +557,6 @@ export default function ReservationsScreen() {
                       </View>
                     </View>
 
-                    {nextReservation && <ReservationQrBlock qrCode={nextReservation.qr_code} />}
-
                     <View style={styles.soldePill}>
                       <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
                     </View>
@@ -589,6 +572,17 @@ export default function ReservationsScreen() {
                         <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
                       </TouchableOpacity>
                     </View>
+
+                    {nextReservation?.qr_code && (
+                      <View style={{ alignItems: 'center', marginTop: 20 }}>
+                        <Text style={{ color: '#fff', marginBottom: 8 }}>🎫 Votre QR code</Text>
+                        <Image
+                          source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?data=${nextReservation.qr_code}&size=200x200` }}
+                          style={{ width: 200, height: 200 }}
+                        />
+                        <Text style={{ color: '#888', fontSize: 12, marginTop: 8 }}>Montrez ce code au salon</Text>
+                      </View>
+                    )}
                   </View>
                 </>
               )}
@@ -943,8 +937,6 @@ export default function ReservationsScreen() {
                 </View>
               </View>
 
-              {nextReservation && <ReservationQrBlock qrCode={nextReservation.qr_code} />}
-
               <View style={styles.soldePill}>
                 <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
               </View>
@@ -960,6 +952,17 @@ export default function ReservationsScreen() {
                   <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
                 </TouchableOpacity>
               </View>
+
+              {nextReservation?.qr_code && (
+                <View style={{ alignItems: 'center', marginTop: 20 }}>
+                  <Text style={{ color: '#fff', marginBottom: 8 }}>🎫 Votre QR code</Text>
+                  <Image
+                    source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?data=${nextReservation.qr_code}&size=200x200` }}
+                    style={{ width: 200, height: 200 }}
+                  />
+                  <Text style={{ color: '#888', fontSize: 12, marginTop: 8 }}>Montrez ce code au salon</Text>
+                </View>
+              )}
             </View>
           </>
         )}
@@ -1479,24 +1482,6 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   soldeText: { fontSize: 12, color: '#C9A84C', fontWeight: '500' },
-
-  qrBlock: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 16,
-    marginBottom: 14,
-  },
-  qrImage: {
-    width: 150,
-    height: 150,
-  },
-  qrCaption: {
-    fontSize: 12,
-    color: '#1A1814',
-    marginTop: 10,
-    fontWeight: '500',
-  },
 
   // ── Resume card ──────────────────────────────────────────────────────────────
   resumeCard: {
