@@ -58,6 +58,11 @@ function formatHmm(timeStr: string): string {
   return timeStr.slice(0, 5).replace(':', 'h');
 }
 
+function formatDateLongFr(dateStr: string): string {
+  const d = parseApiDate(dateStr);
+  return `${d.getDate()} ${MOIS_FR_FULL[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 const MOCK_LOYALTY = {
   points: 980,
   total_earned: 1480,
@@ -161,6 +166,36 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
   );
 }
 
+interface QrCodeModalProps {
+  reservation: (Reservation & { time: string }) | null;
+  onClose: () => void;
+}
+function QrCodeModal({ reservation, onClose }: QrCodeModalProps) {
+  const isTablet = useIsTablet();
+  return (
+    <Modal visible={!!reservation} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
+        <View style={[styles.modalBox, isTablet && styles.modalBoxTablet, styles.qrModalBox]}>
+          <Text style={[styles.modalTitle, { textAlign: 'center' }]}>{reservation?.service_name}</Text>
+          <Text style={[styles.modalSub, { textAlign: 'center' }]}>
+            {reservation ? formatDateLongFr(reservation.date) : ''}
+          </Text>
+          {reservation?.qr_code && (
+            <Image
+              source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?data=${reservation.qr_code}&size=250x250` }}
+              style={styles.qrModalImage}
+            />
+          )}
+          <Text style={styles.qrModalCaption}>Montrez ce code au salon</Text>
+          <TouchableOpacity style={[styles.btnOutline, { alignSelf: 'stretch' }]} onPress={onClose}>
+            <Text style={styles.btnOutlineText}>Fermer</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function ReservationsScreen() {
   const router = useRouter();
   const isTablet = useIsTablet();
@@ -172,6 +207,7 @@ export default function ReservationsScreen() {
   const [selectedHistIndex, setSelectedHistIndex] = useState(0);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [qrTarget, setQrTarget] = useState<(Reservation & { time: string }) | null>(null);
   const [mainTab, setMainTab] = useState<'apercu' | 'coupes'>('apercu');
   const barAnim = useRef(new Animated.Value(0)).current;
   const { media: myMedia, isLoading: myMediaLoading } = useClientMedia(user?.id ?? null);
@@ -574,14 +610,14 @@ export default function ReservationsScreen() {
                     </View>
 
                     {nextReservation?.qr_code && (
-                      <View style={{ alignItems: 'center', marginTop: 20 }}>
-                        <Text style={{ color: '#fff', marginBottom: 8 }}>🎫 Votre QR code</Text>
-                        <Image
-                          source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?data=${nextReservation.qr_code}&size=200x200` }}
-                          style={{ width: 200, height: 200 }}
-                        />
-                        <Text style={{ color: '#888', fontSize: 12, marginTop: 8 }}>Montrez ce code au salon</Text>
-                      </View>
+                      <TouchableOpacity
+                        testID="btn-mon-qr"
+                        style={[styles.btnOutline, { marginTop: 10 }]}
+                        onPress={() => setQrTarget(nextReservation)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.btnOutlineText}>🎫 Mon QR</Text>
+                      </TouchableOpacity>
                     )}
                   </View>
                 </>
@@ -954,14 +990,14 @@ export default function ReservationsScreen() {
               </View>
 
               {nextReservation?.qr_code && (
-                <View style={{ alignItems: 'center', marginTop: 20 }}>
-                  <Text style={{ color: '#fff', marginBottom: 8 }}>🎫 Votre QR code</Text>
-                  <Image
-                    source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?data=${nextReservation.qr_code}&size=200x200` }}
-                    style={{ width: 200, height: 200 }}
-                  />
-                  <Text style={{ color: '#888', fontSize: 12, marginTop: 8 }}>Montrez ce code au salon</Text>
-                </View>
+                <TouchableOpacity
+                  testID="btn-mon-qr"
+                  style={[styles.btnOutline, { marginTop: 10 }]}
+                  onPress={() => setQrTarget(nextReservation)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.btnOutlineText}>🎫 Mon QR</Text>
+                </TouchableOpacity>
               )}
             </View>
           </>
@@ -1284,6 +1320,11 @@ export default function ReservationsScreen() {
         onClose={() => setCancelTarget(null)}
         onConfirm={handleCancel}
         loading={cancelling}
+      />
+
+      <QrCodeModal
+        reservation={qrTarget}
+        onClose={() => setQrTarget(null)}
       />
 
     </View>
@@ -1713,6 +1754,9 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#fff', marginBottom: 8 },
   modalSub:   { fontSize: 13.5, color: 'rgba(255,255,255,0.5)', marginBottom: 18, lineHeight: 19 },
+  qrModalBox:     { alignItems: 'center' },
+  qrModalImage:   { width: 250, height: 250, marginBottom: 18 },
+  qrModalCaption: { fontSize: 13, color: '#888', marginBottom: 20 },
   fieldLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1.5, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: 8 },
   modalInput: {
     backgroundColor: '#252018',
