@@ -41,7 +41,30 @@ type ApiClient = {
   status: string;
   date_joined: string;
   is_at_risk: boolean;
+  deleted_at: string | null;
 };
+
+type ArchivedClient = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  deletedAt: string | null;
+};
+
+function mapArchivedApiClient(c: ApiClient): ArchivedClient {
+  const firstName = (c.first_name ?? '').trim();
+  const lastName = (c.last_name ?? '').trim();
+  const name = `${firstName} ${lastName}`.trim() || c.email;
+
+  return {
+    id: c.id,
+    name,
+    email: c.email ?? '',
+    phone: c.phone ?? '',
+    deletedAt: c.deleted_at,
+  };
+}
 
 function badgeFromReservations(count: number): Badge {
   if (count >= 10) return 'VIP';
@@ -69,13 +92,14 @@ function mapApiClient(c: ApiClient): Client {
   };
 }
 
-const TABS = ['Tous', 'VIP', 'Nouveaux', 'Fidèles', 'Inactifs'] as const;
-const TAB_TO_BADGE: Record<(typeof TABS)[number], Badge | 'ALL'> = {
+const TABS = ['Tous', 'VIP', 'Nouveaux', 'Fidèles', 'Inactifs', 'À risque'] as const;
+const TAB_TO_BADGE: Record<(typeof TABS)[number], Badge | 'ALL' | 'AT_RISK'> = {
   Tous: 'ALL',
   VIP: 'VIP',
   Nouveaux: 'Nouveau',
   Fidèles: 'Fidèle',
   Inactifs: 'Inactif',
+  'À risque': 'AT_RISK',
 };
 
 const EMPTY_FORM = { firstName: '', lastName: '', email: '', phone: '' };
@@ -98,6 +122,12 @@ export default function CoiffeurClientsScreen() {
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const [panelEditing, setPanelEditing] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const [archivedModalVisible, setArchivedModalVisible] = useState(false);
+  const [archivedClients, setArchivedClients] = useState<ArchivedClient[]>([]);
+  const [isLoadingArchived, setIsLoadingArchived] = useState(false);
+  const [archivedError, setArchivedError] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
 
   const { media, isLoading: mediaLoading, isUploading, sharingId, upload, share } = useClientMedia(clientEnEdition?.id ?? null);
 
@@ -136,8 +166,67 @@ export default function CoiffeurClientsScreen() {
     fetchClients();
   }, [fetchClients]);
 
+  const fetchArchivedClients = useCallback(async () => {
+    setIsLoadingArchived(true);
+    setArchivedError(null);
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) {
+        console.log('[CLIENTS ARCHIVÉS] aucun coiffeur_token en AsyncStorage');
+        setArchivedError('Impossible de charger les clients archivés');
+        return;
+      }
+
+      const url = `${API_BASE_URL}/clients/deleted/`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const bodyText = await res.text();
+      console.log('[CLIENTS ARCHIVÉS] GET', url, '→', res.status, bodyText);
+
+      if (!res.ok) {
+        setArchivedError('Impossible de charger les clients archivés');
+        return;
+      }
+
+      const data: ApiClient[] = JSON.parse(bodyText);
+      setArchivedClients(data.map(mapArchivedApiClient));
+    } catch (e) {
+      console.log('[CLIENTS ARCHIVÉS] fetch error', e);
+      setArchivedError('Impossible de charger les clients archivés');
+    } finally {
+      setIsLoadingArchived(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (archivedModalVisible) fetchArchivedClients();
+  }, [archivedModalVisible, fetchArchivedClients]);
+
+  const restoreClient = async (id: number) => {
+    setRestoringId(id);
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) return;
+
+      const url = `${API_BASE_URL}/clients/${id}/restore/`;
+      const res = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      console.log('[CLIENTS ARCHIVÉS] POST', url, '→', res.status);
+
+      if (!res.ok) return;
+      setArchivedClients((prev) => prev.filter((c) => c.id !== id));
+      fetchClients();
+    } catch (e) {
+      console.log('[CLIENTS ARCHIVÉS] restore error', e);
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   const filter = TAB_TO_BADGE[activeTab];
-  const filtered = filter === 'ALL' ? clients : clients.filter((c) => c.badge === filter);
+  const filtered = filter === 'ALL'
+    ? clients
+    : filter === 'AT_RISK'
+      ? clients.filter((c) => c.atRisk)
+      : clients.filter((c) => c.badge === filter);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -329,9 +418,14 @@ export default function CoiffeurClientsScreen() {
       <CoiffeurScreen active="clients">
         <View style={styles.headerRow}>
           <Text style={styles.title}>Clients</Text>
-          <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.addBtn}>
-            <Text style={styles.addBtnText}>+ Ajouter un client</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActionsRow}>
+            <TouchableOpacity onPress={() => setArchivedModalVisible(true)} style={styles.archiveBtn}>
+              <Text style={styles.archiveBtnText}>🗄️ Archivés</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.addBtn}>
+              <Text style={styles.addBtnText}>+ Ajouter un client</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.statsGrid}>
@@ -668,6 +762,71 @@ export default function CoiffeurClientsScreen() {
           </ScrollView>
         </View>
       </Modal>
+
+      <Modal
+        visible={archivedModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setArchivedModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '80%' }]}>
+            <Text style={styles.modalTitle}>Clients archivés</Text>
+
+            {isLoadingArchived && (
+              <ActivityIndicator color={CC.gold} style={{ marginVertical: 24 }} />
+            )}
+
+            {archivedError && !isLoadingArchived && (
+              <View style={styles.errorWrap}>
+                <Text style={styles.errorText}>{archivedError}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={fetchArchivedClients}>
+                  <Text style={styles.retryBtnText}>Réessayer</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {!isLoadingArchived && !archivedError && archivedClients.length === 0 && (
+              <Text style={styles.archivedEmptyText}>Aucun client archivé.</Text>
+            )}
+
+            {!isLoadingArchived && !archivedError && archivedClients.length > 0 && (
+              <ScrollView style={{ maxHeight: 420 }}>
+                {archivedClients.map((c) => (
+                  <View key={c.id} style={styles.archivedRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.archivedName}>{c.name}</Text>
+                      <Text style={styles.archivedMeta}>{c.email}</Text>
+                      {c.deletedAt && (
+                        <Text style={styles.archivedMeta}>
+                          Supprimé le {format(new Date(c.deletedAt), 'd MMM yyyy', { locale: fr })}
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={styles.restoreBtn}
+                      onPress={() => restoreClient(c.id)}
+                      disabled={restoringId === c.id}
+                    >
+                      {restoringId === c.id
+                        ? <ActivityIndicator color={CC.black} size="small" />
+                        : <Text style={styles.restoreBtnText}>Restaurer</Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            <TouchableOpacity
+              style={[styles.cancelBtn, { marginTop: 16 }]}
+              onPress={() => setArchivedModalVisible(false)}
+            >
+              <Text style={styles.cancelBtnText}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -713,6 +872,11 @@ const styles = StyleSheet.create({
     fontSize: 30,
     color: CC.black,
   },
+  headerActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   addBtn: {
     backgroundColor: CC.gold,
     borderRadius: 100,
@@ -726,6 +890,56 @@ const styles = StyleSheet.create({
     color: CC.white,
     fontWeight: '600',
     fontSize: 14,
+  },
+  archiveBtn: {
+    backgroundColor: CC.white,
+    borderWidth: 1,
+    borderColor: CC.border,
+    borderRadius: 100,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+  },
+  archiveBtnText: {
+    color: CC.black,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  archivedEmptyText: {
+    fontSize: 14,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    marginVertical: 24,
+  },
+  archivedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: CC.trackBg,
+  },
+  archivedName: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: CC.black,
+    marginBottom: 2,
+  },
+  archivedMeta: {
+    fontSize: 12,
+    color: CC.textSecondary,
+  },
+  restoreBtn: {
+    backgroundColor: CC.gold,
+    borderRadius: 100,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    minWidth: 92,
+    alignItems: 'center',
+  },
+  restoreBtnText: {
+    color: CC.black,
+    fontWeight: '700',
+    fontSize: 13,
   },
   statsGrid: {
     flexDirection: 'row',

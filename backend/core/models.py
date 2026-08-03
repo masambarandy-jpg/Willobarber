@@ -13,6 +13,8 @@ class User(AbstractUser):
     phone = models.CharField(max_length=20, blank=True, null=True)
     ai_recommendations = models.BooleanField(default=True)
     is_at_risk = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.username} ({self.role})"
