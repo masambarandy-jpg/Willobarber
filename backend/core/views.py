@@ -101,6 +101,14 @@ class ServiceViewSet(viewsets.ModelViewSet):
     queryset = Service.objects.all()
     serializer_class = ServiceSerializer
 
+    def get_permissions(self):
+        # La liste des prestations doit être publique (un client non connecté doit
+        # pouvoir consulter les prix avant de réserver) — mais la création/modification/
+        # suppression reste réservée à Willo, comme pour ClosedPeriodViewSet plus bas.
+        if self.action in ('list', 'retrieve'):
+            return [AllowAny()]
+        return [IsStaffRole()]
+
 
 class ClosedPeriodViewSet(viewsets.ModelViewSet):
     queryset = ClosedPeriod.objects.all()

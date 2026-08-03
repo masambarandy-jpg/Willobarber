@@ -15,7 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Fonts } from '@/constants';
-import { SERVICES, type StaticService } from '@/components/booking/data';
+import type { StaticService } from '@/components/booking/data';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
@@ -88,31 +88,42 @@ export default function CatalogueScreen() {
   const [activeFilter, setActiveFilter] = useState<Filter>('all');
   const [apiServices, setApiServices] = useState<StaticService[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // useFocusEffect (plutôt qu'un useEffect à deps vides) pour refaire le fetch à chaque
   // fois que cet onglet reprend le focus — un service dont le prix vient d'être modifié
   // côté Willo ne doit pas rester figé sur l'ancienne valeur tant que l'app n'est pas
   // relancée.
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-      setLoading(true);
-      (async () => {
-        try {
-          const data = await servicesApi.list();
-          if (!cancelled) setApiServices(data.map(mapApiService));
-        } catch (e) {
-          console.log('[CATALOGUE] fetch services error, fallback sur les données statiques:', e);
-          if (!cancelled) setApiServices(null);
-        } finally {
-          if (!cancelled) setLoading(false);
+  const fetchServices = useCallback(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    (async () => {
+      try {
+        const data = await servicesApi.list();
+        console.log('[CATALOGUE] Données reçues depuis GET /services/:', JSON.stringify(data));
+        if (cancelled) return;
+        const mapped = data.map(mapApiService);
+        console.log('[CATALOGUE] Services mappés dans le state:', JSON.stringify(mapped));
+        setApiServices(mapped);
+      } catch (e) {
+        console.log('[CATALOGUE] fetch services error:', e);
+        if (!cancelled) {
+          setApiServices(null);
+          setLoadError('Impossible de charger les prestations.');
         }
-      })();
-      return () => { cancelled = true; };
-    }, [])
-  );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  const services = apiServices ?? SERVICES;
+  useFocusEffect(fetchServices);
+
+  // Aucune liste statique en repli : si le fetch échoue, on l'affiche clairement plutôt
+  // que de montrer silencieusement d'anciens prix figés en dur (cf. bug "45€ au lieu de 25€").
+  const services = apiServices ?? [];
 
   const filteredServices = useMemo(
     () => services.filter(s => matchesFilter(s, activeFilter)),
@@ -169,6 +180,13 @@ export default function CatalogueScreen() {
         {/* Liste des prestations */}
         {loading ? (
           <ActivityIndicator color={GOLD} size="large" style={styles.loader} />
+        ) : loadError ? (
+          <View style={styles.errorWrap}>
+            <Text style={styles.errorText}>{loadError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={fetchServices} activeOpacity={0.85}>
+              <Text style={styles.retryBtnText}>Réessayer</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
         <View style={[styles.list, isTablet && styles.listGrid]}>
           {filteredServices.map(svc => (
@@ -310,6 +328,28 @@ const styles = StyleSheet.create({
   // Liste
   loader: {
     marginTop: 60,
+  },
+  errorWrap: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 24,
+    gap: 16,
+  },
+  errorText: {
+    fontSize: 14,
+    color: GREY,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    backgroundColor: GOLD,
+    borderRadius: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 26,
+  },
+  retryBtnText: {
+    color: '#1A1208',
+    fontWeight: '700',
+    fontSize: 14,
   },
   list: {
     marginTop: 24,
