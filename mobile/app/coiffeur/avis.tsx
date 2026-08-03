@@ -1,267 +1,171 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { StarIcon } from '@/components/coiffeur/Icons';
-import { CC, SERIF, AvatarKey } from '@/components/coiffeur/theme';
+import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
-import { useCoiffeurProfile } from '@/contexts/CoiffeurProfileContext';
+import { API_BASE_URL } from '@/constants';
+import type { Review } from '@/types';
 
-type Badge = 'Vérifié' | 'Sans réponse' | 'Nouveau client';
+const TABS = ['Tous', '5★', '4★', '3★ et -'] as const;
 
-type Reply = { author: string; role: string; when: string; text: string };
+function avatarLetterFor(name: string): string {
+  return (name.trim().charAt(0) || '?').toUpperCase();
+}
 
-type Review = {
-  letter: AvatarKey;
-  name: string;
-  badge: Badge;
-  when: string;
-  service: string;
-  barber: string;
-  rating: number;
-  text: string;
-  reply: Reply | null;
-};
-
-const REVIEWS: Review[] = [
-  {
-    letter: 'T',
-    name: 'Thomas Leroy',
-    badge: 'Vérifié',
-    when: 'il y a 2 jours',
-    service: 'Signature',
-    barber: 'Willo',
-    rating: 5,
-    text: 'Le meilleur barbier de Bruxelles. Willo prend le temps, écoute, et le résultat est toujours impeccable.',
-    reply: {
-      author: 'Willo D.',
-      role: 'Gérant',
-      when: 'répondu il y a 1 jour',
-      text: 'Merci Thomas, toujours un plaisir de vous recevoir au salon !',
-    },
-  },
-  {
-    letter: 'K',
-    name: 'Karim Benali',
-    badge: 'Sans réponse',
-    when: 'il y a 4 jours',
-    service: 'Taille & rasage',
-    barber: 'Malik',
-    rating: 5,
-    text: 'Un vrai moment de détente. La serviette chaude et le rasoir droit, c’est autre chose.',
-    reply: null,
-  },
-  {
-    letter: 'L',
-    name: 'Léo Martin',
-    badge: 'Nouveau client',
-    when: 'il y a 6 jours',
-    service: 'Le Rituel',
-    barber: 'Willo',
-    rating: 4,
-    text: 'Première visite très réussie. Je reviendrai sans hésiter, juste un peu d’attente à l’arrivée.',
-    reply: null,
-  },
-  {
-    letter: 'N',
-    name: 'Noé Vasseur',
-    badge: 'Vérifié',
-    when: 'il y a 1 sem.',
-    service: 'Camouflage gris',
-    barber: 'Idris',
-    rating: 5,
-    text: 'Coloration discrète et naturelle, exactement ce que je cherchais. Idris est un orfèvre.',
-    reply: {
-      author: 'Willo D.',
-      role: 'Gérant',
-      when: 'répondu il y a 3 jours',
-      text: 'Ravi que la couleur vous plaise, à très vite !',
-    },
-  },
-];
-
-const DISTRIBUTION = [
-  { stars: 5, count: 182 },
-  { stars: 4, count: 41 },
-  { stars: 3, count: 14 },
-  { stars: 2, count: 7 },
-  { stars: 1, count: 4 },
-];
-const MAX_COUNT = Math.max(...DISTRIBUTION.map((d) => d.count));
-
-const TABS = ['Tous', '5★', '4★', '3★ et -', 'Sans réponse'] as const;
-
-function badgeStyle(badge: Badge) {
-  if (badge === 'Sans réponse') return { bg: CC.errorBg, text: CC.errorText };
-  return { bg: CC.successBg, text: CC.successText };
+function formatReviewDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export default function CoiffeurAvisScreen() {
   const isTablet = useIsTablet();
-  const { profile } = useCoiffeurProfile();
-  const avatarLetter = (profile.firstName ?? '').charAt(0).toUpperCase() || 'W';
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
-  const [replyingTo, setReplyingTo] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const [reviews, setReviews] = useState<Review[]>(REVIEWS);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Le token du gérant est stocké sous 'coiffeur_token' (cf. app/coiffeur/index.tsx) —
+        // distinct du JWT client géré par l'instance axios `http` (TokenStorage).
+        const token = await AsyncStorage.getItem('coiffeur_token');
+        if (!token) {
+          console.log('[AVIS] aucun coiffeur_token en AsyncStorage');
+          if (!cancelled) setError('Impossible de charger les avis.');
+          return;
+        }
+
+        const url = `${API_BASE_URL}/reviews/`;
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        console.log('[AVIS] GET', url, '→', response.status, JSON.stringify(data));
+
+        if (!response.ok) {
+          if (!cancelled) setError('Impossible de charger les avis.');
+          return;
+        }
+        if (!cancelled) setReviews(data as Review[]);
+      } catch (err) {
+        console.log('[AVIS] erreur fetch avis:', err);
+        if (!cancelled) setError('Impossible de charger les avis.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = reviews.filter((r) => {
     if (activeTab === 'Tous') return true;
     if (activeTab === '5★') return r.rating === 5;
     if (activeTab === '4★') return r.rating === 4;
     if (activeTab === '3★ et -') return r.rating <= 3;
-    if (activeTab === 'Sans réponse') return !r.reply;
     return true;
   });
 
-  const submitReply = (name: string) => {
-    if (!draft.trim()) return;
-    setReviews((prev) =>
-      prev.map((r) =>
-        r.name === name
-          ? {
-              ...r,
-              badge: 'Vérifié',
-              reply: {
-                author: `${profile.firstName} ${(profile.lastName ?? '').charAt(0)}.`,
-                role: profile.role,
-                when: 'répondu à l’instant',
-                text: draft.trim(),
-              },
-            }
-          : r
-      )
-    );
-    setDraft('');
-    setReplyingTo(null);
-  };
+  const totalReviews = reviews.length;
+  const avgRating = totalReviews > 0
+    ? reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews
+    : 0;
 
-  const cancelReply = () => {
-    setReplyingTo(null);
-    setDraft('');
-  };
+  const distribution = [5, 4, 3, 2, 1].map((stars) => ({
+    stars,
+    count: reviews.filter((r) => r.rating === stars).length,
+  }));
+  const maxCount = Math.max(1, ...distribution.map((d) => d.count));
 
   return (
     <CoiffeurScreen active="avis">
       <Text style={styles.title}>Avis clients</Text>
 
       <View style={isTablet && styles.tabletRow}>
-      <View style={isTablet ? styles.summaryColTablet : undefined}>
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryLeft}>
-            <Text style={styles.ratingBig}>4,8</Text>
-            <View style={styles.starsRow}>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <StarIcon key={i} filled />
-              ))}
-            </View>
-            <Text style={styles.reviewCount}>248 avis</Text>
-          </View>
-
-          <View style={styles.summaryRight}>
-            {DISTRIBUTION.map((d) => (
-              <View key={d.stars} style={styles.distRow}>
-                <Text style={styles.distLabel}>{d.stars}★</Text>
-                <View style={styles.distTrack}>
-                  <View style={[styles.distFill, { width: `${(d.count / MAX_COUNT) * 100}%` }]} />
+        <View style={isTablet ? styles.summaryColTablet : undefined}>
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryLeft}>
+                <Text style={styles.ratingBig}>{totalReviews > 0 ? avgRating.toFixed(1).replace('.', ',') : '—'}</Text>
+                <View style={styles.starsRow}>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <StarIcon key={i} filled={i < Math.round(avgRating)} />
+                  ))}
                 </View>
-                <Text style={styles.distCount}>{d.count}</Text>
+                <Text style={styles.reviewCount}>{totalReviews} avis</Text>
               </View>
-            ))}
+
+              <View style={styles.summaryRight}>
+                {distribution.map((d) => (
+                  <View key={d.stars} style={styles.distRow}>
+                    <Text style={styles.distLabel}>{d.stars}★</Text>
+                    <View style={styles.distTrack}>
+                      <View style={[styles.distFill, { width: `${(d.count / maxCount) * 100}%` }]} />
+                    </View>
+                    <Text style={styles.distCount}>{d.count}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
           </View>
         </View>
 
-        <View style={styles.summaryDivider} />
-        <Text style={styles.newReviewsText}>
-          <Text style={styles.newReviewsBold}>12 nouveaux</Text> ce mois
-        </Text>
-      </View>
-      </View>
-
-      <View style={isTablet ? styles.listColTablet : undefined}>
-      <View style={styles.tabsRow}>
-        {TABS.map((tab) => {
-          const active = tab === activeTab;
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, active && styles.tabActive]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {filtered.map((r) => {
-        const bs = badgeStyle(r.badge);
-        const isReplying = replyingTo === r.name;
-        return (
-          <View key={r.name} style={styles.reviewCard}>
-            <View style={styles.reviewTopRow}>
-              <Avatar letter={r.letter} size={38} />
-              <View style={styles.reviewIdentity}>
-                <Text style={styles.reviewName}>{r.name}</Text>
-                <Text style={styles.reviewMeta}>
-                  {r.when} · {r.service} · {r.barber}
-                </Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: bs.bg }]}>
-                <Text style={[styles.badgeText, { color: bs.text }]}>{r.badge}</Text>
-              </View>
-            </View>
-
-            <View style={styles.starsRow}>
-              {Array.from({ length: 5 }, (_, i) => (
-                <StarIcon key={i} filled={i < r.rating} />
-              ))}
-            </View>
-
-            <Text style={styles.reviewText}>{r.text}</Text>
-
-            {r.reply ? (
-              <View style={styles.replyBlock}>
-                <View style={styles.replyTopRow}>
-                  <Avatar letter={avatarLetter} size={26} />
-                  <Text style={styles.replyAuthor}>
-                    {r.reply.author} · {r.reply.role} · {r.reply.when}
-                  </Text>
-                </View>
-                <Text style={styles.replyText}>{r.reply.text}</Text>
-              </View>
-            ) : isReplying ? (
-              <View style={styles.replyForm}>
-                <TextInput
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder="Votre réponse..."
-                  placeholderTextColor={CC.textSecondary}
-                  style={styles.replyInput}
-                  multiline
-                />
-                <View style={styles.replyActionsRow}>
-                  <TouchableOpacity style={styles.cancelBtn} onPress={cancelReply}>
-                    <Text style={styles.cancelBtnText}>Annuler</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.sendBtn, !draft.trim() && styles.sendBtnDisabled]}
-                    onPress={() => submitReply(r.name)}
-                  >
-                    <Text style={[styles.sendBtnText, !draft.trim() && styles.sendBtnTextDisabled]}>Envoyer</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.replyBtn} onPress={() => setReplyingTo(r.name)}>
-                <Text style={styles.replyBtnText}>← Répondre</Text>
-              </TouchableOpacity>
-            )}
+        <View style={isTablet ? styles.listColTablet : undefined}>
+          <View style={styles.tabsRow}>
+            {TABS.map((tab) => {
+              const active = tab === activeTab;
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.tab, active && styles.tabActive]}
+                  onPress={() => setActiveTab(tab)}
+                >
+                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        );
-      })}
-      </View>
+
+          {isLoading ? (
+            <ActivityIndicator color={CC.gold} size="large" style={{ marginVertical: 30 }} />
+          ) : error ? (
+            <Text style={styles.emptyText}>{error}</Text>
+          ) : filtered.length === 0 ? (
+            <Text style={styles.emptyText}>Aucun avis pour le moment.</Text>
+          ) : (
+            filtered.map((r) => (
+              <View key={r.id} style={styles.reviewCard}>
+                <View style={styles.reviewTopRow}>
+                  <Avatar letter={avatarLetterFor(r.client_name)} size={38} />
+                  <View style={styles.reviewIdentity}>
+                    <Text style={styles.reviewName}>{r.client_name}</Text>
+                    <Text style={styles.reviewMeta}>
+                      {formatReviewDate(r.created_at)} · {r.service_name}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.starsRow}>
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <StarIcon key={i} filled={i < r.rating} />
+                  ))}
+                </View>
+
+                {!!r.comment && <Text style={styles.reviewText}>{r.comment}</Text>}
+              </View>
+            ))
+          )}
+        </View>
       </View>
     </CoiffeurScreen>
   );
@@ -348,19 +252,6 @@ const styles = StyleSheet.create({
     width: 26,
     textAlign: 'right',
   },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: CC.border,
-    marginVertical: 14,
-  },
-  newReviewsText: {
-    fontSize: 13,
-    color: CC.textSecondary,
-  },
-  newReviewsBold: {
-    fontWeight: '700',
-    color: CC.goldDark,
-  },
   tabsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -387,6 +278,12 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: CC.white,
   },
+  emptyText: {
+    fontSize: 13.5,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    marginVertical: 30,
+  },
   reviewCard: {
     backgroundColor: CC.white,
     borderRadius: 16,
@@ -412,102 +309,10 @@ const styles = StyleSheet.create({
     color: CC.textSecondary,
     marginTop: 1,
   },
-  badge: {
-    borderRadius: 100,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  badgeText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-  },
   reviewText: {
     fontSize: 13.5,
     lineHeight: 21,
     color: CC.black,
     marginTop: 8,
-    marginBottom: 12,
-  },
-  replyBlock: {
-    backgroundColor: CC.cream,
-    borderRadius: 12,
-    padding: 12,
-  },
-  replyTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  replyAuthor: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: CC.black,
-  },
-  replyText: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: CC.black,
-  },
-  replyBtn: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: CC.border,
-    borderRadius: 100,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-  },
-  replyBtnText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: CC.black,
-  },
-  replyForm: {
-    gap: 8,
-  },
-  replyInput: {
-    backgroundColor: CC.cream,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: CC.inputBorder,
-    padding: 10,
-    fontSize: 13,
-    color: CC.black,
-    minHeight: 44,
-  },
-  replyActionsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 100,
-    borderWidth: 1,
-    borderColor: CC.border,
-    alignItems: 'center',
-  },
-  cancelBtnText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: CC.black,
-  },
-  sendBtn: {
-    flex: 1,
-    backgroundColor: CC.gold,
-    borderRadius: 100,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  sendBtnDisabled: {
-    backgroundColor: CC.barTrackBg,
-  },
-  sendBtnText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: CC.black,
-  },
-  sendBtnTextDisabled: {
-    color: '#a89f93',
   },
 });
