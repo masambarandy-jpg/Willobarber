@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, ActivityIndicator, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '@/constants';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import { ScissorsIcon, ClockIcon, EditIcon, TrashIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
@@ -9,6 +11,7 @@ type Category = 'Coupe' | 'Rasage' | 'Pack' | 'Soin';
 type Status = 'Actif' | 'Brouillon';
 
 type Service = {
+  id: number;
   name: string;
   description: string;
   category: Category;
@@ -17,14 +20,69 @@ type Service = {
   status: Status;
 };
 
-const SERVICES: Service[] = [
-  { name: 'Signature WilloBarber', description: 'Coupe ciseaux & finition rasoir', category: 'Coupe', duration: '45 min', price: '45€', status: 'Actif' },
-  { name: 'Taille & rasage à l’ancienne', description: 'Serviette chaude, rasoir droit', category: 'Rasage', duration: '30 min', price: '28€', status: 'Actif' },
-  { name: 'Le Rituel', description: 'Coupe + barbe + soin', category: 'Pack', duration: '1h15', price: '75€', status: 'Actif' },
-  { name: 'Coupe express', description: 'Version concentrée', category: 'Coupe', duration: '25 min', price: '28€', status: 'Actif' },
-  { name: 'Camouflage gris', description: 'Pigmentation sans ammoniaque', category: 'Soin', duration: '40 min', price: '35€', status: 'Brouillon' },
-  { name: 'Soin du visage', description: 'Gommage & masque argile', category: 'Soin', duration: '30 min', price: '32€', status: 'Actif' },
-];
+type ApiService = {
+  id: number;
+  name: string;
+  price: string;
+  duration: number;
+};
+
+// Le modèle Service côté backend n'a que name/price/duration — pas de description,
+// catégorie ou statut. On garde ces valeurs cosmétiques par nom pour les prestations
+// historiques connues ; toute prestation absente de cette table retombe sur des valeurs
+// par défaut. Ces champs ne sont donc jamais envoyés au backend (ils ne persisteraient
+// pas) — seuls name/price/duration sont réellement sauvegardés sur Railway.
+const SERVICE_COSMETICS: Record<string, { description: string; category: Category; status: Status }> = {
+  'Signature WilloBarber': { description: 'Coupe ciseaux & finition rasoir', category: 'Coupe', status: 'Actif' },
+  'Taille & rasage à l’ancienne': { description: 'Serviette chaude, rasoir droit', category: 'Rasage', status: 'Actif' },
+  'Le Rituel': { description: 'Coupe + barbe + soin', category: 'Pack', status: 'Actif' },
+  'Coupe express': { description: 'Version concentrée', category: 'Coupe', status: 'Actif' },
+  'Camouflage gris': { description: 'Pigmentation sans ammoniaque', category: 'Soin', status: 'Brouillon' },
+  'Soin du visage': { description: 'Gommage & masque argile', category: 'Soin', status: 'Actif' },
+};
+const DEFAULT_COSMETICS = { description: '', category: 'Coupe' as Category, status: 'Actif' as Status };
+
+function formatPriceDisplay(price: number): string {
+  return `${Math.round(price)}€`;
+}
+
+function parsePriceInput(display: string): number {
+  const num = parseFloat(display.replace(',', '.').replace(/[^\d.]/g, ''));
+  return Number.isNaN(num) ? 0 : num;
+}
+
+function formatDurationDisplay(minutes: number): string {
+  if (minutes >= 60) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+  }
+  return `${minutes} min`;
+}
+
+function parseDurationInput(display: string): number {
+  const hMatch = display.match(/(\d+)\s*h\s*(\d+)?/i);
+  if (hMatch) {
+    const hours = parseInt(hMatch[1], 10);
+    const mins = hMatch[2] ? parseInt(hMatch[2], 10) : 0;
+    return hours * 60 + mins;
+  }
+  const mMatch = display.match(/(\d+)/);
+  return mMatch ? parseInt(mMatch[1], 10) : 0;
+}
+
+function mapApiService(s: ApiService): Service {
+  const cosmetics = SERVICE_COSMETICS[s.name] ?? DEFAULT_COSMETICS;
+  return {
+    id: s.id,
+    name: s.name,
+    description: cosmetics.description,
+    category: cosmetics.category,
+    status: cosmetics.status,
+    duration: formatDurationDisplay(s.duration),
+    price: formatPriceDisplay(parseFloat(s.price)),
+  };
+}
 
 const CATEGORY_STYLE: Record<Category, { bg: string; text: string }> = {
   Coupe: { bg: '#3a2f12', text: '#C9A84C' },
@@ -47,7 +105,9 @@ const EMPTY_EDIT_FORM = { name: '', description: '', price: '', duration: '', st
 export default function CoiffeurPrestationsScreen() {
   const isTablet = useIsTablet();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Toutes');
-  const [services, setServices] = useState<Service[]>(SERVICES);
+  const [services, setServices] = useState<Service[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [serviceASupprimer, setServiceASupprimer] = useState<Service | null>(null);
@@ -55,12 +115,49 @@ export default function CoiffeurPrestationsScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [serviceEnEdition, setServiceEnEdition] = useState<Service | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const fetchServices = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) {
+        console.log('[PRESTATIONS] aucun coiffeur_token en AsyncStorage');
+        setLoadError('Impossible de charger les prestations');
+        return;
+      }
+
+      const url = `${API_BASE_URL}/services/`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const bodyText = await res.text();
+      console.log('[PRESTATIONS] GET', url, '→', res.status, bodyText);
+
+      if (!res.ok) {
+        setLoadError('Impossible de charger les prestations');
+        return;
+      }
+
+      const data: ApiService[] = JSON.parse(bodyText);
+      setServices(data.map(mapApiService));
+    } catch (e) {
+      console.log('[PRESTATIONS] fetch error', e);
+      setLoadError('Impossible de charger les prestations');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
 
   const category = TAB_TO_CATEGORY[activeTab];
   const filtered = category ? services.filter((s) => s.category === category) : services;
-  const avgPrice = Math.round(
-    services.reduce((sum, s) => sum + parseInt(s.price, 10), 0) / services.length
-  );
+  const avgPrice = services.length
+    ? Math.round(services.reduce((sum, s) => sum + parseInt(s.price, 10), 0) / services.length)
+    : 0;
 
   const demanderSuppression = (service: Service) => {
     setServiceASupprimer(service);
@@ -69,7 +166,7 @@ export default function CoiffeurPrestationsScreen() {
 
   const confirmerSuppression = () => {
     if (serviceASupprimer) {
-      setServices((prev) => prev.filter((s) => s.name !== serviceASupprimer.name));
+      setServices((prev) => prev.filter((s) => s.id !== serviceASupprimer.id));
     }
     setDeleteModalVisible(false);
     setServiceASupprimer(null);
@@ -84,6 +181,7 @@ export default function CoiffeurPrestationsScreen() {
       duration: service.duration,
       status: service.status,
     });
+    setSaveError(null);
     setEditModalVisible(true);
   };
 
@@ -91,13 +189,65 @@ export default function CoiffeurPrestationsScreen() {
     setEditForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const sauvegarderModification = () => {
+  const sauvegarderModification = async () => {
     if (!serviceEnEdition) return;
-    setServices((prev) =>
-      prev.map((s) => (s.name === serviceEnEdition.name ? { ...s, ...editForm } : s))
-    );
-    setEditModalVisible(false);
-    setServiceEnEdition(null);
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) {
+        console.log('[PRESTATIONS] aucun coiffeur_token en AsyncStorage — sauvegarde annulée');
+        setSaveError('Impossible d’enregistrer la prestation');
+        return;
+      }
+
+      const url = `${API_BASE_URL}/services/${serviceEnEdition.id}/`;
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: editForm.name,
+          price: parsePriceInput(editForm.price),
+          duration: parseDurationInput(editForm.duration),
+        }),
+      });
+      const bodyText = await res.text();
+      console.log('[PRESTATIONS] PATCH', url, '→', res.status, bodyText);
+
+      if (!res.ok) {
+        setSaveError('Impossible d’enregistrer la prestation');
+        return;
+      }
+
+      // Le backend ne connaît que name/price/duration : on reprend ces valeurs telles
+      // que confirmées par Railway, et on garde description/statut du formulaire (voir
+      // le commentaire sur SERVICE_COSMETICS plus haut).
+      const updated: ApiService = JSON.parse(bodyText);
+      setServices((prev) =>
+        prev.map((s) =>
+          s.id === serviceEnEdition.id
+            ? {
+                ...s,
+                name: updated.name,
+                price: formatPriceDisplay(parseFloat(updated.price)),
+                duration: formatDurationDisplay(updated.duration),
+                description: editForm.description,
+                status: editForm.status,
+              }
+            : s
+        )
+      );
+      setEditModalVisible(false);
+      setServiceEnEdition(null);
+    } catch (e) {
+      console.log('[PRESTATIONS] save error', e);
+      setSaveError('Impossible d’enregistrer la prestation');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -135,13 +285,27 @@ export default function CoiffeurPrestationsScreen() {
         })}
       </ScrollView>
 
+      {isLoading && (
+        <ActivityIndicator color={CC.gold} style={{ marginVertical: 30 }} />
+      )}
+
+      {loadError && !isLoading && (
+        <View style={styles.errorWrap}>
+          <Text style={styles.errorText}>{loadError}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={fetchServices}>
+            <Text style={styles.retryBtnText}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {!isLoading && !loadError && (
       <View style={isTablet && styles.serviceGrid}>
       {filtered.map((s) => {
         const catStyle = CATEGORY_STYLE[s.category];
         const statusStyle = s.status === 'Actif' ? styles.statusActif : styles.statusBrouillon;
         const statusTextStyle = s.status === 'Actif' ? styles.statusActifText : styles.statusBrouillonText;
         return (
-          <View key={s.name} style={[styles.serviceCard, isTablet && styles.serviceCardTablet]}>
+          <View key={s.id} style={[styles.serviceCard, isTablet && styles.serviceCardTablet]}>
             <View style={styles.serviceTop}>
               <View style={styles.serviceIconWrap}>
                 <ScissorsIcon color={CC.gold} size={20} />
@@ -177,6 +341,7 @@ export default function CoiffeurPrestationsScreen() {
         );
       })}
       </View>
+      )}
     </CoiffeurScreen>
 
     <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
@@ -262,12 +427,17 @@ export default function CoiffeurPrestationsScreen() {
             })}
           </View>
 
+          {!!saveError && <Text style={styles.saveErrorText}>{saveError}</Text>}
+
           <View style={styles.modalActionsRow}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditModalVisible(false)}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditModalVisible(false)} disabled={isSaving}>
               <Text style={styles.cancelBtnText}>Annuler</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.confirmBtn} onPress={sauvegarderModification}>
-              <Text style={styles.confirmBtnText}>Enregistrer</Text>
+            <TouchableOpacity style={styles.confirmBtn} onPress={sauvegarderModification} disabled={isSaving}>
+              {isSaving
+                ? <ActivityIndicator color={CC.black} size="small" />
+                : <Text style={styles.confirmBtnText}>Enregistrer</Text>
+              }
             </TouchableOpacity>
           </View>
         </View>
@@ -284,6 +454,33 @@ const styles = StyleSheet.create({
     fontSize: 30,
     color: CC.black,
     marginBottom: 18,
+  },
+  errorWrap: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 14,
+  },
+  errorText: {
+    fontSize: 14,
+    color: CC.textSecondary,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    backgroundColor: CC.gold,
+    borderRadius: 100,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+  },
+  retryBtnText: {
+    color: CC.white,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  saveErrorText: {
+    fontSize: 12.5,
+    color: CC.errorText,
+    marginTop: -8,
+    marginBottom: 14,
   },
   statsGrid: {
     flexDirection: 'row',
