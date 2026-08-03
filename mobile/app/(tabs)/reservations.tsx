@@ -736,7 +736,7 @@ export default function ReservationsScreen() {
               ) : (
                 <View style={styles.histSplit}>
                   <View style={styles.histSplitList}>
-                    {filteredHist.map((h, i) => {
+                    {visibleHist.map((h, i) => {
                       const isSelected = selectedHistIndex === i;
                       return (
                         <Pressable
@@ -757,8 +757,12 @@ export default function ReservationsScreen() {
                     })}
                   </View>
                   {selectedHistIndex === null ? (
-                    <View style={[styles.histSplitDetail, styles.histSplitDetailEmpty]}>
-                      <Text style={styles.histSplitEmptyText}>Sélectionnez un rendez-vous pour voir les détails</Text>
+                    <View style={styles.histSplitDetail}>
+                      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                        <Text style={{ color: '#888', fontSize: 16 }}>
+                          Sélectionnez un rendez-vous pour voir les détails
+                        </Text>
+                      </View>
                     </View>
                   ) : (() => {
                     const i = Math.min(selectedHistIndex, filteredHist.length - 1);
@@ -1173,14 +1177,14 @@ export default function ReservationsScreen() {
           ))
         )}
 
-        {!showInitialLoader && !showAllHistory && filteredHist.length > 5 && (
+        {!showAllHistory && filteredHist.length > 5 && (
           <TouchableOpacity
-            testID="btn-voir-tout-historique"
-            style={styles.voirToutHistBtn}
             onPress={() => setShowAllHistory(true)}
-            activeOpacity={0.85}
+            style={{ padding: 16, alignItems: 'center' }}
           >
-            <Text style={styles.voirToutHistBtnText}>Voir tout l'historique</Text>
+            <Text style={{ color: '#C9A84C', fontSize: 14 }}>
+              Voir tout l'historique ({filteredHist.length} RDV)
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -1551,8 +1555,6 @@ const styles = StyleSheet.create({
   histSplit:       { flexDirection: 'row', gap: 16, marginBottom: 20 },
   histSplitList:   { width: '40%', gap: 8 },
   histSplitDetail: { flex: 1, backgroundColor: '#1A1814', borderRadius: 16, padding: 20 },
-  histSplitDetailEmpty: { alignItems: 'center', justifyContent: 'center', minHeight: 200 },
-  histSplitEmptyText: { fontSize: 13.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', paddingHorizontal: 20 },
   histListRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1575,21 +1577,6 @@ const styles = StyleSheet.create({
   filterChipText:       { fontSize: 12.5, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
   filterChipTextActive: { color: '#1A1208' },
   emptyHist:            { fontSize: 13.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 10, marginBottom: 20 },
-  voirToutHistBtn: {
-    alignSelf: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 100,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  voirToutHistBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
-  },
 
   histCard: {
     flexDirection: 'row',
