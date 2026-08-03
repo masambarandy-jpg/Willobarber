@@ -139,8 +139,16 @@ export default function CoiffeurPrestationsScreen() {
         return;
       }
 
-      const data: ApiService[] = JSON.parse(bodyText);
-      setServices(data.map(mapApiService));
+      const data = JSON.parse(bodyText);
+      if (!Array.isArray(data)) {
+        // Si la réponse n'est pas un tableau brut (page d'erreur HTML, wrapper de
+        // pagination, etc.), .map planterait silencieusement et service.id resterait
+        // undefined pour toute la liste — on le détecte explicitement ici.
+        console.log('[PRESTATIONS] réponse inattendue (pas un tableau):', bodyText);
+        setLoadError('Impossible de charger les prestations');
+        return;
+      }
+      setServices((data as ApiService[]).map(mapApiService));
     } catch (e) {
       console.log('[PRESTATIONS] fetch error', e);
       setLoadError('Impossible de charger les prestations');
@@ -191,10 +199,21 @@ export default function CoiffeurPrestationsScreen() {
 
   const sauvegarderModification = async () => {
     if (!serviceEnEdition) return;
+
+    // Garde-fou : si serviceEnEdition.id n'est pas un nombre exploitable, l'URL PATCH
+    // deviendrait '.../services/undefined/' — le backend répondrait 404 sans que ce soit
+    // visible dans l'UI. On le détecte explicitement avant d'envoyer la requête.
+    if (typeof serviceEnEdition.id !== 'number' || Number.isNaN(serviceEnEdition.id)) {
+      console.log('[PRESTATIONS] service.id invalide, abandon de la sauvegarde:', serviceEnEdition.id);
+      setSaveError('Impossible d’enregistrer la prestation (identifiant invalide).');
+      return;
+    }
+
     setIsSaving(true);
     setSaveError(null);
     try {
       const token = await AsyncStorage.getItem('coiffeur_token');
+      console.log('Token:', token ? 'présent' : 'absent');
       if (!token) {
         console.log('[PRESTATIONS] aucun coiffeur_token en AsyncStorage — sauvegarde annulée');
         setSaveError('Impossible d’enregistrer la prestation');
@@ -202,20 +221,27 @@ export default function CoiffeurPrestationsScreen() {
       }
 
       const url = `${API_BASE_URL}/services/${serviceEnEdition.id}/`;
+      const body = {
+        name: editForm.name,
+        price: parsePriceInput(editForm.price),
+        duration: parseDurationInput(editForm.duration),
+      };
+      console.log('API_BASE_URL:', API_BASE_URL);
+      console.log('URL:', url);
+      console.log('Body:', JSON.stringify(body));
+
       const res = await fetch(url, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          name: editForm.name,
-          price: parsePriceInput(editForm.price),
-          duration: parseDurationInput(editForm.duration),
-        }),
+        body: JSON.stringify(body),
       });
+      console.log('Response status:', res.status);
+
       const bodyText = await res.text();
-      console.log('[PRESTATIONS] PATCH', url, '→', res.status, bodyText);
+      console.log('Response body:', bodyText);
 
       if (!res.ok) {
         setSaveError('Impossible d’enregistrer la prestation');
