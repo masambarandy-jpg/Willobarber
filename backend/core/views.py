@@ -31,6 +31,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
+from django.utils import timezone
 from .models import Barbershop, Service, Reservation, User, ClientMedia, ClosedPeriod, Review
 from .emails import format_date_fr, format_date_fr_short, format_heure_fr
 from .permissions import IsStaffRole
@@ -838,16 +839,14 @@ def share_client_media(request, pk):
     return Response(ClientMediaSerializer(media).data)
 
 
-@api_view(['GET'])
-@permission_classes([IsStaffRole])
-def client_list(request):
-    clients = User.objects.filter(role='client').annotate(
+def _serialize_clients(queryset):
+    clients = queryset.annotate(
         total_reservations=Count('reservation', distinct=True),
         last_visit=Max('reservation__date'),
         total_spent=Sum('reservation__amount_paid'),
     ).order_by('-date_joined')
 
-    data = [
+    return [
         {
             'id': c.id,
             'first_name': c.first_name,
@@ -859,6 +858,7 @@ def client_list(request):
             'total_spent': float(c.total_spent or 0),
             'date_joined': c.date_joined.isoformat(),
             'is_at_risk': c.is_at_risk,
+            'deleted_at': c.deleted_at.isoformat() if c.deleted_at else None,
             'status': (
                 'VIP' if c.total_reservations >= 10
                 else 'Nouveau' if c.total_reservations == 1
@@ -867,7 +867,48 @@ def client_list(request):
         }
         for c in clients
     ]
-    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def client_list(request):
+    clients = User.objects.filter(role='client', is_deleted=False)
+    return Response(_serialize_clients(clients))
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def deleted_client_list(request):
+    clients = User.objects.filter(role='client', is_deleted=True)
+    return Response(_serialize_clients(clients))
+
+
+@api_view(['DELETE'])
+@permission_classes([IsStaffRole])
+def delete_client(request, pk):
+    try:
+        client = User.objects.get(pk=pk, role='client', is_deleted=False)
+    except User.DoesNotExist:
+        return Response({'error': 'Client introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    client.is_deleted = True
+    client.deleted_at = timezone.now()
+    client.save(update_fields=['is_deleted', 'deleted_at'])
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+@permission_classes([IsStaffRole])
+def restore_client(request, pk):
+    try:
+        client = User.objects.get(pk=pk, role='client', is_deleted=True)
+    except User.DoesNotExist:
+        return Response({'error': 'Client supprimé introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    client.is_deleted = False
+    client.deleted_at = None
+    client.save(update_fields=['is_deleted', 'deleted_at'])
+    return Response(_serialize_clients(User.objects.filter(pk=client.pk))[0])
 
 
 @api_view(['POST'])
