@@ -4,6 +4,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Image,
   Linking,
   Modal,
   Platform,
@@ -115,6 +116,21 @@ function GoldItalic({ children }: { children: React.ReactNode }) {
     <Text style={{ color: '#C9A84C', fontStyle: 'italic', fontFamily: Fonts.italic, fontWeight: '500' }}>
       {children}
     </Text>
+  );
+}
+
+// Willo scanne ce QR au salon pour valider le check-in (POST /api/checkin/<uuid>/) —
+// généré côté client via l'API publique qrserver.com plutôt qu'une lib native, pour
+// ne pas ajouter de dépendance/rebuild natif juste pour cet écran.
+function ReservationQrBlock({ qrCode }: { qrCode?: string }) {
+  const { t } = useLanguage();
+  if (!qrCode) return null;
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrCode)}`;
+  return (
+    <View style={styles.qrBlock}>
+      <Image source={{ uri: qrImageUrl }} style={styles.qrImage} resizeMode="contain" />
+      <Text style={styles.qrCaption}>{t('reservations.qrCode.caption')}</Text>
+    </View>
   );
 }
 
@@ -556,6 +572,8 @@ export default function ReservationsScreen() {
                       </View>
                     </View>
 
+                    {nextReservation && <ReservationQrBlock qrCode={nextReservation.qr_code} />}
+
                     <View style={styles.soldePill}>
                       <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
                     </View>
@@ -924,6 +942,8 @@ export default function ReservationsScreen() {
                   </View>
                 </View>
               </View>
+
+              {nextReservation && <ReservationQrBlock qrCode={nextReservation.qr_code} />}
 
               <View style={styles.soldePill}>
                 <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
@@ -1459,6 +1479,24 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   soldeText: { fontSize: 12, color: '#C9A84C', fontWeight: '500' },
+
+  qrBlock: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginBottom: 14,
+  },
+  qrImage: {
+    width: 150,
+    height: 150,
+  },
+  qrCaption: {
+    fontSize: 12,
+    color: '#1A1814',
+    marginTop: 10,
+    fontWeight: '500',
+  },
 
   // ── Resume card ──────────────────────────────────────────────────────────────
   resumeCard: {

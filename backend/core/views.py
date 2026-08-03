@@ -435,6 +435,56 @@ def recommendations(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def reservation_qr_code(request, pk):
+    try:
+        reservation = Reservation.objects.get(pk=pk)
+    except Reservation.DoesNotExist:
+        return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff = request.user.is_superuser or getattr(request.user, 'role', None) == 'admin'
+    if not is_staff and reservation.user_id != request.user.id:
+        return Response({'error': "Vous n'avez pas accès à ce QR code."}, status=status.HTTP_403_FORBIDDEN)
+
+    return Response({
+        'reservation_id': reservation.id,
+        'qr_code': str(reservation.qr_code),
+        'checked_in': reservation.checked_in,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsStaffRole])
+def checkin_reservation(request, qr_code):
+    try:
+        reservation = Reservation.objects.select_related('user', 'service').get(qr_code=qr_code)
+    except Reservation.DoesNotExist:
+        return Response({'error': 'QR code invalide — aucune réservation correspondante.'}, status=status.HTTP_404_NOT_FOUND)
+
+    already_checked_in = reservation.checked_in
+    if not already_checked_in:
+        reservation.checked_in = True
+        reservation.checked_in_at = timezone.now()
+        reservation.save(update_fields=['checked_in', 'checked_in_at'])
+
+    client = reservation.user
+    client_name = f"{client.first_name} {client.last_name}".strip() or client.username
+
+    return Response({
+        'success': True,
+        'already_checked_in': already_checked_in,
+        'reservation_id': reservation.id,
+        'client_name': client_name,
+        'client_email': client.email,
+        'client_phone': client.phone,
+        'service_name': reservation.service.name,
+        'date': reservation.date,
+        'time': reservation.time,
+        'checked_in_at': reservation.checked_in_at,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def generate_invoice(request, pk):
     try:
         reservation = Reservation.objects.get(pk=pk)
