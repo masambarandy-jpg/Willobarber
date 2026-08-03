@@ -3,12 +3,32 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { useAuth } from '@/hooks/useAuth';
+import { useReservations } from '@/hooks/useReservations';
 import { useClientSidebarWidth } from './useIsTablet';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
 import type { TranslationKey } from '@/i18n/translations';
+import type { Reservation } from '@/types';
 
 export type ClientRoute = 'home' | 'catalogue' | 'book' | 'space' | 'profile';
+
+const JOURS_ABBR_FR = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
+const MOIS_ABBR_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+function parseApiDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+// Le backend n'a pas de champ d'affectation barbier sur Reservation — "Willo" en
+// fallback ici reprend la même convention que le planning coiffeur (cf. planning.tsx).
+function formatNextRdvLabel(reservation: Reservation & { time: string }): string {
+  const d = parseApiDate(reservation.date);
+  const jourAbbr = JOURS_ABBR_FR[d.getDay()];
+  const moisAbbr = MOIS_ABBR_FR[d.getMonth()];
+  const heure = reservation.time.slice(0, 5);
+  return `${jourAbbr} ${d.getDate()} ${moisAbbr} · ${heure} · Willo`;
+}
 
 const GOLD = '#C9A84C';
 const GOLD_DARK = '#8B6914';
@@ -93,6 +113,7 @@ export default function ClientIPadLayout({ active, children }: Props) {
   const sidebarWidth = useClientSidebarWidth();
   const { user, isAuthenticated } = useAuth();
   const { t } = useLanguage();
+  const { upcoming } = useReservations();
   const NAV_ITEMS = NAV_ITEM_KEYS.map(item => ({ ...item, label: t(item.labelKey) }));
 
   const firstName = user?.first_name || user?.username || 'Client';
@@ -100,6 +121,13 @@ export default function ClientIPadLayout({ active, children }: Props) {
   const avatarLetter = (firstName ?? '').charAt(0).toUpperCase() || 'W';
 
   const go = (route: ClientRoute) => router.push(ROUTES[route] as never);
+
+  // Même dérivation que "Prochain RDV" dans reservations.tsx : le plus proche des
+  // réservations à venir (pending/confirmed), trié par date+heure croissante.
+  const upcomingList = upcoming as (Reservation & { time: string })[];
+  const nextReservation = isAuthenticated
+    ? [...upcomingList].sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0] ?? null
+    : null;
 
   return (
     <View style={styles.root}>
@@ -141,18 +169,20 @@ export default function ClientIPadLayout({ active, children }: Props) {
             })}
           </View>
 
-          <LinearGradient
-            colors={[GOLD, GOLD_DARK]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.promoBlock}
-          >
-            <Text style={styles.promoKicker}>{t('clientSidebar.nextRdvKicker')}</Text>
-            <Text style={styles.promoText}>Sam. 23 mai · 10:30 · Willo</Text>
-            <TouchableOpacity style={styles.promoBtn} onPress={() => go('space')} activeOpacity={0.85}>
-              <Text style={styles.promoBtnText}>{t('clientSidebar.viewDetails')}</Text>
-            </TouchableOpacity>
-          </LinearGradient>
+          {nextReservation && (
+            <LinearGradient
+              colors={[GOLD, GOLD_DARK]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.promoBlock}
+            >
+              <Text style={styles.promoKicker}>{t('clientSidebar.nextRdvKicker')}</Text>
+              <Text style={styles.promoText}>{formatNextRdvLabel(nextReservation)}</Text>
+              <TouchableOpacity style={styles.promoBtn} onPress={() => go('space')} activeOpacity={0.85}>
+                <Text style={styles.promoBtnText}>{t('clientSidebar.viewDetails')}</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          )}
         </ScrollView>
       </View>
 
