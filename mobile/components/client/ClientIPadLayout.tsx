@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
@@ -175,10 +175,25 @@ export default function ClientIPadLayout({ active, children }: Props) {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.promoBlock}
+              pointerEvents="box-none"
             >
               <Text style={styles.promoKicker}>{t('clientSidebar.nextRdvKicker')}</Text>
               <Text style={styles.promoText}>{formatNextRdvLabel(nextReservation)}</Text>
-              <TouchableOpacity style={styles.promoBtn} onPress={() => router.push('/(tabs)/reservations')} activeOpacity={0.85}>
+              <TouchableOpacity
+                style={[styles.promoBtn, { zIndex: 999 }]}
+                pointerEvents="auto"
+                onPress={() => {
+                  const d = parseApiDate(nextReservation.date);
+                  const dateLabel = `${JOURS_ABBR_FR[d.getDay()]} ${d.getDate()} ${MOIS_ABBR_FR[d.getMonth()]}`;
+                  const heureLabel = nextReservation.time.slice(0, 5);
+                  Alert.alert(
+                    'Votre prochain RDV',
+                    `📅 ${dateLabel}\n⏰ ${heureLabel}\n✂️ ${nextReservation.service_name}\n👤 Willo`,
+                    [{ text: 'Fermer', style: 'cancel' }]
+                  );
+                }}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.promoBtnText}>{t('clientSidebar.viewDetails')}</Text>
               </TouchableOpacity>
             </LinearGradient>
