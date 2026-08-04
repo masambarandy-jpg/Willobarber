@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Dimensions,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,10 +11,12 @@ import {
 } from 'react-native';
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { closedPeriodsApi } from '@/services/api';
+import { closedPeriodsApi, slotsApi, waitingListApi } from '@/services/api';
 import type { ClosedPeriod } from '@/types';
 import { SLOT_GROUPS, isSlotAvailable, type BookingState } from './data';
 import type { TranslationKey } from '@/i18n/translations';
+
+const ALL_SLOTS = SLOT_GROUPS.flatMap((g) => g.slots);
 
 const GOLD       = '#C9A84C';
 const CARD       = '#1A1814';
@@ -27,6 +31,10 @@ const SLOT_W = Math.floor((SCREEN_W - 40 - 18) / 3);
 function parseIsoDate(s: string): Date {
   const [y, m, d] = s.split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function toIsoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function findClosedPeriod(date: Date, closedPeriods: ClosedPeriod[]): ClosedPeriod | null {
@@ -212,13 +220,18 @@ interface Props {
   booking: BookingState;
   onDateSelect: (d: Date) => void;
   onTimeSelect: (t: string) => void;
+  serviceId: number | null;
 }
 
-export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
+export function Step3Date({ booking, onDateSelect, onTimeSelect, serviceId }: Props) {
   const { date: selectedDate, time: selectedTime, service } = booking;
   const { t } = useLanguage();
 
   const [closedPeriods, setClosedPeriods] = useState<ClosedPeriod[]>([]);
+  const [bookedTimes, setBookedTimes] = useState<Set<string>>(new Set());
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [joiningWaitlist, setJoiningWaitlist] = useState(false);
+  const [joinedWaitlist, setJoinedWaitlist] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -228,7 +241,65 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
     return () => { cancelled = true; };
   }, []);
 
+  // Le salon n'a qu'un seul barbier ("Willo") — /slots/available/ n'utilise pas
+  // barber_id côté backend, mais la signature de l'API l'exige encore.
+  useEffect(() => {
+    setJoinedWaitlist(false);
+    if (!selectedDate) {
+      setBookedTimes(new Set());
+      return;
+    }
+    let cancelled = false;
+    setLoadingSlots(true);
+    slotsApi.available(1, toIsoDate(selectedDate))
+      .then((res) => {
+        if (cancelled) return;
+        const taken = new Set(res.slots.filter((s) => !s.is_available).map((s) => s.start_time));
+        setBookedTimes(taken);
+      })
+      .catch(() => { if (!cancelled) setBookedTimes(new Set()); })
+      .finally(() => { if (!cancelled) setLoadingSlots(false); });
+    return () => { cancelled = true; };
+  }, [selectedDate]);
+
   const closedPeriod = selectedDate ? findClosedPeriod(selectedDate, closedPeriods) : null;
+
+  const slotAvailable = (slot: string) => {
+    if (service && !isSlotAvailable(slot, service.dur)) return false;
+    return !bookedTimes.has(slot);
+  };
+
+  const dayFull = Boolean(
+    selectedDate && !closedPeriod && !loadingSlots &&
+    ALL_SLOTS.every((slot) => !slotAvailable(slot))
+  );
+
+  const handleJoinWaitingList = async () => {
+    if (!selectedDate || !serviceId) return;
+    setJoiningWaitlist(true);
+    try {
+      await waitingListApi.create({
+        service: serviceId,
+        preferred_date: toIsoDate(selectedDate),
+      });
+      setJoinedWaitlist(true);
+      const message = t('step3.waitingListConfirm');
+      if (Platform.OS === 'web') {
+        window.alert(message);
+      } else {
+        Alert.alert(t('step3.waitingListTitle'), message);
+      }
+    } catch {
+      const message = t('step3.waitingListError');
+      if (Platform.OS === 'web') {
+        window.alert(message);
+      } else {
+        Alert.alert(t('common.error'), message);
+      }
+    } finally {
+      setJoiningWaitlist(false);
+    }
+  };
 
   return (
     <ScrollView
@@ -273,7 +344,7 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
               <View style={styles.slotsGrid}>
                 {group.slots.map((slot) => {
                   const isOn     = selectedTime === slot;
-                  const available = service ? isSlotAvailable(slot, service.dur) : true;
+                  const available = slotAvailable(slot);
                   const disabled  = !available;
                   return (
                     <TouchableOpacity
@@ -301,6 +372,19 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect }: Props) {
             </View>
           ))}
         </View>
+      )}
+
+      {dayFull && !joinedWaitlist && (
+        <TouchableOpacity
+          style={{ backgroundColor: '#C9A84C', padding: 16, borderRadius: 12, margin: 16, opacity: joiningWaitlist ? 0.6 : 1 }}
+          onPress={handleJoinWaitingList}
+          disabled={joiningWaitlist || !serviceId}
+          activeOpacity={0.85}
+        >
+          <Text style={{ color: 'white', textAlign: 'center', fontWeight: '600' }}>
+            📋 Rejoindre la liste d'attente
+          </Text>
+        </TouchableOpacity>
       )}
     </ScrollView>
   );

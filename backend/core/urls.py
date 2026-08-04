@@ -2,18 +2,20 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
-from .views import BarbershopViewSet, ServiceViewSet, ReservationViewSet, ClosedPeriodViewSet
+from .views import BarbershopViewSet, ServiceViewSet, ReservationViewSet, ClosedPeriodViewSet, WaitingListViewSet
 
 router = DefaultRouter()
 router.register(r'barbershops', BarbershopViewSet)
 router.register(r'services', ServiceViewSet)
 router.register(r'reservations', ReservationViewSet)
 router.register(r'closed-periods', ClosedPeriodViewSet)
+router.register(r'waiting-list', WaitingListViewSet)
 
 urlpatterns = [
     path('reservations/<int:pk>/acompte-invoice/', views.generate_invoice, name='invoice'),
     path('reservations/<int:pk>/qr/', views.reservation_qr_code, name='reservation-qr'),
     path('checkin/<uuid:qr_code>/', views.checkin_reservation, name='checkin'),
+    path('slots/available/', views.available_slots, name='available-slots'),
     path('', include(router.urls)),
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/login/', views.LoginView.as_view(), name='login'),

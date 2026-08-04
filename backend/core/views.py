@@ -32,14 +32,14 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
 from django.utils import timezone
-from .models import Barbershop, Service, Reservation, User, ClientMedia, ClosedPeriod, Review
+from .models import Barbershop, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList
 from .emails import format_date_fr, format_date_fr_short, format_heure_fr
 from .permissions import IsStaffRole
 from .sms import send_reminders_for_tomorrow
 from .serializers import (
     BarbershopSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
-    ClosedPeriodSerializer, ReviewSerializer,
+    ClosedPeriodSerializer, ReviewSerializer, WaitingListSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,6 +122,59 @@ class ClosedPeriodViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+
+class WaitingListViewSet(viewsets.ModelViewSet):
+    queryset = WaitingList.objects.all()
+    serializer_class = WaitingListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        is_staff = user.is_superuser or getattr(user, 'role', None) == 'admin'
+        if is_staff:
+            return WaitingList.objects.all()
+        return WaitingList.objects.filter(client=user)
+
+    def perform_create(self, serializer):
+        serializer.save(client=self.request.user)
+
+
+# Créneaux proposés côté client (cf. SLOT_GROUPS dans mobile/components/booking/data.ts) —
+# tenus en phase manuellement, le salon n'ayant qu'un seul barbier donc pas de agenda par
+# ressource à interroger dynamiquement.
+SLOT_TIMES = [
+    '11:00', '11:30', '12:00', '12:30',
+    '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
+    '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00',
+]
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def available_slots(request):
+    date_str = request.query_params.get('date')
+    if not date_str:
+        return Response({'error': 'date requis (YYYY-MM-DD).'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        requested_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return Response({'error': 'Format de date invalide (YYYY-MM-DD attendu).'}, status=status.HTTP_400_BAD_REQUEST)
+
+    booked_hhmm = {
+        t.strftime('%H:%M')
+        for t in Reservation.objects
+            .filter(date=requested_date)
+            .exclude(status='cancelled')
+            .values_list('time', flat=True)
+    }
+
+    slots = [
+        {'start_time': slot, 'end_time': slot, 'is_available': slot not in booked_hhmm}
+        for slot in SLOT_TIMES
+    ]
+
+    return Response({'date': date_str, 'slots': slots})
 
 
 def send_confirmation_email(to_email, first_name, service_name, date, time, barber, total_price, acompte=5):

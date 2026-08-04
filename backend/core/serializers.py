@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Barbershop, Service, Reservation, ClientMedia, ClosedPeriod, Review
+from .models import User, Barbershop, Service, Reservation, ClientMedia, ClosedPeriod, Review, WaitingList
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -107,6 +107,16 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     def get_reservation_date(self, obj):
         return obj.reservation.date if obj.reservation else None
+
+
+class WaitingListSerializer(serializers.ModelSerializer):
+    client = serializers.PrimaryKeyRelatedField(read_only=True)
+    service_name = serializers.CharField(source='service.name', read_only=True)
+
+    class Meta:
+        model = WaitingList
+        fields = ['id', 'client', 'service', 'service_name', 'preferred_date', 'created_at', 'notified']
+        read_only_fields = ['notified']
 
 
 class ClientMediaSerializer(serializers.ModelSerializer):
