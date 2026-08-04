@@ -22,7 +22,7 @@ import { BookingHeader }      from '@/components/booking/BookingHeader';
 import { BookingStepper }     from '@/components/booking/BookingStepper';
 import { Step1Service }       from '@/components/booking/Step1Service';
 import { Step2Barber }        from '@/components/booking/Step2Barber';
-import { Step3Date }          from '@/components/booking/Step3Date';
+import { Step3Date, type Step3DateHandle } from '@/components/booking/Step3Date';
 import { Step4Payment, type Step4PaymentHandle } from '@/components/booking/Step4Payment';
 import { BookingConfirmation } from '@/components/booking/BookingConfirmation';
 
@@ -219,6 +219,7 @@ export default function BookScreen() {
   const [isPaying,      setIsPaying]      = useState(false);
   const [createdReservationId, setCreatedReservationId] = useState<number | null>(null);
   const step4Ref = useRef<Step4PaymentHandle>(null);
+  const step3Ref = useRef<Step3DateHandle>(null);
 
   // Map slugs statiques → vrais IDs Django (/api/services/)
   useEffect(() => {
@@ -298,8 +299,23 @@ export default function BookScreen() {
         });
         setCreatedReservationId(created.id);
         console.log('[BOOKING] Nouvelle réservation créée, id:', created.id);
-      } catch (e) {
+      } catch (e: any) {
         console.error('[RESERVATION] Erreur création après paiement Stripe:', e);
+
+        if (e?.response?.status === 409) {
+          const message = e.response?.data?.error
+            || 'Ce créneau vient d\'être pris par quelqu\'un d\'autre. Veuillez choisir un autre horaire.';
+          if (Platform.OS === 'web') {
+            window.alert(message);
+          } else {
+            Alert.alert('Créneau indisponible', message);
+          }
+          setBooking(prev => ({ ...prev, time: null }));
+          setStep(3);
+          step3Ref.current?.refresh();
+          return;
+        }
+
         Alert.alert(
           'Erreur de réservation',
           'Paiement reçu mais erreur lors de la réservation. Contactez WilloBarber.'
@@ -434,6 +450,7 @@ export default function BookScreen() {
       )}
       {step === 3 && (
         <Step3Date
+          ref={step3Ref}
           booking={booking}
           onDateSelect={selectDate}
           onTimeSelect={selectTime}
