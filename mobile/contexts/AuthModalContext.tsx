@@ -45,6 +45,11 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const [visible, setVisible] = useState(false);
+  // Distingue "la modale ferme (animation de fondu en cours)" de "la modale
+  // est ouverte" : le backdrop plein-écran ne doit plus intercepter les clics
+  // dès que la fermeture démarre, sinon il reste cliquable pendant les ~200ms
+  // de fondu et bloque le premier clic de l'utilisateur sur ce qu'il y a en-dessous.
+  const [closing, setClosing] = useState(false);
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [onSuccessCallback, setOnSuccessCallback] = useState<(() => void) | null>(null);
 
@@ -109,6 +114,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
 
   const dismiss = (callback?: () => void) => {
     if (loading) return;
+    setClosing(true);
     Animated.parallel([
       Animated.timing(overlayAnim, {
         toValue: 0,
@@ -122,6 +128,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
       }),
     ]).start(() => {
       setVisible(false);
+      setClosing(false);
       callback?.();
     });
   };
@@ -261,7 +268,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
             {/* Fond flou */}
             <Animated.View
               style={[StyleSheet.absoluteFillObject, { opacity: overlayAnim }]}
-              pointerEvents="auto"
+              pointerEvents={closing ? 'none' : 'auto'}
             >
               <View style={[StyleSheet.absoluteFillObject, styles.overlayTint]} />
               {Platform.OS !== 'web' && (
