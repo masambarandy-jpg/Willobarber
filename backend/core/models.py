@@ -92,6 +92,29 @@ class WaitingList(models.Model):
         return f"{self.client} - {self.service} ({self.preferred_date})"
 
 
+class BarberLeave(models.Model):
+    # Les barbiers ne sont pas des User Django (aucun rôle 'barber' n'existe sur
+    # User — cf. ROLE_CHOICES ci-dessus) : partout ailleurs dans l'app (planning
+    # coiffeur, réservations), le barbier est ce type statique à 3 valeurs.
+    BARBER_CHOICES = [
+        ('Willo', 'Willo'),
+        ('Malik', 'Malik'),
+        ('Idris', 'Idris'),
+    ]
+
+    barber = models.CharField(max_length=20, choices=BARBER_CHOICES)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    reason = models.CharField(max_length=200, blank=True, default='Congé')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['start_date']
+
+    def __str__(self):
+        return f"{self.barber} — {self.reason} ({self.start_date} → {self.end_date})"
+
+
 class ClosedPeriod(models.Model):
     start_date = models.DateField()
     end_date = models.DateField()
