@@ -755,6 +755,16 @@ export default function ReservationsScreen() {
                         </Pressable>
                       );
                     })}
+                    {!showAllHistory && filteredHist.length > 5 && (
+                      <TouchableOpacity
+                        onPress={() => setShowAllHistory(true)}
+                        style={{ padding: 16, alignItems: 'center' }}
+                      >
+                        <Text style={{ color: '#C9A84C', fontSize: 14 }}>
+                          Voir tout l'historique ({filteredHist.length} RDV)
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                   {selectedHistIndex === null ? (
                     <View style={styles.histSplitDetail}>
