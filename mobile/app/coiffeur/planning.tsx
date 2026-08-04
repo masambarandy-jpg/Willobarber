@@ -77,6 +77,31 @@ type ClosedPeriod = {
   created_at: string;
 };
 
+type BarberLeave = {
+  id: number;
+  barber: Barber;
+  start_date: string;
+  end_date: string;
+  reason: string;
+  created_at: string;
+};
+
+type CongeListItem =
+  | ({ kind: 'salon' } & ClosedPeriod)
+  | ({ kind: 'barber' } & BarberLeave);
+
+const MOIS_ABBR_CONGE = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+function formatCongeRange(startStr: string, endStr: string): string {
+  const start = parseApiDate(startStr);
+  const end = parseApiDate(endStr);
+  if (startStr === endStr) return `${start.getDate()} ${MOIS_ABBR_CONGE[start.getMonth()]}`;
+  if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+    return `${start.getDate()} au ${end.getDate()} ${MOIS_ABBR_CONGE[end.getMonth()]}`;
+  }
+  return `${start.getDate()} ${MOIS_ABBR_CONGE[start.getMonth()]} au ${end.getDate()} ${MOIS_ABBR_CONGE[end.getMonth()]}`;
+}
+
 type CheckinResult = {
   clientName: string;
   serviceName: string;
@@ -283,11 +308,15 @@ export default function CoiffeurPlanningScreen() {
 
   const [closedPeriods, setClosedPeriods] = useState<ClosedPeriod[]>([]);
   const [loadingClosedPeriods, setLoadingClosedPeriods] = useState(false);
+  const [barberLeaves, setBarberLeaves] = useState<BarberLeave[]>([]);
+  const [loadingBarberLeaves, setLoadingBarberLeaves] = useState(false);
   const [congeStartInput, setCongeStartInput] = useState('');
   const [congeEndInput, setCongeEndInput] = useState('');
   const [congeReasonInput, setCongeReasonInput] = useState('');
+  const [selectedCongeBarbier, setSelectedCongeBarbier] = useState<'all' | Barber>('all');
   const [submittingConge, setSubmittingConge] = useState(false);
   const [deletingCongeId, setDeletingCongeId] = useState<number | null>(null);
+  const [deletingBarberLeaveId, setDeletingBarberLeaveId] = useState<number | null>(null);
 
   const ouvrirDetailRdv = (event: Event) => {
     setSelectedRdv(event);
@@ -585,9 +614,30 @@ export default function CoiffeurPlanningScreen() {
     }
   };
 
+  const fetchBarberLeaves = async () => {
+    setLoadingBarberLeaves(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/barber-leaves/`);
+      if (!res.ok) throw new Error(`barber-leaves-fetch-failed-${res.status}`);
+      const data: BarberLeave[] = await res.json();
+      setBarberLeaves(data);
+    } catch (error) {
+      console.log('ERREUR CONGÉS BARBIER:', error);
+    } finally {
+      setLoadingBarberLeaves(false);
+    }
+  };
+
   useEffect(() => {
     fetchClosedPeriods();
+    fetchBarberLeaves();
   }, []);
+
+  const congesCombined = useMemo<CongeListItem[]>(() => {
+    const salon = closedPeriods.map((p) => ({ kind: 'salon' as const, ...p }));
+    const barber = barberLeaves.map((l) => ({ kind: 'barber' as const, ...l }));
+    return [...salon, ...barber].sort((a, b) => a.start_date.localeCompare(b.start_date));
+  }, [closedPeriods, barberLeaves]);
 
   const ajouterConge = async () => {
     if (!congeStartInput || !congeEndInput || !congeReasonInput.trim()) {
@@ -601,24 +651,40 @@ export default function CoiffeurPlanningScreen() {
 
     setSubmittingConge(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/closed-periods/`, {
+      const isIndividuel = selectedCongeBarbier !== 'all';
+      const endpoint = isIndividuel ? 'barber-leaves' : 'closed-periods';
+      const body = isIndividuel
+        ? {
+            barber: selectedCongeBarbier,
+            start_date: congeStartInput,
+            end_date: congeEndInput,
+            reason: congeReasonInput.trim(),
+          }
+        : {
+            start_date: congeStartInput,
+            end_date: congeEndInput,
+            reason: congeReasonInput.trim(),
+          };
+
+      const res = await fetch(`${API_BASE_URL}/api/${endpoint}/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          start_date: congeStartInput,
-          end_date: congeEndInput,
-          reason: congeReasonInput.trim(),
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         const message = data ? Object.values(data).flat().join(' ') : `Erreur ${res.status}`;
         throw new Error(message);
       }
-      setClosedPeriods((prev) => [...prev, data].sort((a, b) => a.start_date.localeCompare(b.start_date)));
+      if (isIndividuel) {
+        setBarberLeaves((prev) => [...prev, data].sort((a, b) => a.start_date.localeCompare(b.start_date)));
+      } else {
+        setClosedPeriods((prev) => [...prev, data].sort((a, b) => a.start_date.localeCompare(b.start_date)));
+      }
       setCongeStartInput('');
       setCongeEndInput('');
       setCongeReasonInput('');
+      setSelectedCongeBarbier('all');
       showToast('Congé ajouté ✅');
     } catch (error) {
       console.log('ERREUR AJOUT CONGÉ:', error);
@@ -628,13 +694,17 @@ export default function CoiffeurPlanningScreen() {
     }
   };
 
-  const confirmerSuppressionConge = (id: number) => {
+  const confirmerSuppressionConge = (item: CongeListItem) => {
     Alert.alert(
       'Supprimer ce congé ?',
       'Cette action est irréversible.',
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', style: 'destructive', onPress: () => supprimerConge(id) },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => (item.kind === 'salon' ? supprimerConge(item.id) : supprimerBarberLeave(item.id)),
+        },
       ],
     );
   };
@@ -658,6 +728,28 @@ export default function CoiffeurPlanningScreen() {
       showToast('Erreur lors de la suppression du congé.');
     } finally {
       setDeletingCongeId(null);
+    }
+  };
+
+  const supprimerBarberLeave = async (id: number) => {
+    if (!token) {
+      showToast('Impossible de supprimer (non authentifié).');
+      return;
+    }
+    setDeletingBarberLeaveId(id);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/barber-leaves/${id}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`barber-leave-delete-failed-${res.status}`);
+      setBarberLeaves((prev) => prev.filter((l) => l.id !== id));
+      showToast('Congé supprimé.');
+    } catch (error) {
+      console.log('ERREUR SUPPRESSION CONGÉ BARBIER:', error);
+      showToast('Erreur lors de la suppression du congé.');
+    } finally {
+      setDeletingBarberLeaveId(null);
     }
   };
 
@@ -999,6 +1091,32 @@ export default function CoiffeurPlanningScreen() {
             </View>
           </View>
           <View style={styles.congesFormField}>
+            <Text style={styles.congesFieldLabel}>BARBIER</Text>
+            <View style={styles.filterRow}>
+              <TouchableOpacity
+                style={[styles.chip, selectedCongeBarbier !== 'all' && styles.chipInactive]}
+                onPress={() => setSelectedCongeBarbier('all')}
+                disabled={submittingConge}
+              >
+                <Text style={styles.chipText}>Tout le salon</Text>
+              </TouchableOpacity>
+              {BARBER_CHIPS.map((chip) => {
+                const active = selectedCongeBarbier === chip.key;
+                return (
+                  <TouchableOpacity
+                    key={chip.key}
+                    style={[styles.chip, !active && styles.chipInactive]}
+                    onPress={() => setSelectedCongeBarbier(chip.key)}
+                    disabled={submittingConge}
+                  >
+                    <View style={[styles.chipDot, { backgroundColor: chip.color }]} />
+                    <Text style={styles.chipText}>{chip.key}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+          <View style={styles.congesFormField}>
             <Text style={styles.congesFieldLabel}>RAISON</Text>
             <TextInput
               style={styles.congesInput}
@@ -1020,31 +1138,38 @@ export default function CoiffeurPlanningScreen() {
           </TouchableOpacity>
         </View>
 
-        {loadingClosedPeriods ? (
+        {loadingClosedPeriods || loadingBarberLeaves ? (
           <Text style={styles.congesEmpty}>Chargement…</Text>
-        ) : closedPeriods.length === 0 ? (
+        ) : congesCombined.length === 0 ? (
           <Text style={styles.congesEmpty}>Aucun congé ou fermeture enregistré.</Text>
         ) : (
           <View style={styles.congesList}>
-            {closedPeriods.map((p) => (
-              <View key={p.id} style={styles.congeItem}>
-                <View style={styles.congeItemInfo}>
-                  <Text style={styles.congeItemDates}>
-                    {p.start_date === p.end_date ? p.start_date : `${p.start_date} → ${p.end_date}`}
-                  </Text>
-                  <Text style={styles.congeItemReason}>{p.reason}</Text>
+            {congesCombined.map((item) => {
+              const isDeleting = item.kind === 'salon'
+                ? deletingCongeId === item.id
+                : deletingBarberLeaveId === item.id;
+              return (
+                <View key={`${item.kind}-${item.id}`} style={styles.congeItem}>
+                  <View style={styles.congeItemInfo}>
+                    <Text style={styles.congeItemDates}>
+                      {item.kind === 'barber'
+                        ? `🏖️ ${item.barber} — ${formatCongeRange(item.start_date, item.end_date)}`
+                        : (item.start_date === item.end_date ? item.start_date : `${item.start_date} → ${item.end_date}`)}
+                    </Text>
+                    <Text style={styles.congeItemReason}>{item.reason}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.congeDeleteBtn}
+                    onPress={() => confirmerSuppressionConge(item)}
+                    disabled={isDeleting}
+                  >
+                    <Text style={styles.congeDeleteBtnText}>
+                      {isDeleting ? '…' : 'Supprimer'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.congeDeleteBtn}
-                  onPress={() => confirmerSuppressionConge(p.id)}
-                  disabled={deletingCongeId === p.id}
-                >
-                  <Text style={styles.congeDeleteBtnText}>
-                    {deletingCongeId === p.id ? '…' : 'Supprimer'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </View>
