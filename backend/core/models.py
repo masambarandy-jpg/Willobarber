@@ -74,6 +74,19 @@ class Reservation(models.Model):
     checked_in = models.BooleanField(default=False)
     checked_in_at = models.DateTimeField(null=True, blank=True)
 
+    class Meta:
+        # Un seul créneau actif (pending/confirmed) par date+heure — le salon
+        # n'a pas de champ barbier sur Reservation, tout le monde partage le
+        # même agenda côté backend (cf. fallback "Willo" dans planning.tsx).
+        # cancelled/no_show ne comptent pas : le créneau redevient réservable.
+        constraints = [
+            models.UniqueConstraint(
+                fields=['date', 'time'],
+                condition=models.Q(status__in=['pending', 'confirmed']),
+                name='unique_active_reservation_slot',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.user} - {self.date} {self.time}"
 

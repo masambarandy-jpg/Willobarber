@@ -11,6 +11,7 @@ import cloudinary.uploader
 import sendgrid
 import stripe
 from django.conf import settings
+from django.db import IntegrityError, transaction
 from sendgrid.helpers.mail import (
     Mail, Email, To, Content,
     Attachment, FileContent, FileName, FileType, Disposition,
@@ -252,11 +253,40 @@ class ReservationViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def create(self, request, *args, **kwargs):
-        try:
-            return super().create(request, *args, **kwargs)
-        except Exception as e:
-            print(f"[RESERVATION] Bad Request — data reçue: {request.data} — erreur: {e}")
-            raise
+        date = request.data.get('date')
+        time = request.data.get('time')
+        conflict_response = Response(
+            {'error': "Ce créneau vient d'être pris. Veuillez choisir un autre horaire."},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+        with transaction.atomic():
+            # select_for_update ferme la fenêtre de course quand une réservation
+            # active existe déjà sur ce créneau. Elle ne verrouille rien sur un
+            # créneau tout neuf (rien à sélectionner) — c'est la contrainte
+            # unique_active_reservation_slot en base (cf. models.py) qui ferme
+            # ce second cas : deux requêtes simultanées sur un créneau libre
+            # provoquent un IntegrityError pour l'une des deux, rattrapé plus bas.
+            conflict = Reservation.objects.select_for_update().filter(
+                date=date,
+                time=time,
+                status__in=['pending', 'confirmed'],
+            ).exists()
+
+            if conflict:
+                return conflict_response
+
+            try:
+                # Savepoint imbriqué : si super().create() lève une IntegrityError,
+                # seul ce savepoint est annulé — la transaction englobante reste
+                # utilisable pour renvoyer une réponse propre au lieu de planter.
+                with transaction.atomic():
+                    return super().create(request, *args, **kwargs)
+            except IntegrityError:
+                return conflict_response
+            except Exception as e:
+                print(f"[RESERVATION] Bad Request — data reçue: {request.data} — erreur: {e}")
+                raise
 
     def perform_create(self, serializer):
         print(f"[RESERVATION] data: {self.request.data}")

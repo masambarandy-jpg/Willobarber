@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -223,7 +223,15 @@ interface Props {
   serviceId: number | null;
 }
 
-export function Step3Date({ booking, onDateSelect, onTimeSelect, serviceId }: Props) {
+export interface Step3DateHandle {
+  /** Force un nouveau fetch des créneaux de la date sélectionnée (ex: après un 409 réservation). */
+  refresh: () => void;
+}
+
+export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
+  { booking, onDateSelect, onTimeSelect, serviceId },
+  ref
+) {
   const { date: selectedDate, time: selectedTime, service } = booking;
   const { t } = useLanguage();
 
@@ -243,15 +251,11 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect, serviceId }: Pr
 
   // Le salon n'a qu'un seul barbier ("Willo") — /slots/available/ n'utilise pas
   // barber_id côté backend, mais la signature de l'API l'exige encore.
-  useEffect(() => {
+  const fetchSlots = useCallback((date: Date) => {
     setJoinedWaitlist(false);
-    if (!selectedDate) {
-      setBookedTimes(new Set());
-      return;
-    }
-    let cancelled = false;
     setLoadingSlots(true);
-    slotsApi.available(1, toIsoDate(selectedDate))
+    let cancelled = false;
+    slotsApi.available(1, toIsoDate(date))
       .then((res) => {
         if (cancelled) return;
         const taken = new Set(res.slots.filter((s) => !s.is_available).map((s) => s.start_time));
@@ -260,7 +264,22 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect, serviceId }: Pr
       .catch(() => { if (!cancelled) setBookedTimes(new Set()); })
       .finally(() => { if (!cancelled) setLoadingSlots(false); });
     return () => { cancelled = true; };
-  }, [selectedDate]);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedDate) {
+      setBookedTimes(new Set());
+      setJoinedWaitlist(false);
+      return;
+    }
+    return fetchSlots(selectedDate);
+  }, [selectedDate, fetchSlots]);
+
+  useImperativeHandle(ref, () => ({
+    refresh: () => {
+      if (selectedDate) fetchSlots(selectedDate);
+    },
+  }), [selectedDate, fetchSlots]);
 
   const closedPeriod = selectedDate ? findClosedPeriod(selectedDate, closedPeriods) : null;
 
@@ -388,7 +407,7 @@ export function Step3Date({ booking, onDateSelect, onTimeSelect, serviceId }: Pr
       )}
     </ScrollView>
   );
-}
+});
 
 // ─── Calendar styles ──────────────────────────────────────────────────────────
 
