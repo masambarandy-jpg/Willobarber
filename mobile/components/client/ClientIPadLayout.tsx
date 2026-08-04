@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
@@ -130,9 +130,14 @@ export default function ClientIPadLayout({ active, children }: Props) {
     : null;
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} pointerEvents="box-none">
       <View style={[styles.sidebar, { width: sidebarWidth }]}>
-        <ScrollView contentContainerStyle={styles.sidebarContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.sidebarScroll}
+          contentContainerStyle={styles.sidebarContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.header}>
             <Text style={styles.logo}>{'{w}'}</Text>
             <Text style={styles.brand}>willobarber</Text>
@@ -168,37 +173,42 @@ export default function ClientIPadLayout({ active, children }: Props) {
               );
             })}
           </View>
-
-          {nextReservation && (
-            <LinearGradient
-              colors={[GOLD, GOLD_DARK]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.promoBlock}
-              pointerEvents="box-none"
-            >
-              <Text style={styles.promoKicker}>{t('clientSidebar.nextRdvKicker')}</Text>
-              <Text style={styles.promoText}>{formatNextRdvLabel(nextReservation)}</Text>
-              <TouchableOpacity
-                style={[styles.promoBtn, { zIndex: 999 }]}
-                pointerEvents="auto"
-                onPress={() => {
-                  const d = parseApiDate(nextReservation.date);
-                  const dateLabel = `${JOURS_ABBR_FR[d.getDay()]} ${d.getDate()} ${MOIS_ABBR_FR[d.getMonth()]}`;
-                  const heureLabel = nextReservation.time.slice(0, 5);
-                  Alert.alert(
-                    'Votre prochain RDV',
-                    `📅 ${dateLabel}\n⏰ ${heureLabel}\n✂️ ${nextReservation.service_name}\n👤 Willo`,
-                    [{ text: 'Fermer', style: 'cancel' }]
-                  );
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.promoBtnText}>{t('clientSidebar.viewDetails')}</Text>
-              </TouchableOpacity>
-            </LinearGradient>
-          )}
         </ScrollView>
+
+        {nextReservation && (
+          <LinearGradient
+            colors={[GOLD, GOLD_DARK]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.promoBlock}
+          >
+            <Text style={styles.promoKicker}>{t('clientSidebar.nextRdvKicker')}</Text>
+            <Text style={styles.promoText}>{formatNextRdvLabel(nextReservation)}</Text>
+            <TouchableOpacity
+              style={styles.promoBtn}
+              onPress={() => {
+                const dateFormatted = nextReservation.date
+                  ? (() => {
+                      const d = parseApiDate(nextReservation.date);
+                      return `${JOURS_ABBR_FR[d.getDay()]} ${d.getDate()} ${MOIS_ABBR_FR[d.getMonth()]}`;
+                    })()
+                  : '';
+                const timeFormatted = nextReservation.time?.substring(0, 5) ?? '';
+
+                const message = `✂️ ${nextReservation.service_name}\n📅 ${dateFormatted}\n⏰ ${timeFormatted}\n👤 Willo\n📍 Rue Auguste Van Zande 78`;
+
+                if (Platform.OS === 'web') {
+                  window.alert(message);
+                } else {
+                  Alert.alert('Votre prochain RDV', message, [{ text: 'Fermer', style: 'cancel' }]);
+                }
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.promoBtnText}>{t('clientSidebar.viewDetails')}</Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        )}
       </View>
 
       <View style={styles.content}>{children}</View>
@@ -218,6 +228,11 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: 'rgba(255,255,255,0.07)',
     flexShrink: 0,
+    zIndex: 10,
+    elevation: 10,
+  },
+  sidebarScroll: {
+    flex: 1,
   },
   sidebarContent: {
     paddingTop: 40,
@@ -311,6 +326,8 @@ const styles = StyleSheet.create({
   promoBlock: {
     borderRadius: 14,
     padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 24,
   },
   promoKicker: {
     color: '#FFFFFF',
@@ -338,5 +355,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     minWidth: 0,
+    zIndex: 1,
   },
 });
