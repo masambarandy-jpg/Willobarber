@@ -78,6 +78,20 @@ class Reservation(models.Model):
         return f"{self.user} - {self.date} {self.time}"
 
 
+class WaitingList(models.Model):
+    client = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='waiting_list')
+    service = models.ForeignKey(Service, on_delete=models.CASCADE)
+    preferred_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    notified = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.client} - {self.service} ({self.preferred_date})"
+
+
 class ClosedPeriod(models.Model):
     start_date = models.DateField()
     end_date = models.DateField()

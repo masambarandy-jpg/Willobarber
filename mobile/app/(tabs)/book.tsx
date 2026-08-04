@@ -437,6 +437,7 @@ export default function BookScreen() {
           booking={booking}
           onDateSelect={selectDate}
           onTimeSelect={selectTime}
+          serviceId={serviceIdMap[booking.service?.id ?? ''] ?? null}
         />
       )}
       {step === 4 && (
