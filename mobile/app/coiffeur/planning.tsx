@@ -121,6 +121,13 @@ function parseApiDate(dateStr: string): Date {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
+function handleDateInputChange(text: string, setter: (v: string) => void) {
+  // N'accepte que chiffres et tirets (format AAAA-MM-JJ attendu par l'API) —
+  // filtre toute frappe qui produirait une valeur invalide plutôt que de
+  // rejeter tout le champ.
+  setter(text.replace(/[^0-9-]/g, ''));
+}
+
 function fmtEuro(n: number): string {
   return `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 }
@@ -1083,7 +1090,7 @@ export default function CoiffeurPlanningScreen() {
               <TextInput
                 style={styles.congesInput}
                 value={congeStartInput}
-                onChangeText={setCongeStartInput}
+                onChangeText={(text) => handleDateInputChange(text, setCongeStartInput)}
                 placeholder="AAAA-MM-JJ"
                 placeholderTextColor={CC.textSecondary}
                 editable={!submittingConge}
@@ -1094,7 +1101,7 @@ export default function CoiffeurPlanningScreen() {
               <TextInput
                 style={styles.congesInput}
                 value={congeEndInput}
-                onChangeText={setCongeEndInput}
+                onChangeText={(text) => handleDateInputChange(text, setCongeEndInput)}
                 placeholder="AAAA-MM-JJ"
                 placeholderTextColor={CC.textSecondary}
                 editable={!submittingConge}

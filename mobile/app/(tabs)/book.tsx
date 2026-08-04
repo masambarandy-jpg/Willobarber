@@ -277,7 +277,12 @@ export default function BookScreen() {
         paymentIntentId = await step4Ref.current?.pay();
       } catch (e: any) {
         setIsPaying(false);
-        Alert.alert(t('step4.paymentErrorTitle'), e?.message || t('step4.cardIncomplete'));
+        const message = e?.message || t('step4.cardIncomplete');
+        if (Platform.OS === 'web') {
+          window.alert(message);
+        } else {
+          Alert.alert(t('step4.paymentErrorTitle'), message);
+        }
         return;
       }
       setIsPaying(false);

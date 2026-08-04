@@ -79,7 +79,12 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
 
           const { clientSecret } = await paymentsApi.createPaymentIntent(amount, 'eur');
 
-          const result = await stripe.confirmCardPayment(clientSecret, {
+          // Stripe charge un challenge hCaptcha invisible qui peut échouer
+          // silencieusement en environnement headless (ERR_ABORTED) et laisser
+          // confirmCardPayment bloqué indéfiniment sans jamais résoudre ni
+          // rejeter — d'où cette course contre un timeout pour ne pas geler
+          // l'UI et retourner un message clair à l'utilisateur.
+          const confirmPromise = stripe.confirmCardPayment(clientSecret, {
             payment_method: {
               card: cardNumberElement,
               billing_details: {
@@ -89,6 +94,19 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
               },
             },
           });
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('payment-timeout')), 30000)
+          );
+
+          let result;
+          try {
+            result = await Promise.race([confirmPromise, timeoutPromise]);
+          } catch (e: any) {
+            if (e?.message === 'payment-timeout') {
+              throw new Error('Le paiement a pris trop de temps. Veuillez réessayer.');
+            }
+            throw e;
+          }
 
           console.log('CONFIRM RESULT:', JSON.stringify(result, null, 2));
           console.log('CONFIRM ERROR:', result.error?.message, result.error?.code, result.error?.decline_code);
