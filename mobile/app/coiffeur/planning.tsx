@@ -694,22 +694,30 @@ export default function CoiffeurPlanningScreen() {
     }
   };
 
-  const confirmerSuppressionConge = (item: CongeListItem) => {
-    Alert.alert(
-      'Supprimer ce congé ?',
-      'Cette action est irréversible.',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => (item.kind === 'salon' ? supprimerConge(item.id) : supprimerBarberLeave(item.id)),
-        },
-      ],
-    );
+  // Alert.alert() avec plusieurs boutons ne déclenche pas onPress sur Expo Web
+  // (même limitation déjà rencontrée sur le bouton "Voir les détails" de la
+  // sidebar client) — sur web on utilise donc window.confirm, natif on garde
+  // Alert.alert mais enveloppé dans une Promise pour pouvoir l'awaiter.
+  const confirmerSuppression = (message: string): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+      return Promise.resolve(window.confirm(message));
+    }
+    return new Promise<boolean>((resolve) => {
+      Alert.alert(
+        'Confirmer la suppression',
+        message,
+        [
+          { text: 'Annuler', onPress: () => resolve(false), style: 'cancel' },
+          { text: 'Supprimer', onPress: () => resolve(true), style: 'destructive' },
+        ],
+      );
+    });
   };
 
-  const supprimerConge = async (id: number) => {
+  const supprimerConge = async (id: number, label: string) => {
+    const confirmer = await confirmerSuppression(`Supprimer le congé "${label}" ?`);
+    if (!confirmer) return;
+
     if (!token) {
       showToast('Impossible de supprimer (non authentifié).');
       return;
@@ -731,7 +739,10 @@ export default function CoiffeurPlanningScreen() {
     }
   };
 
-  const supprimerBarberLeave = async (id: number) => {
+  const supprimerBarberLeave = async (id: number, nomBarbier: string) => {
+    const confirmer = await confirmerSuppression(`Supprimer le congé de ${nomBarbier} ?`);
+    if (!confirmer) return;
+
     if (!token) {
       showToast('Impossible de supprimer (non authentifié).');
       return;
@@ -1160,7 +1171,11 @@ export default function CoiffeurPlanningScreen() {
                   </View>
                   <TouchableOpacity
                     style={styles.congeDeleteBtn}
-                    onPress={() => confirmerSuppressionConge(item)}
+                    onPress={() => (
+                      item.kind === 'salon'
+                        ? supprimerConge(item.id, item.reason || `${item.start_date} → ${item.end_date}`)
+                        : supprimerBarberLeave(item.id, item.barber)
+                    )}
                     disabled={isDeleting}
                   >
                     <Text style={styles.congeDeleteBtnText}>
