@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
+
+// jsPDF s'appuie sur des API navigateur indisponibles sur iOS/Android natif
+// (Expo Go) — un import statique fait planter l'app au chargement du module,
+// avant même l'appel de genererRapport(). On ne le require() que sur web.
+const jsPDF: typeof import('jspdf').jsPDF | null =
+  Platform.OS === 'web' ? require('jspdf').jsPDF : null;
 
 type Period = 'jour' | 'semaine' | 'mois';
 
@@ -461,7 +466,10 @@ type RapportData = {
 };
 
 function genererRapport(data: RapportData) {
-  if (typeof window === 'undefined') return;
+  if (Platform.OS !== 'web' || !jsPDF) {
+    Alert.alert('Export PDF', "L'export PDF est disponible uniquement sur web.");
+    return;
+  }
 
   const doc = new jsPDF();
   const gold: [number, number, number] = [139, 105, 20];
@@ -630,7 +638,12 @@ type ExcelData = {
 };
 
 function genererExcel(data: ExcelData) {
-  if (typeof window === 'undefined') return;
+  // XLSX.writeFile() déclenche un téléchargement via des API navigateur
+  // (Blob, document.createElement('a')) indisponibles sur iOS/Android natif.
+  if (Platform.OS !== 'web') {
+    Alert.alert('Export Excel', "L'export Excel est disponible uniquement sur web.");
+    return;
+  }
 
   // ── Onglet Réservations ──
   const reservationsRows = data.reservations.map((r) => ({
