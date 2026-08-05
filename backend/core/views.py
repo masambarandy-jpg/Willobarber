@@ -33,12 +33,12 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
 from django.utils import timezone
-from .models import Barbershop, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave
+from .models import Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave
 from .emails import format_date_fr, format_date_fr_short, format_heure_fr
 from .permissions import IsStaffRole
 from .sms import send_reminders_for_tomorrow
 from .serializers import (
-    BarbershopSerializer, ServiceSerializer, ReservationSerializer,
+    BarbershopSerializer, BarberSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
     ClosedPeriodSerializer, ReviewSerializer, WaitingListSerializer,
     BarberLeaveSerializer,
@@ -97,6 +97,19 @@ def fmt_eur(n):
 class BarbershopViewSet(viewsets.ModelViewSet):
     queryset = Barbershop.objects.all()
     serializer_class = BarbershopSerializer
+
+
+class BarberViewSet(viewsets.ModelViewSet):
+    queryset = Barber.objects.all()
+    serializer_class = BarberSerializer
+
+    def get_permissions(self):
+        # La liste de l'équipe est publique (affichée côté client dans certains
+        # écrans) mais la création/modification/suppression reste réservée à
+        # Willo, comme pour ServiceViewSet ci-dessous.
+        if self.action in ('list', 'retrieve'):
+            return [AllowAny()]
+        return [IsStaffRole()]
 
 
 class ServiceViewSet(viewsets.ModelViewSet):
