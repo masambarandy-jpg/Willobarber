@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, useWindowDimensions, Alert, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, useWindowDimensions, Alert, Platform, StatusBar } from 'react-native';
 import { router } from 'expo-router';
 import { HamburgerIcon, BellIcon, GearIcon, PersonIcon, HelpIcon, LogOutIcon } from './Icons';
 import Avatar from './Avatar';
@@ -56,8 +55,14 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
     }
   };
 
+  // Sous la présentation 'transparentModal' du Stack "coiffeur" (voir
+  // app/_layout.tsx), SafeAreaView ne mesure pas toujours correctement l'inset
+  // du haut sur iOS et retombe sur 0, ce qui colle le header sous l'encoche.
+  // StatusBar.currentHeight vaut undefined sur iOS, d'où le fallback à 44.
+  const statusBarHeight = Platform.OS === 'ios' ? (StatusBar.currentHeight || 44) : 0;
+
   return (
-    <SafeAreaView edges={['top']} style={{ backgroundColor: CC.white }}>
+    <View style={{ backgroundColor: CC.white, paddingTop: statusBarHeight }}>
     <View style={styles.bar}>
       <View style={styles.left}>
         {!isTablet && (
@@ -122,7 +127,7 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
 
       <SupportModal visible={supportVisible} onClose={() => setSupportVisible(false)} />
     </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

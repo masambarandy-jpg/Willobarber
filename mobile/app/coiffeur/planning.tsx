@@ -17,7 +17,7 @@ import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 
 const HOUR_HEIGHT = 66;
 const START_HOUR = 11;
-const END_HOUR = 19;
+const END_HOUR = 20;
 const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app';
 
 type Barber = 'Willo' | 'Malik' | 'Idris';
@@ -1384,13 +1384,15 @@ export default function CoiffeurPlanningScreen() {
               <View style={[styles.congesFormField, { marginTop: 16, marginBottom: 8 }]}>
                 <Text style={styles.congesFieldLabel}>UUID DU QR CODE</Text>
                 <TextInput
-                  style={styles.congesInput}
+                  style={[styles.congesInput, styles.scanUuidInput]}
                   value={scanUuidInput}
                   onChangeText={setScanUuidInput}
                   placeholder="ex : 497a59df-d625-4321-b2ac-1dc71aa8bb6f"
                   placeholderTextColor={CC.textSecondary}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  multiline
+                  numberOfLines={2}
                   editable={!scanning}
                 />
               </View>
@@ -2057,6 +2059,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: CC.black,
     backgroundColor: CC.cream,
+  },
+  scanUuidInput: {
+    fontSize: 13,
+    letterSpacing: 0.3,
+    lineHeight: 18,
+    minHeight: 50,
+    textAlignVertical: 'top',
+    borderColor: CC.gold,
   },
   congesAddBtn: {
     paddingVertical: 13,
