@@ -120,6 +120,9 @@ export interface Reservation {
   is_walk_in: boolean;
   person_count: number;
   created_at: string;
+  qr_code?: string;
+  checked_in?: boolean;
+  checked_in_at?: string | null;
 }
 
 export interface CreateReservationPayload {
@@ -143,6 +146,8 @@ export interface Review {
   rating: 1 | 2 | 3 | 4 | 5;
   comment: string;
   created_at: string;
+  reply?: string | null;
+  replied_at?: string | null;
 }
 
 // ─── Salon Settings ───────────────────────────────────────────────────────────

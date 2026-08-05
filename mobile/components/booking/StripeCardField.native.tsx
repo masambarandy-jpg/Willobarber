@@ -55,7 +55,7 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, StripeCardField
     return (
       <CardField
         postalCodeEnabled={false}
-        placeholders={{ number: '4242 4242 4242 4242' }}
+        placeholders={{ number: '1234 5678 9012 3456', expiration: 'MM/AA', cvc: 'CVV' }}
         cardStyle={cardFieldStyle}
         style={styles.cardField}
         onCardChange={(details) => {

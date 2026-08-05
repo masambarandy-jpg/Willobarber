@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
+  Easing,
   Image,
   Platform,
   Pressable,
@@ -12,14 +14,6 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  cancelAnimation,
-  Easing,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { Fonts } from '@/constants';
@@ -125,8 +119,13 @@ export function ServiceCarousel() {
   const currentSlideRef = useRef(0);
   const isPausedRef = useRef(false);
 
-  const progress = useSharedValue(0);
-  const trackWidth = useSharedValue(mobileSlideW);
+  // react-native-reanimated s'appuie sur un module natif embarqué dans Expo Go
+  // pour une version d'SDK précise — un décalage de version fait planter l'app
+  // au chargement sur iOS natif. L'API Animated intégrée à react-native n'a pas
+  // cette dépendance et suffit pour une simple barre de progression linéaire.
+  const progress = useRef(new Animated.Value(0)).current;
+  const [trackWidth, setTrackWidth] = useState(mobileSlideW);
+  const runningAnimation = useRef<Animated.CompositeAnimation | null>(null);
 
   const handleAutoAdvance = useCallback(() => {
     const next = (currentSlideRef.current + 1) % SERVICES.length;
@@ -144,17 +143,30 @@ export function ServiceCarousel() {
     scrollRef.current?.scrollTo({ x: i * mobileSnapInterval, animated: true });
   }, []);
 
+  // width n'est pas animable par le native driver — animation JS-thread comme
+  // avec les shared values reanimated, juste sans le module natif dédié.
+  const startProgress = useCallback(() => {
+    progress.setValue(0);
+    const anim = Animated.timing(progress, {
+      toValue: 1,
+      duration: SLIDE_DURATION,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    runningAnimation.current = anim;
+    anim.start(({ finished }) => {
+      if (finished) handleAutoAdvance();
+    });
+  }, [progress, handleAutoAdvance]);
+
   useEffect(() => {
     if (isPaused) {
-      cancelAnimation(progress);
+      runningAnimation.current?.stop();
       return;
     }
-    progress.value = 0;
-    progress.value = withTiming(1, { duration: SLIDE_DURATION, easing: Easing.linear }, finished => {
-      if (finished) runOnJS(handleAutoAdvance)();
-    });
-    return () => cancelAnimation(progress);
-  }, [currentSlide, isPaused, progress, handleAutoAdvance]);
+    startProgress();
+    return () => runningAnimation.current?.stop();
+  }, [currentSlide, isPaused, startProgress]);
 
   const handlePausePlay = useCallback(() => {
     const next = !isPausedRef.current;
@@ -163,8 +175,8 @@ export function ServiceCarousel() {
   }, []);
 
   const handleScrollBeginDrag = useCallback(() => {
-    cancelAnimation(progress);
-  }, [progress]);
+    runningAnimation.current?.stop();
+  }, []);
 
   const handleMomentumScrollEnd = useCallback((e: any) => {
     const x = e.nativeEvent.contentOffset.x;
@@ -176,16 +188,13 @@ export function ServiceCarousel() {
       setCurrentSlide(clamped);
     } else if (!isPausedRef.current) {
       // Same slide after the drag — the currentSlide effect won't re-fire, so restart the timer manually.
-      progress.value = 0;
-      progress.value = withTiming(1, { duration: SLIDE_DURATION, easing: Easing.linear }, finished => {
-        if (finished) runOnJS(handleAutoAdvance)();
-      });
+      startProgress();
     }
-  }, [progress, handleAutoAdvance]);
+  }, [startProgress]);
 
-  const progressFillStyle = useAnimatedStyle(() => ({
-    width: progress.value * trackWidth.value,
-  }));
+  const progressFillStyle = {
+    width: progress.interpolate({ inputRange: [0, 1], outputRange: [0, trackWidth] }),
+  };
 
   if (isTablet) {
     return (
@@ -315,7 +324,7 @@ export function ServiceCarousel() {
                     <View
                       key={i}
                       style={styles.progressPill}
-                      onLayout={e => { trackWidth.value = e.nativeEvent.layout.width; }}
+                      onLayout={e => setTrackWidth(e.nativeEvent.layout.width)}
                     >
                       <Animated.View style={[styles.progressFill, progressFillStyle]} />
                     </View>

@@ -489,7 +489,12 @@ export default function BookScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={100}
         >
-          <View style={[styles.footerInner, { paddingBottom }]}>
+          {/* pointerEvents="box-none" ici aussi : sans lui, ce View (padding +
+              fond translucide autour du bouton) intercepte tous les clics dans
+              son rectangle, y compris hors du bouton — ce qui rendait les
+              boutons radio acompte/total du Step4Payment inatteignables dès
+              qu'ils défilaient sous cette bande fixe. */}
+          <View style={[styles.footerInner, { paddingBottom }]} pointerEvents="box-none">
             <TouchableOpacity
               style={[styles.ctaFull, isPaying && styles.ctaDisabled]}
               onPress={handleNext}
@@ -509,7 +514,7 @@ export default function BookScreen() {
       ) : (
         /* Steps 1-3: back button + CTA */
         <View style={styles.footerContainer} pointerEvents="box-none">
-          <View style={[styles.footerInner, { paddingBottom }]}>
+          <View style={[styles.footerInner, { paddingBottom }]} pointerEvents="box-none">
             <TouchableOpacity
               style={styles.backBtn}
               onPress={handleBack}

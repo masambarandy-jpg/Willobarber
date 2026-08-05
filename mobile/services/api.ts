@@ -201,6 +201,29 @@ export const reservationsApi = {
 
   cancel: (id: number, reason?: string) =>
     http.post(`/reservations/${id}/cancel/`, { reason: reason ?? '' }).then((r) => r.data),
+
+  qr: (id: number) =>
+    http.get<{ reservation_id: number; qr_code: string; checked_in: boolean }>(`/reservations/${id}/qr/`).then((r) => r.data),
+};
+
+// ─── Check-in API (scan QR côté Willo) ────────────────────────────────────────
+
+export interface CheckinResponse {
+  success: boolean;
+  already_checked_in: boolean;
+  reservation_id: number;
+  client_name: string;
+  client_email: string;
+  client_phone: string | null;
+  service_name: string;
+  date: string;
+  time: string;
+  checked_in_at: string;
+}
+
+export const checkinApi = {
+  scan: (qrCode: string) =>
+    http.post<CheckinResponse>(`/checkin/${qrCode}/`).then((r) => r.data),
 };
 
 // ─── Payments API ────────────────────────────────────────────────────────────

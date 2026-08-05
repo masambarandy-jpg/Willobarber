@@ -10,6 +10,7 @@ import {
 } from '@stripe/react-stripe-js';
 import { STRIPE_PUBLISHABLE_KEY } from '@/constants';
 import { paymentsApi } from '@/services/api';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { StripeCardFieldHandle, StripeCardFieldProps } from './StripeCardField.types';
 
 // Resolved once, ahead of render, so the Elements provider always mounts with a
@@ -48,8 +49,18 @@ const rowStyle: React.CSSProperties = {
   marginTop: 12,
 };
 
+const fieldLabelStyle: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: 1.5,
+  color: 'rgba(255,255,255,0.45)',
+  textTransform: 'uppercase',
+  marginBottom: 7,
+};
+
 const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldProps>(
   function StripeCardFieldInner({ onChange, incompleteMessage }, ref) {
+    const { t } = useLanguage();
     const stripe = useStripe();
     const elements = useElements();
     const isProcessing = useRef(false);
@@ -127,11 +138,14 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
       },
     }));
 
+    const numberOptions = { ...elementOptions, placeholder: '1234 5678 9012 3456' };
+
     return (
       <div>
+        <div style={fieldLabelStyle}>{t('step4.cardNumberLabel')}</div>
         <div style={fieldWrapStyle}>
           <CardNumberElement
-            options={elementOptions}
+            options={numberOptions}
             onChange={(e) => {
               setNumberComplete(e.complete);
               reportChange({ number: e.complete });
@@ -139,24 +153,33 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
           />
         </div>
         <div style={rowStyle}>
-          <div style={{ ...fieldWrapStyle, flex: 1 }}>
-            <CardExpiryElement
-              options={elementOptions}
-              onChange={(e) => {
-                setExpiryComplete(e.complete);
-                reportChange({ expiry: e.complete });
-              }}
-            />
+          <div style={{ flex: 1 }}>
+            <div style={fieldLabelStyle}>{t('step4.cardExpiryLabel')} (MM/AA)</div>
+            <div style={fieldWrapStyle}>
+              <CardExpiryElement
+                options={elementOptions}
+                onChange={(e) => {
+                  setExpiryComplete(e.complete);
+                  reportChange({ expiry: e.complete });
+                }}
+              />
+            </div>
           </div>
-          <div style={{ ...fieldWrapStyle, flex: 1 }}>
-            <CardCvcElement
-              options={elementOptions}
-              onChange={(e) => {
-                setCvcComplete(e.complete);
-                reportChange({ cvc: e.complete });
-              }}
-            />
+          <div style={{ flex: 1 }}>
+            <div style={fieldLabelStyle}>{t('step4.cvcLabel')}</div>
+            <div style={fieldWrapStyle}>
+              <CardCvcElement
+                options={elementOptions}
+                onChange={(e) => {
+                  setCvcComplete(e.complete);
+                  reportChange({ cvc: e.complete });
+                }}
+              />
+            </div>
           </div>
+        </div>
+        <div style={{ ...fieldLabelStyle, textTransform: 'none', marginTop: 10, marginBottom: 0 }}>
+          {t('step4.cardFieldHint')}
         </div>
       </div>
     );
