@@ -42,15 +42,35 @@ const PHOTO_BY_NAME: Record<string, string> = {
   'Coupe enfant +15 ans': 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80',
 };
 
-// Le backend (ServiceSerializer) ne renvoie que id/name/price/duration/barbershop —
-// pas de description, catégorie ou is_popular. On tolère leur absence ici plutôt que
-// de planter : un crash dans ce mapping faisait échouer tout le fetch et retombait
-// silencieusement sur les prix figés de SERVICES (cf. le bug "45€ au lieu de 25€").
+// Tant que la migration ajoutant 'category' au Service Django n'est pas déployée sur
+// Railway, l'API ne renvoie aucune valeur pour ce champ (confirmé par un appel direct à
+// GET /api/services/ : la réponse ne contient que id/name/price/duration/barbershop).
+// On déduit donc la catégorie à partir du NOM du service — seul champ fiable retourné
+// en prod actuellement — en attendant que le backend renvoie une vraie valeur de 'category'.
+const CATEGORY_NAME_KEYWORDS: { cat: string; keywords: string[] }[] = [
+  { cat: 'ENFANT', keywords: ['enfant'] },
+  { cat: 'SOIN', keywords: ['soin'] },
+  { cat: 'COLORATION', keywords: ['coloration', 'camouflage'] },
+  { cat: 'BARBE', keywords: ['barbe', 'rasage'] },
+  { cat: 'PACKAGE', keywords: ['package', 'pack', 'rituel', 'signature'] },
+  { cat: 'COUPE HOMME', keywords: ['coupe'] },
+];
+
+function inferCategoryFromName(name: string): string {
+  const n = name.toLowerCase();
+  for (const { cat, keywords } of CATEGORY_NAME_KEYWORDS) {
+    if (keywords.some(k => n.includes(k))) return cat;
+  }
+  return 'COUPE HOMME';
+}
+
 function mapApiService(s: Service): StaticService {
   const category = s.category ?? '';
+  const cat = API_CATEGORY_MAP[category] ?? (category ? category.toUpperCase() : inferCategoryFromName(s.name));
   return {
     id: String(s.id),
-    cat: API_CATEGORY_MAP[category] ?? (category ? category.toUpperCase() : 'COUPE HOMME'),
+    cat,
+    rawCategory: category || undefined,
     name: s.name,
     desc: s.description ?? '',
     dur: `${s.duration} min`,
@@ -107,6 +127,10 @@ export default function CatalogueScreen() {
       try {
         const data = await servicesApi.list();
         console.log('[CATALOGUE] Données reçues depuis GET /services/:', JSON.stringify(data));
+        console.log(
+          '[CATALOGUE] Valeur brute category/cat par service:',
+          JSON.stringify(data.map(s => ({ id: s.id, name: s.name, category: (s as any).category, cat: (s as any).cat })))
+        );
         if (cancelled) return;
         const mapped = data.map(mapApiService);
         console.log('[CATALOGUE] Services mappés dans le state:', JSON.stringify(mapped));
@@ -231,6 +255,12 @@ export default function CatalogueScreen() {
               <View style={styles.textZone}>
                 <Text style={styles.name}>{svcName(svc)}</Text>
                 <Text style={styles.desc}>{svcDesc(svc)}</Text>
+
+                {__DEV__ && (
+                  <Text style={styles.debugCat}>
+                    DEBUG · category brut API: "{svc.rawCategory ?? '(vide)'}" → mappé: "{svc.cat}"
+                  </Text>
+                )}
 
                 <View style={styles.sep} />
 
@@ -432,6 +462,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 4,
     marginBottom: 12,
+  },
+  debugCat: {
+    fontSize: 10,
+    color: '#FF6B6B',
+    marginBottom: 8,
   },
   sep: {
     height: 1,

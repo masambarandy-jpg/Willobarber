@@ -339,6 +339,7 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
                 incompleteMessage={t('step4.cardIncomplete')}
                 onChange={setCardDetails}
               />
+              <Text style={styles.cardFieldHint}>{t('step4.cardFieldHint')}</Text>
             </View>
           )}
 
@@ -514,6 +515,13 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#1a1208',
     fontWeight: '600',
+  },
+
+  cardFieldHint: {
+    fontSize: 11,
+    color: GREY,
+    marginTop: 8,
+    lineHeight: 15,
   },
 
   altPay: {

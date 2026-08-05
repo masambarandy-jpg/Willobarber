@@ -10,6 +10,8 @@ export interface StaticService {
   popular?: boolean;
   counter?: boolean;
   photo?: string;
+  /** Valeur brute du champ category renvoyée par l'API, avant mapping — utile en debug. */
+  rawCategory?: string;
 }
 
 export interface StaticBarber {

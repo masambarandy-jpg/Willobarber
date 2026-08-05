@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, Alert, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { ChatIcon, EditIcon, TrashIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
+
+const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app';
 
 type SlotState = 'ferme' | 'reserve' | 'dispo';
 type Status = 'Actif' | 'Absent';
@@ -79,6 +82,59 @@ const INITIAL_TEAM: TeamMember[] = [
 const EMPTY_EDIT_FORM = { name: '', role: '', email: '', phone: '', status: 'Actif' as Status };
 const EMPTY_ADD_FORM = { name: '', role: '', email: '', phone: '', tag1: '', tag2: '', tag3: '', status: 'Actif' as Status };
 
+// Réel : GET/PATCH/POST/DELETE /api/barbers/ → id, name, role, status, email,
+// phone, specialties (pas de rdv/rating/exp/am/pm côté API — ces stats
+// d'aperçu restent locales, cf. LOCAL_STATS_BY_NAME ci-dessous).
+type ApiBarber = {
+  id: number;
+  name: string;
+  role: string;
+  status: Status;
+  email: string;
+  phone: string;
+  specialties: string[];
+};
+
+type LocalStats = Pick<TeamMember, 'rdv' | 'rating' | 'exp' | 'am' | 'pm'>;
+
+const LOCAL_STATS_BY_NAME: Record<string, LocalStats> = {
+  'Willo Diallo': {
+    rdv: 148, rating: '4,9', exp: '30 ans',
+    am: ['ferme', 'reserve', 'reserve', 'dispo', 'reserve', 'reserve', 'dispo'],
+    pm: ['ferme', 'dispo', 'ferme', 'reserve', 'dispo', 'ferme', 'reserve'],
+  },
+  'Malik Haddad': {
+    rdv: 96, rating: '4,9', exp: '12 ans',
+    am: ['ferme', 'dispo', 'reserve', 'reserve', 'dispo', 'reserve', 'reserve'],
+    pm: ['ferme', 'reserve', 'dispo', 'ferme', 'reserve', 'dispo', 'ferme'],
+  },
+  'Idris Camara': {
+    rdv: 64, rating: '4,8', exp: '8 ans',
+    am: ['ferme', 'reserve', 'dispo', 'reserve', 'reserve', 'dispo', 'ferme'],
+    pm: ['dispo', 'ferme', 'reserve', 'dispo', 'ferme', 'reserve', 'dispo'],
+  },
+};
+const DEFAULT_STATS: LocalStats = {
+  rdv: 0, rating: '—', exp: '—',
+  am: Array(7).fill('dispo') as SlotState[],
+  pm: Array(7).fill('dispo') as SlotState[],
+};
+
+function mapApiBarber(b: ApiBarber): TeamMember {
+  const stats = LOCAL_STATS_BY_NAME[b.name] ?? DEFAULT_STATS;
+  return {
+    id: String(b.id),
+    initial: (b.name ?? '').charAt(0).toUpperCase() || '?',
+    name: b.name,
+    role: b.role,
+    status: b.status,
+    tags: b.specialties ?? [],
+    email: b.email ?? '',
+    phone: b.phone ?? '',
+    ...stats,
+  };
+}
+
 function slotColor(state: SlotState) {
   if (state === 'reserve') return { backgroundColor: CC.gold, borderWidth: 0 };
   if (state === 'ferme') return { backgroundColor: '#e5ddd0', borderWidth: 0 };
@@ -87,7 +143,12 @@ function slotColor(state: SlotState) {
 
 export default function CoiffeurEquipeScreen() {
   const isTablet = useIsTablet();
-  const [team, setTeam] = useState<TeamMember[]>(INITIAL_TEAM);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [loadingTeam, setLoadingTeam] = useState(true);
+  const [usingMockTeam, setUsingMockTeam] = useState(false);
+
+  // undefined = pas encore lu dans AsyncStorage, null = lu mais absent, string = token trouvé
+  const [token, setToken] = useState<string | null | undefined>(undefined);
 
   const [chatModalVisible, setChatModalVisible] = useState(false);
   const [memberPourMessage, setMemberPourMessage] = useState<TeamMember | null>(null);
@@ -96,12 +157,48 @@ export default function CoiffeurEquipeScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [memberEnEdition, setMemberEnEdition] = useState<TeamMember | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
+  const [editError, setEditError] = useState('');
+  const [savingMembre, setSavingMembre] = useState(false);
 
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [memberASupprimer, setMemberASupprimer] = useState<TeamMember | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deletingMembre, setDeletingMembre] = useState(false);
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
+  const [addError, setAddError] = useState('');
+  const [addingMembre, setAddingMembre] = useState(false);
+
+  // Le token du gérant est stocké sous 'coiffeur_token' (cf. app/coiffeur/index.tsx)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const t = await AsyncStorage.getItem('coiffeur_token');
+      if (!cancelled) setToken(t);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const fetchTeam = useCallback(async () => {
+    setLoadingTeam(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/barbers/`);
+      const data = await res.json().catch(() => null);
+      console.log('ÉQUIPE — GET /api/barbers/ statut:', res.status, 'données:', JSON.stringify(data));
+      if (!res.ok || !Array.isArray(data)) throw new Error(`fetch-team-failed-${res.status}`);
+      setTeam(data.map(mapApiBarber));
+      setUsingMockTeam(false);
+    } catch (error) {
+      console.log('ERREUR ÉQUIPE — fallback données démo:', error);
+      setTeam(INITIAL_TEAM);
+      setUsingMockTeam(true);
+    } finally {
+      setLoadingTeam(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchTeam(); }, [fetchTeam]);
 
   const ouvrirChat = (member: TeamMember) => {
     setMemberPourMessage(member);
@@ -124,6 +221,7 @@ export default function CoiffeurEquipeScreen() {
   const ouvrirEdition = (member: TeamMember) => {
     setMemberEnEdition(member);
     setEditForm({ name: member.name, role: member.role, email: member.email, phone: member.phone, status: member.status });
+    setEditError('');
     setEditModalVisible(true);
   };
 
@@ -132,43 +230,95 @@ export default function CoiffeurEquipeScreen() {
   };
 
   const fermerEdition = () => {
+    if (savingMembre) return;
     setEditModalVisible(false);
     setMemberEnEdition(null);
+    setEditError('');
   };
 
-  const sauvegarderMembre = () => {
+  const sauvegarderMembre = async () => {
     if (!memberEnEdition) return;
     const name = editForm.name.trim();
+    if (!name) {
+      setEditError('Le nom est obligatoire.');
+      return;
+    }
+    if (!token) {
+      setEditError('Session gérant expirée — reconnectez-vous.');
+      return;
+    }
 
-    setTeam((prev) =>
-      prev.map((m) =>
-        m.id === memberEnEdition.id
-          ? {
-              ...m,
-              name,
-              initial: (name ?? '').charAt(0).toUpperCase() || m.initial,
-              role: editForm.role.trim(),
-              email: editForm.email.trim(),
-              phone: editForm.phone.trim(),
-              status: editForm.status,
-            }
-          : m
-      )
-    );
-    fermerEdition();
+    setSavingMembre(true);
+    setEditError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/barbers/${memberEnEdition.id}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name,
+          role: editForm.role.trim(),
+          email: editForm.email.trim(),
+          phone: editForm.phone.trim(),
+          status: editForm.status,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      console.log(`ÉQUIPE — PATCH /api/barbers/${memberEnEdition.id}/ statut:`, res.status, 'réponse:', JSON.stringify(data));
+      if (!res.ok) {
+        const apiMessage = data ? Object.values(data).flat().join(' ') : '';
+        throw new Error(apiMessage || `Erreur ${res.status}`);
+      }
+      // On reconstruit la ligne à partir de la réponse API (pas du formulaire local)
+      // pour être sûr d'afficher ce qui a réellement été persisté côté serveur.
+      const updated = mapApiBarber(data);
+      setTeam((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+      fermerEdition();
+    } catch (error) {
+      console.log('ERREUR ÉQUIPE — sauvegarde:', error);
+      setEditError(error instanceof Error ? error.message : 'Erreur lors de la sauvegarde.');
+    } finally {
+      setSavingMembre(false);
+    }
   };
 
   const demanderSuppression = (member: TeamMember) => {
     setMemberASupprimer(member);
+    setDeleteError('');
     setDeleteModalVisible(true);
   };
 
-  const confirmerSuppression = () => {
-    if (memberASupprimer) {
-      setTeam((prev) => prev.filter((m) => m.id !== memberASupprimer.id));
-    }
+  const fermerSuppression = () => {
+    if (deletingMembre) return;
     setDeleteModalVisible(false);
     setMemberASupprimer(null);
+    setDeleteError('');
+  };
+
+  const confirmerSuppression = async () => {
+    if (!memberASupprimer) return;
+    if (!token) {
+      setDeleteError('Session gérant expirée — reconnectez-vous.');
+      return;
+    }
+
+    setDeletingMembre(true);
+    setDeleteError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/barbers/${memberASupprimer.id}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log(`ÉQUIPE — DELETE /api/barbers/${memberASupprimer.id}/ statut:`, res.status);
+      if (!res.ok) throw new Error(`Erreur ${res.status}`);
+      setTeam((prev) => prev.filter((m) => m.id !== memberASupprimer.id));
+      setDeleteModalVisible(false);
+      setMemberASupprimer(null);
+    } catch (error) {
+      console.log('ERREUR ÉQUIPE — suppression:', error);
+      setDeleteError(error instanceof Error ? error.message : 'Erreur lors de la suppression.');
+    } finally {
+      setDeletingMembre(false);
+    }
   };
 
   const updateAddField = (key: keyof typeof EMPTY_ADD_FORM, value: string) => {
@@ -176,34 +326,54 @@ export default function CoiffeurEquipeScreen() {
   };
 
   const fermerAjout = () => {
+    if (addingMembre) return;
     setAddModalVisible(false);
     setAddForm(EMPTY_ADD_FORM);
+    setAddError('');
   };
 
-  const ajouterMembre = () => {
+  const ajouterMembre = async () => {
     const name = addForm.name.trim();
-    if (!name || !addForm.role.trim()) return;
+    if (!name || !addForm.role.trim()) {
+      setAddError('Le nom et le rôle sont obligatoires.');
+      return;
+    }
+    if (!token) {
+      setAddError('Session gérant expirée — reconnectez-vous.');
+      return;
+    }
 
     const tags = [addForm.tag1, addForm.tag2, addForm.tag3].map((t) => t.trim()).filter(Boolean);
 
-    const newMember: TeamMember = {
-      id: `member-${team.length}-${name.toLowerCase()}`,
-      initial: (name ?? '').charAt(0).toUpperCase(),
-      name,
-      role: addForm.role.trim(),
-      status: addForm.status,
-      tags,
-      rdv: 0,
-      rating: '—',
-      exp: '—',
-      email: addForm.email.trim(),
-      phone: addForm.phone.trim(),
-      am: Array(7).fill('dispo'),
-      pm: Array(7).fill('dispo'),
-    };
-
-    setTeam((prev) => [...prev, newMember]);
-    fermerAjout();
+    setAddingMembre(true);
+    setAddError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/barbers/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name,
+          role: addForm.role.trim(),
+          status: addForm.status,
+          email: addForm.email.trim(),
+          phone: addForm.phone.trim(),
+          specialties: tags,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      console.log('ÉQUIPE — POST /api/barbers/ statut:', res.status, 'réponse:', JSON.stringify(data));
+      if (!res.ok) {
+        const apiMessage = data ? Object.values(data).flat().join(' ') : '';
+        throw new Error(apiMessage || `Erreur ${res.status}`);
+      }
+      setTeam((prev) => [...prev, mapApiBarber(data)]);
+      fermerAjout();
+    } catch (error) {
+      console.log('ERREUR ÉQUIPE — ajout:', error);
+      setAddError(error instanceof Error ? error.message : "Erreur lors de l'ajout.");
+    } finally {
+      setAddingMembre(false);
+    }
   };
 
   return (
@@ -216,6 +386,17 @@ export default function CoiffeurEquipeScreen() {
           </TouchableOpacity>
         </View>
 
+        {usingMockTeam && (
+          <View style={styles.mockBanner}>
+            <Text style={styles.mockBannerText}>
+              ⚠️ Aperçu de démonstration — API indisponible, données fictives affichées.
+            </Text>
+          </View>
+        )}
+
+        {loadingTeam ? (
+          <ActivityIndicator color={CC.gold} size="large" style={{ marginTop: 40 }} />
+        ) : (
         <View style={isTablet && styles.teamGrid}>
         {team.map((m) => {
           const stats = [
@@ -286,6 +467,7 @@ export default function CoiffeurEquipeScreen() {
           );
         })}
         </View>
+        )}
 
         <View style={styles.legendCard}>
           <View style={styles.legendItem}>
@@ -404,19 +586,29 @@ export default function CoiffeurEquipeScreen() {
               })}
             </View>
 
+            {!!editError && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{editError}</Text>
+              </View>
+            )}
+
             <View style={styles.modalActionsRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={fermerEdition}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={fermerEdition} disabled={savingMembre}>
                 <Text style={styles.cancelBtnText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmBtn} onPress={sauvegarderMembre}>
-                <Text style={styles.confirmBtnText}>Enregistrer</Text>
+              <TouchableOpacity
+                style={[styles.confirmBtn, savingMembre && styles.btnDisabled]}
+                onPress={sauvegarderMembre}
+                disabled={savingMembre}
+              >
+                <Text style={styles.confirmBtnText}>{savingMembre ? 'Enregistrement…' : 'Enregistrer'}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
+      <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={fermerSuppression}>
         <View style={styles.deleteOverlay}>
           <View style={styles.deleteCard}>
             <View style={styles.deleteIconWrap}>
@@ -426,12 +618,22 @@ export default function CoiffeurEquipeScreen() {
             <Text style={styles.deleteTitle}>Retirer {memberASupprimer?.name} de l’équipe ?</Text>
             <Text style={styles.deleteText}>Cette action est irréversible.</Text>
 
+            {!!deleteError && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{deleteError}</Text>
+              </View>
+            )}
+
             <View style={styles.modalActionsRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setDeleteModalVisible(false)}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={fermerSuppression} disabled={deletingMembre}>
                 <Text style={styles.cancelBtnText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteConfirmBtn} onPress={confirmerSuppression}>
-                <Text style={styles.deleteConfirmBtnText}>Retirer</Text>
+              <TouchableOpacity
+                style={[styles.deleteConfirmBtn, deletingMembre && styles.btnDisabled]}
+                onPress={confirmerSuppression}
+                disabled={deletingMembre}
+              >
+                <Text style={styles.deleteConfirmBtnText}>{deletingMembre ? 'Suppression…' : 'Retirer'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -522,12 +724,22 @@ export default function CoiffeurEquipeScreen() {
                 })}
               </View>
 
+              {!!addError && (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{addError}</Text>
+                </View>
+              )}
+
               <View style={styles.modalActionsRow}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={fermerAjout}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={fermerAjout} disabled={addingMembre}>
                   <Text style={styles.cancelBtnText}>Annuler</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.confirmBtn} onPress={ajouterMembre}>
-                  <Text style={styles.confirmBtnText}>Ajouter</Text>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, addingMembre && styles.btnDisabled]}
+                  onPress={ajouterMembre}
+                  disabled={addingMembre}
+                >
+                  <Text style={styles.confirmBtnText}>{addingMembre ? 'Ajout…' : 'Ajouter'}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -554,6 +766,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 18,
+  },
+  mockBanner: {
+    backgroundColor: CC.errorBg,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  mockBannerText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: CC.errorText,
   },
   title: {
     fontFamily: SERIF,
@@ -838,6 +1062,23 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '700',
     color: CC.textSecondary,
+  },
+  errorBox: {
+    backgroundColor: CC.errorBg,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: CC.errorText,
+    padding: 12,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  errorText: {
+    fontSize: 13,
+    color: CC.errorText,
+    lineHeight: 18,
+  },
+  btnDisabled: {
+    opacity: 0.6,
   },
   modalActionsRow: {
     flexDirection: 'row',
