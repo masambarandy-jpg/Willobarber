@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, useWindowDimensions, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, useWindowDimensions, Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { HamburgerIcon, BellIcon, GearIcon, PersonIcon, HelpIcon, LogOutIcon } from './Icons';
 import Avatar from './Avatar';
@@ -44,7 +44,7 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
   const confirmerDeconnexion = () => {
     setProfileMenuVisible(false);
 
-    if (typeof window !== 'undefined') {
+    if (Platform.OS === 'web') {
       const ok = window.confirm('Voulez-vous vraiment vous déconnecter ?');
       if (ok) router.replace('/coiffeur');
     } else {
