@@ -800,13 +800,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '85%',
-    // flexShrink: 1 est nécessaire sur iOS pour que le ScrollView enfant
-    // (flex: 1) résolve une hauteur réelle : sans ça, une View bornée
-    // seulement par maxHeight (sans flex/height définie) crée une dépendance
-    // circulaire que Yoga résout en hauteur 0 sur iOS — le texte (bien réel)
-    // du modal Conditions/Politique s'affichait alors comme "vide".
-    flexShrink: 1,
+    // Hauteur fixe plutôt que maxHeight : le ScrollView enfant (flex: 1) a
+    // besoin d'une base de calcul non ambiguë. maxHeight seul (sans height ni
+    // flex sur ce conteneur) laisse Yoga résoudre la dépendance circulaire
+    // "hauteur du parent dépend du flex:1 de l'enfant" en hauteur 0 sur iOS —
+    // le texte (bien réel) du modal Conditions/Politique s'affichait "vide".
+    height: '70%',
     borderTopWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
@@ -815,7 +814,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     width: '90%',
     maxWidth: 620,
-    maxHeight: '80%',
+    height: '80%',
     paddingBottom: 24,
   },
   legalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#FFFFFF', flex: 1, paddingRight: 12 },

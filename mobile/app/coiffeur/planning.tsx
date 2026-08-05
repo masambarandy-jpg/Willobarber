@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, Pressable, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Modal, Pressable, StyleSheet, Platform, Alert, KeyboardAvoidingView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import {
@@ -1350,6 +1350,10 @@ export default function CoiffeurPlanningScreen() {
       animationType="fade"
       onRequestClose={fermerScanQr}
     >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <Pressable style={styles.rdvOverlay} onPress={fermerScanQr}>
         <Pressable style={styles.rdvCard} onPress={(e) => e.stopPropagation()}>
           <TouchableOpacity style={styles.rdvCloseBtn} onPress={fermerScanQr}>
@@ -1404,6 +1408,7 @@ export default function CoiffeurPlanningScreen() {
           )}
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
 
     {toastMessage && (
@@ -1622,6 +1627,10 @@ const styles = StyleSheet.create({
     height: 0,
     flexDirection: 'row',
     alignItems: 'center',
+    // Les cartes RDV (styles.event) n'ont pas de zIndex mais sont rendues
+    // après cette ligne dans le JSX — sans zIndex ici, elles s'affichent
+    // par-dessus dès qu'un RDV chevauche l'heure actuelle.
+    zIndex: 10,
   },
   currentTimeDot: {
     width: 8,

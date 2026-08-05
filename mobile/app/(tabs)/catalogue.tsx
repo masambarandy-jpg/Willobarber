@@ -70,12 +70,17 @@ type Filter = typeof FILTERS[number];
 
 function matchesFilter(svc: StaticService, filter: Filter): boolean {
   if (filter === 'all') return true;
-  if (filter === 'coupe') return svc.cat.includes('COUPE');
-  if (filter === 'barbe') return svc.cat === 'BARBE';
-  if (filter === 'package') return svc.cat === 'PACKAGE';
-  if (filter === 'soin') return svc.cat === 'SOIN';
-  if (filter === 'coloration') return svc.cat === 'COLORATION';
-  if (filter === 'enfant') return svc.cat === 'ENFANT';
+  // Comparaison insensible à la casse et partielle plutôt qu'un === exact sur
+  // svc.cat (déjà mappé en majuscules par mapApiService) : tolère un léger
+  // écart entre la catégorie stockée en base et le label attendu ici plutôt
+  // que de vider silencieusement la liste filtrée.
+  const cat = (svc.cat ?? '').toLowerCase();
+  if (filter === 'coupe') return cat.includes('coupe');
+  if (filter === 'barbe') return cat.includes('barbe');
+  if (filter === 'package') return cat.includes('package');
+  if (filter === 'soin') return cat.includes('soin');
+  if (filter === 'coloration') return cat.includes('coloration');
+  if (filter === 'enfant') return cat.includes('enfant');
   return true;
 }
 
@@ -145,6 +150,8 @@ export default function CatalogueScreen() {
   const handleReserve = (svc: StaticService) => {
     router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } });
   };
+
+  console.log('CATALOGUE SERVICES:', JSON.stringify(services));
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>

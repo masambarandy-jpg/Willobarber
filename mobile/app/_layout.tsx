@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import {
   CormorantGaramond_300Light,
@@ -69,18 +70,23 @@ export default function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <StripeWrapper>
-        <LanguageProvider>
-          <AuthProvider>
-            <CartProvider>
-              <AuthModalProvider>
-                <RootNavigation />
-              </AuthModalProvider>
-            </CartProvider>
-          </AuthProvider>
-        </LanguageProvider>
-      </StripeWrapper>
-    </GestureHandlerRootView>
+    // SafeAreaProvider doit englober l'app pour que SafeAreaView /
+    // useSafeAreaInsets (CoiffeurTopBar, book.tsx, catalogue.tsx) mesurent de
+    // vrais insets — sans lui, ils retombent silencieusement sur 0 partout.
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <StripeWrapper>
+          <LanguageProvider>
+            <AuthProvider>
+              <CartProvider>
+                <AuthModalProvider>
+                  <RootNavigation />
+                </AuthModalProvider>
+              </CartProvider>
+            </AuthProvider>
+          </LanguageProvider>
+        </StripeWrapper>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
