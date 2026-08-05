@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
@@ -477,8 +478,17 @@ export default function BookScreen() {
 
       {/* Fixed CTA footer — outer container is pointer-transparent so clicks pass through to cards */}
       {step === 4 ? (
-        /* Step 4: full-width pay button, no back button */
-        <View style={styles.footerContainer} pointerEvents="box-none">
+        /* Step 4: full-width pay button, no back button.
+           KeyboardAvoidingView plutôt qu'un simple View : le footer est
+           position:absolute/bottom:0, donc sans lui le clavier (ouvert par
+           les champs contact du Step4Payment) recouvre le bouton "Payer" au
+           lieu de le pousser au-dessus. */
+        <KeyboardAvoidingView
+          style={styles.footerContainer}
+          pointerEvents="box-none"
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={100}
+        >
           <View style={[styles.footerInner, { paddingBottom }]}>
             <TouchableOpacity
               style={[styles.ctaFull, isPaying && styles.ctaDisabled]}
@@ -495,7 +505,7 @@ export default function BookScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       ) : (
         /* Steps 1-3: back button + CTA */
         <View style={styles.footerContainer} pointerEvents="box-none">

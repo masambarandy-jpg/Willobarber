@@ -486,19 +486,21 @@ const styles = StyleSheet.create({
   // Payment tabs
   tabs: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
     marginBottom: 18,
     marginTop: 12,
   },
   tab: {
     flex: 1,
-    paddingVertical: 9,
+    height: 44,
     paddingHorizontal: 16,
     borderRadius: 100,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   tabActive: {
     backgroundColor: GOLD,

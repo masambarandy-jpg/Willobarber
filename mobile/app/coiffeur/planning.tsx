@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, Pressable, StyleSheet, Platform, Alert, KeyboardAvoidingView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Modal, Pressable, StyleSheet, Platform, Alert, KeyboardAvoidingView, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import {
@@ -1355,59 +1355,66 @@ export default function CoiffeurPlanningScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
       <Pressable style={styles.rdvOverlay} onPress={fermerScanQr}>
-        <Pressable style={styles.rdvCard} onPress={(e) => e.stopPropagation()}>
+        <Pressable style={[styles.rdvCard, styles.scanCard]} onPress={(e) => e.stopPropagation()}>
           <TouchableOpacity style={styles.rdvCloseBtn} onPress={fermerScanQr}>
             <CloseIcon size={13} />
           </TouchableOpacity>
 
-          <Text style={styles.rdvTitle}>📱 Scanner QR</Text>
-          {scanTarget && !scanResult && (
-            <Text style={styles.rdvSubtitle}>
-              RDV {scanTarget.time} · {scanTarget.client}
-            </Text>
-          )}
-
-          {scanResult ? (
-            <View style={styles.checkinResultBlock}>
-              <Text style={styles.checkinResultText}>
-                ✅ Check-in confirmé — {scanResult.clientName} · {scanResult.serviceName}
+          <ScrollView
+            style={styles.scanCardScroll}
+            contentContainerStyle={styles.scanCardScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.rdvTitle}>📱 Scanner QR</Text>
+            {scanTarget && !scanResult && (
+              <Text style={styles.rdvSubtitle}>
+                RDV {scanTarget.time} · {scanTarget.client}
               </Text>
-              {scanResult.alreadyCheckedIn && (
-                <Text style={styles.checkinResultNote}>Ce client avait déjà été check-in précédemment.</Text>
-              )}
-              <TouchableOpacity style={[styles.rdvCallBtn, { marginTop: 16 }]} onPress={fermerScanQr}>
-                <Text style={styles.rdvCallBtnText}>Fermer</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <View style={[styles.congesFormField, { marginTop: 16, marginBottom: 8 }]}>
-                <Text style={styles.congesFieldLabel}>UUID DU QR CODE</Text>
-                <TextInput
-                  style={[styles.congesInput, styles.scanUuidInput]}
-                  value={scanUuidInput}
-                  onChangeText={setScanUuidInput}
-                  placeholder="ex : 497a59df-d625-4321-b2ac-1dc71aa8bb6f"
-                  placeholderTextColor={CC.textSecondary}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  multiline
-                  numberOfLines={2}
-                  editable={!scanning}
-                />
-              </View>
-              {scanError && <Text style={styles.checkinErrorText}>{scanError}</Text>}
-              <TouchableOpacity
-                style={[styles.validateBtn, scanning && styles.btnDisabled, { marginTop: 8 }]}
-                onPress={validerCheckin}
-                disabled={scanning}
-              >
-                <Text style={styles.validateBtnText}>
-                  {scanning ? 'Validation…' : 'Valider check-in'}
+            )}
+
+            {scanResult ? (
+              <View style={styles.checkinResultBlock}>
+                <Text style={styles.checkinResultText}>
+                  ✅ Check-in confirmé — {scanResult.clientName} · {scanResult.serviceName}
                 </Text>
-              </TouchableOpacity>
-            </>
-          )}
+                {scanResult.alreadyCheckedIn && (
+                  <Text style={styles.checkinResultNote}>Ce client avait déjà été check-in précédemment.</Text>
+                )}
+                <TouchableOpacity style={[styles.rdvCallBtn, { marginTop: 16 }]} onPress={fermerScanQr}>
+                  <Text style={styles.rdvCallBtnText}>Fermer</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <View style={[styles.congesFormField, { marginTop: 16, marginBottom: 8 }]}>
+                  <Text style={styles.congesFieldLabel}>UUID DU QR CODE</Text>
+                  <TextInput
+                    style={[styles.congesInput, styles.scanUuidInput]}
+                    value={scanUuidInput}
+                    onChangeText={setScanUuidInput}
+                    placeholder="ex : 497a59df-d625-4321-b2ac-1dc71aa8bb6f"
+                    placeholderTextColor={CC.textSecondary}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    multiline
+                    scrollEnabled
+                    editable={!scanning}
+                  />
+                </View>
+                {scanError && <Text style={styles.checkinErrorText}>{scanError}</Text>}
+                <TouchableOpacity
+                  style={[styles.validateBtn, scanning && styles.btnDisabled, { marginTop: 8 }]}
+                  onPress={validerCheckin}
+                  disabled={scanning}
+                >
+                  <Text style={styles.validateBtnText}>
+                    {scanning ? 'Validation…' : 'Valider check-in'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </ScrollView>
         </Pressable>
       </Pressable>
       </KeyboardAvoidingView>
@@ -1775,6 +1782,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
   },
+  scanCard: {
+    minHeight: 320,
+    maxHeight: '80%',
+  },
+  scanCardScroll: {
+    maxHeight: '100%',
+  },
+  scanCardScrollContent: {
+    paddingBottom: 4,
+  },
   rdvCloseBtn: {
     position: 'absolute',
     top: 16,
@@ -2061,11 +2078,13 @@ const styles = StyleSheet.create({
     backgroundColor: CC.cream,
   },
   scanUuidInput: {
-    fontSize: 13,
-    letterSpacing: 0.3,
-    lineHeight: 18,
-    minHeight: 50,
+    fontSize: 12,
+    letterSpacing: 0.2,
+    lineHeight: 17,
+    minHeight: 68,
+    maxHeight: 100,
     textAlignVertical: 'top',
+    borderWidth: 1.5,
     borderColor: CC.gold,
   },
   congesAddBtn: {

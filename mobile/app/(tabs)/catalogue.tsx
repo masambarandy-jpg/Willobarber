@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -131,16 +130,10 @@ export default function CatalogueScreen() {
   // que de montrer silencieusement d'anciens prix figés en dur (cf. bug "45€ au lieu de 25€").
   const services = apiServices ?? [];
 
-  // TODO: le mapping catégorie API -> filtre est source de listes vides sur natif
-  // (cf. console.log ci-dessous pour identifier le mismatch). En attendant la
-  // correction du mapping, on désactive le filtre sur natif pour ne jamais
-  // cacher de prestations ; le filtre reste actif sur web.
-  const filteredServices = useMemo(() => {
-    console.log('[CATALOGUE] Services cats:', services.map(s => s.cat));
-    return Platform.OS === 'web'
-      ? services.filter(s => matchesFilter(s, activeFilter))
-      : services;
-  }, [services, activeFilter]);
+  const filteredServices = useMemo(
+    () => services.filter(s => matchesFilter(s, activeFilter)),
+    [services, activeFilter]
+  );
 
   const svcName = (svc: StaticService) => {
     const key = `services.svc.${svc.id}.name` as TranslationKey;
