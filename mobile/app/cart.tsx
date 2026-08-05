@@ -134,7 +134,7 @@ export default function CartScreen() {
                   <Circle cx="17" cy="20" r="2"/>
                 </Svg>
               </View>
-              <View>
+              <View style={styles.retraitInfo}>
                 <Text style={styles.retraitTitle}>{t('cart.deliveryHomeTitle')} · {t('cart.deliveryHomeSub')}</Text>
                 {!!deliveryAddress && <Text style={styles.retraitAddr}>{deliveryAddress}</Text>}
               </View>
@@ -149,7 +149,7 @@ export default function CartScreen() {
                   <Path d="M9 9h1M14 9h1"/>
                 </Svg>
               </View>
-              <View>
+              <View style={styles.retraitInfo}>
                 <Text style={styles.retraitTitle}>{t('cart.deliverySalonTitle')}</Text>
                 <Text style={styles.retraitAddr}>Rue Auguste Van Zande 78 · Bruxelles</Text>
                 <Text style={styles.retraitAddr}>{t('cart.deliverySalonAvailable')}</Text>
@@ -740,8 +740,9 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   retraitIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2A2520', alignItems: 'center', justifyContent: 'center' },
-  retraitTitle: { fontSize: 15, fontWeight: '600', color: '#fff', marginBottom: 2 },
-  retraitAddr: { fontSize: 13, color: 'rgba(255,255,255,0.45)' },
+  retraitInfo: { flex: 1 },
+  retraitTitle: { fontSize: 15, fontWeight: '600', color: '#fff', marginBottom: 2, flexWrap: 'wrap' },
+  retraitAddr: { fontSize: 13, color: 'rgba(255,255,255,0.45)', flexWrap: 'wrap' },
 
   continueBtn: {
     backgroundColor: '#C9A84C',
