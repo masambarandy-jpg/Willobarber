@@ -303,34 +303,43 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                     {message || t('authModal.subtitleDefault')}
                   </Text>
 
-                  <View style={styles.quickRow}>
-                    <TouchableOpacity
-                      style={styles.quickPill}
-                      onPress={() => handleProviderSelect('@gmail.com')}
-                      activeOpacity={0.75}
-                    >
-                      <Text style={styles.quickPillGmailIcon}>G</Text>
-                      <Text style={styles.quickPillText}>{t('authModal.gmail')}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.quickPill}
-                      onPress={() => handleProviderSelect('@outlook.com')}
-                      activeOpacity={0.75}
-                    >
-                      <Feather name="mail" size={14} color="#4A9EFF" />
-                      <Text style={styles.quickPillText}>{t('authModal.outlook')}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.quickPill} onPress={handleOtherProvider} activeOpacity={0.75}>
-                      <Feather name="user" size={14} color="rgba(255,255,255,0.7)" />
-                      <Text style={styles.quickPillText}>{t('authModal.other')}</Text>
-                    </TouchableOpacity>
-                  </View>
+                  {/* Gmail/Outlook ouvrent l'app externe correspondante via un
+                      deep link natif (googlegmail://, ms-outlook://) sur
+                      iOS/Android — ça ne connecte à rien, juste déroutant.
+                      Sur web ils ouvrent une page de connexion réelle, donc
+                      utiles là uniquement. */}
+                  {Platform.OS === 'web' && (
+                    <>
+                      <View style={styles.quickRow}>
+                        <TouchableOpacity
+                          style={styles.quickPill}
+                          onPress={() => handleProviderSelect('@gmail.com')}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={styles.quickPillGmailIcon}>G</Text>
+                          <Text style={styles.quickPillText}>{t('authModal.gmail')}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.quickPill}
+                          onPress={() => handleProviderSelect('@outlook.com')}
+                          activeOpacity={0.75}
+                        >
+                          <Feather name="mail" size={14} color="#4A9EFF" />
+                          <Text style={styles.quickPillText}>{t('authModal.outlook')}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.quickPill} onPress={handleOtherProvider} activeOpacity={0.75}>
+                          <Feather name="user" size={14} color="rgba(255,255,255,0.7)" />
+                          <Text style={styles.quickPillText}>{t('authModal.other')}</Text>
+                        </TouchableOpacity>
+                      </View>
 
-                  <View style={styles.separatorRow}>
-                    <View style={styles.separatorLine} />
-                    <Text style={styles.separatorText}>{t('authModal.separator')}</Text>
-                    <View style={styles.separatorLine} />
-                  </View>
+                      <View style={styles.separatorRow}>
+                        <View style={styles.separatorLine} />
+                        <Text style={styles.separatorText}>{t('authModal.separator')}</Text>
+                        <View style={styles.separatorLine} />
+                      </View>
+                    </>
+                  )}
 
                   {!!error && (
                     <View style={styles.errorBox}>
