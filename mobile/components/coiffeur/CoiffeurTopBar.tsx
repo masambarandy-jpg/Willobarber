@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, useWindowDimensions, Alert, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { HamburgerIcon, BellIcon, GearIcon, PersonIcon, HelpIcon, LogOutIcon } from './Icons';
 import Avatar from './Avatar';
@@ -56,6 +57,7 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
   };
 
   return (
+    <SafeAreaView edges={['top']} style={{ backgroundColor: CC.white }}>
     <View style={styles.bar}>
       <View style={styles.left}>
         {!isTablet && (
@@ -120,6 +122,7 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
 
       <SupportModal visible={supportVisible} onClose={() => setSupportVisible(false)} />
     </View>
+    </SafeAreaView>
   );
 }
 

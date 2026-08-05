@@ -220,10 +220,18 @@ export default function ClientMediaGrid({ media, isLoading, emptyLabel, mutedCol
         <View style={{ flexDirection: 'column', gap: 16 }}>
           {photos.map((item) => (
             <View key={item.id} style={styles.photoCell}>
+              {/* "cover" recadre : correct pour la fiche client coiffeur (onShare,
+                  vignettes uniformes) mais coupait les photos "Mes coupes" du
+                  client — même logique que la branche web ci-dessus. */}
               <Image
                 source={{ uri: item.cloudinary_url }}
-                style={{ width: '100%', height: 180, borderRadius: 12 }}
-                resizeMode="cover"
+                style={{
+                  width: '100%',
+                  height: 300,
+                  borderRadius: 12,
+                  backgroundColor: onShare ? '#000' : '#111',
+                }}
+                resizeMode={onShare ? 'cover' : 'contain'}
               />
               <Text style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 8 }}>
                 {formatMediaDate(item.created_at)}
