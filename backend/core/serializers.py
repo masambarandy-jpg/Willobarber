@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Barbershop, Service, Reservation, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave
+from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -31,12 +31,18 @@ class BarbershopSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class BarberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Barber
+        fields = ['id', 'name', 'role', 'status', 'email', 'phone', 'specialties']
+
+
 class ServiceSerializer(serializers.ModelSerializer):
     barbershop_name = serializers.CharField(source='barbershop.name', read_only=True)
 
     class Meta:
         model = Service
-        fields = ['id', 'name', 'price', 'duration', 'barbershop', 'barbershop_name']
+        fields = ['id', 'name', 'category', 'price', 'duration', 'barbershop', 'barbershop_name']
 
 
 class ReservationSerializer(serializers.ModelSerializer):

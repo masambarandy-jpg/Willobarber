@@ -3,12 +3,13 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
 from .views import (
-    BarbershopViewSet, ServiceViewSet, ReservationViewSet, ClosedPeriodViewSet,
+    BarbershopViewSet, BarberViewSet, ServiceViewSet, ReservationViewSet, ClosedPeriodViewSet,
     WaitingListViewSet, BarberLeaveViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'barbershops', BarbershopViewSet)
+router.register(r'barbers', BarberViewSet)
 router.register(r'services', ServiceViewSet)
 router.register(r'reservations', ReservationViewSet)
 router.register(r'closed-periods', ClosedPeriodViewSet)

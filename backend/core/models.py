@@ -33,13 +33,44 @@ class Barbershop(models.Model):
 
 
 class Service(models.Model):
+    CATEGORY_CHOICES = [
+        ('coupe_homme', 'Coupe Homme'),
+        ('barbe', 'Barbe'),
+        ('package', 'Package'),
+        ('coloration', 'Coloration'),
+        ('soin', 'Soin'),
+        ('enfant', 'Enfant'),
+    ]
+
     name = models.CharField(max_length=100)
+    category = models.CharField(max_length=30, choices=CATEGORY_CHOICES, default='coupe_homme')
     price = models.DecimalField(max_digits=6, decimal_places=2)
     duration = models.IntegerField(help_text="Durée en minutes")
     barbershop = models.ForeignKey(Barbershop, on_delete=models.CASCADE)
 
     def __str__(self):
         return f"{self.name} - {self.price}€"
+
+
+class Barber(models.Model):
+    STATUS_CHOICES = [
+        ('Actif', 'Actif'),
+        ('Absent', 'Absent'),
+    ]
+
+    name = models.CharField(max_length=100)
+    role = models.CharField(max_length=100, blank=True, default='Barbier')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Actif')
+    email = models.EmailField(blank=True, default='')
+    phone = models.CharField(max_length=30, blank=True, default='')
+    specialties = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.name} ({self.role})"
 
 
 class Reservation(models.Model):
