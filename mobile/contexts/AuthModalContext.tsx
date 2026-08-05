@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  KeyboardAvoidingView,
   Platform,
   Text,
   TextInput,
@@ -248,6 +249,14 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     focusIdentifierAtStart();
   };
 
+  // Sur iOS, pré-remplir @gmail.com laissait croire à l'app qu'elle "devinait"
+  // l'email du téléphone — en fait le clavier natif suggère déjà l'adresse liée
+  // à l'Apple ID de l'utilisateur, donc ce pré-remplissage n'apportait rien et
+  // semait la confusion. On se contente de donner le focus au champ identifiant.
+  const handleGmailPress = () => {
+    identifierInputRef.current?.focus();
+  };
+
   const handleOtherProvider = () => {
     setEmailSuffix('');
     focusIdentifier();
@@ -265,7 +274,11 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
         {children}
 
         {visible && (
-          <View style={styles.container} pointerEvents="box-none">
+          <KeyboardAvoidingView
+            style={styles.container}
+            pointerEvents="box-none"
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
             {/* Fond flou */}
             <Animated.View
               style={[StyleSheet.absoluteFillObject, { opacity: overlayAnim }]}
@@ -307,7 +320,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                   <View style={styles.quickRow}>
                     <TouchableOpacity
                       style={styles.quickPill}
-                      onPress={() => handleProviderSelect('@gmail.com')}
+                      onPress={handleGmailPress}
                       activeOpacity={0.75}
                     >
                       <Text style={styles.quickPillGmailIcon}>G</Text>
@@ -486,7 +499,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                 </>
               )}
             </Animated.View>
-          </View>
+          </KeyboardAvoidingView>
         )}
       </View>
     </AuthModalContext.Provider>

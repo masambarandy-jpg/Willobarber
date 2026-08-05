@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Platform,
+  KeyboardAvoidingView,
   useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -53,6 +54,11 @@ export default function CoiffeurLoginScreen() {
 
   return (
     <View style={styles.root}>
+      <KeyboardAvoidingView
+        style={{ flex: 1, width: '100%' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+      >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={[styles.card, { maxWidth: cardMaxWidth }]}>
         <TouchableOpacity
@@ -126,6 +132,7 @@ export default function CoiffeurLoginScreen() {
         </TouchableOpacity>
       </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
