@@ -180,10 +180,12 @@ export default function CoiffeurEquipeScreen() {
     return () => { cancelled = true; };
   }, []);
 
-  const fetchTeam = useCallback(async () => {
+  const fetchTeam = useCallback(async (authToken: string | null) => {
     setLoadingTeam(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/barbers/`);
+      const res = await fetch(`${API_BASE_URL}/api/barbers/`, {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+      });
       const data = await res.json().catch(() => null);
       console.log('ÉQUIPE — GET /api/barbers/ statut:', res.status, 'données:', JSON.stringify(data));
       if (!res.ok || !Array.isArray(data)) throw new Error(`fetch-team-failed-${res.status}`);
@@ -198,7 +200,12 @@ export default function CoiffeurEquipeScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchTeam(); }, [fetchTeam]);
+  // On attend que le token soit lu dans AsyncStorage (undefined = pas encore lu)
+  // avant de lancer le fetch, pour être sûr d'envoyer le header Authorization.
+  useEffect(() => {
+    if (token === undefined) return;
+    fetchTeam(token);
+  }, [token, fetchTeam]);
 
   const ouvrirChat = (member: TeamMember) => {
     setMemberPourMessage(member);
