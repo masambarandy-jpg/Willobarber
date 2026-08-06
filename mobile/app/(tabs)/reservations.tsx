@@ -234,6 +234,7 @@ export default function ReservationsScreen() {
   const [cancelling, setCancelling] = useState(false);
   const [qrTarget, setQrTarget] = useState<(Reservation & { time: string }) | null>(null);
   const [mainTab, setMainTab] = useState<'apercu' | 'coupes'>('apercu');
+  const [loyaltyPoints, setLoyaltyPoints] = useState(MOCK_LOYALTY.points);
   const barAnim = useRef(new Animated.Value(0)).current;
   const { media: myMedia, isLoading: myMediaLoading } = useClientMedia(user?.id ?? null);
 
@@ -344,11 +345,11 @@ export default function ReservationsScreen() {
 
   useEffect(() => {
     Animated.timing(barAnim, {
-      toValue: getBarProgress(MOCK_LOYALTY.points),
+      toValue: getBarProgress(loyaltyPoints),
       duration: 1000,
       useNativeDriver: false,
     }).start();
-  }, []);
+  }, [loyaltyPoints]);
 
   if (!isAuthenticated || !user) {
     return (
@@ -371,8 +372,8 @@ export default function ReservationsScreen() {
   }
 
   const username = user?.username || user?.first_name || 'Client';
-  const nextTarget  = getNextTarget(MOCK_LOYALTY.points);
-  const ptsRestants = nextTarget - MOCK_LOYALTY.points;
+  const nextTarget  = getNextTarget(loyaltyPoints);
+  const ptsRestants = nextTarget - loyaltyPoints;
 
   const mainTabsRow = (
     <View style={styles.mainTabsRow}>
@@ -417,15 +418,30 @@ export default function ReservationsScreen() {
 
   const handleCancel = async (reason: string) => {
     if (!cancelTarget) return;
+    if (cancelTarget.id == null) {
+      console.log('[ANNULATION] cancelTarget.id manquant — cancelTarget:', JSON.stringify(cancelTarget));
+      const msg = 'Réservation invalide (identifiant manquant). Rechargez la page et réessayez.';
+      if (Platform.OS === 'web') window.alert(`${t('common.error')} : ${msg}`);
+      else Alert.alert(t('common.error'), msg);
+      return;
+    }
     setCancelling(true);
     try {
+      console.log(`[ANNULATION] POST /reservations/${cancelTarget.id}/cancel/ — reason:`, reason);
       await cancel(cancelTarget.id, reason);
       setCancelTarget(null);
-    } catch {
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const data = err?.response?.data;
+      console.log('[ANNULATION] échec —', status, JSON.stringify(data));
+      const serverMessage: string | undefined = data?.error || data?.detail || data?.message;
+      const displayMessage = serverMessage
+        ? `${serverMessage}${status ? ` (${status})` : ''}`
+        : t('reservations.cancelError');
       if (Platform.OS === 'web') {
-        window.alert(`${t('common.error')} : ${t('reservations.cancelError')}`);
+        window.alert(`${t('common.error')} : ${displayMessage}`);
       } else {
-        Alert.alert(t('common.error'), t('reservations.cancelError'));
+        Alert.alert(t('common.error'), displayMessage);
       }
     } finally {
       setCancelling(false);
@@ -494,8 +510,11 @@ export default function ReservationsScreen() {
       try {
         await loyaltyApi.redeem();
       } catch {
-        // API pas encore disponible côté serveur : on affiche quand même la confirmation.
+        // API pas encore disponible côté serveur : on applique quand même le rachat en local.
       }
+      // Nouveau solde = pointsActuels - 500, la barre de progression et les
+      // paliers se recalculent automatiquement (dérivés de loyaltyPoints).
+      setLoyaltyPoints((prev) => Math.max(0, prev - 500));
       if (Platform.OS === 'web') {
         window.alert(t('reservations.loyalty.redeemSuccess'));
       } else {
@@ -606,7 +625,7 @@ export default function ReservationsScreen() {
                   <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
                 </View>
                 <View style={styles.statCard}>
-                  <Text style={[styles.statNum, { color: '#C9A84C' }]}>{MOCK_LOYALTY.points}</Text>
+                  <Text style={[styles.statNum, { color: '#C9A84C' }]}>{loyaltyPoints}</Text>
                   <Text style={styles.statNumSub}>/ 1000</Text>
                   <Text style={styles.statLabel}>{t('reservations.stats.loyaltyPoints')}</Text>
                 </View>
@@ -871,7 +890,7 @@ export default function ReservationsScreen() {
                     <Text style={styles.loyaltyBrandSub}>{t('reservations.loyalty.brandSub')}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.loyaltyPoints}>{MOCK_LOYALTY.points}</Text>
+                    <Text style={styles.loyaltyPoints}>{loyaltyPoints}</Text>
                     <Text style={styles.loyaltyPtsSuffix}>pts</Text>
                   </View>
                 </View>
@@ -896,9 +915,9 @@ export default function ReservationsScreen() {
 
                 <View style={styles.loyaltyTiersRow}>
                   {TIERS.map((tier, i) => {
-                    const reached  = MOCK_LOYALTY.points >= tier.min;
+                    const reached  = loyaltyPoints >= tier.min;
                     const nextTier = TIERS[i + 1];
-                    const isActive  = reached && (!nextTier || MOCK_LOYALTY.points < nextTier.min);
+                    const isActive  = reached && (!nextTier || loyaltyPoints < nextTier.min);
                     const isDepasse = reached && !isActive;
                     return (
                       <View key={tier.label} style={styles.tierBadgeWrap}>
@@ -927,7 +946,7 @@ export default function ReservationsScreen() {
                   })}
                 </View>
 
-                {MOCK_LOYALTY.points >= 500 ? (
+                {loyaltyPoints >= 500 ? (
                   <>
                     <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85} onPress={handleRedeemLoyalty}>
                       <Text style={styles.loyaltyCtaText}>{t('reservations.loyalty.ctaText')}</Text>
@@ -936,7 +955,7 @@ export default function ReservationsScreen() {
                   </>
                 ) : (
                   <Text style={styles.loyaltyCtaDisabled}>
-                    500 {t('reservations.loyalty.pointsRequired')} ({500 - MOCK_LOYALTY.points} {t('reservations.loyalty.ctaDisabledSuffix')}
+                    500 {t('reservations.loyalty.pointsRequired')} ({500 - loyaltyPoints} {t('reservations.loyalty.ctaDisabledSuffix')}
                   </Text>
                 )}
               </View>
@@ -1004,7 +1023,7 @@ export default function ReservationsScreen() {
             <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={[styles.statNum, { color: '#C9A84C' }]}>{MOCK_LOYALTY.points}</Text>
+            <Text style={[styles.statNum, { color: '#C9A84C' }]}>{loyaltyPoints}</Text>
             <Text style={styles.statNumSub}>/ 1000</Text>
             <Text style={styles.statLabel}>{t('reservations.stats.loyaltyPoints')}</Text>
           </View>
@@ -1246,7 +1265,7 @@ export default function ReservationsScreen() {
               <Text style={styles.loyaltyBrandSub}>{t('reservations.loyalty.brandSub')}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.loyaltyPoints}>{MOCK_LOYALTY.points}</Text>
+              <Text style={styles.loyaltyPoints}>{loyaltyPoints}</Text>
               <Text style={styles.loyaltyPtsSuffix}>pts</Text>
             </View>
           </View>
@@ -1271,9 +1290,9 @@ export default function ReservationsScreen() {
 
           <View style={styles.loyaltyTiersRow}>
             {TIERS.map((tier, i) => {
-              const reached  = MOCK_LOYALTY.points >= tier.min;
+              const reached  = loyaltyPoints >= tier.min;
               const nextTier = TIERS[i + 1];
-              const isActive  = reached && (!nextTier || MOCK_LOYALTY.points < nextTier.min);
+              const isActive  = reached && (!nextTier || loyaltyPoints < nextTier.min);
               const isDepasse = reached && !isActive;
               return (
                 <View key={tier.label} style={styles.tierBadgeWrap}>
@@ -1302,7 +1321,7 @@ export default function ReservationsScreen() {
             })}
           </View>
 
-          {MOCK_LOYALTY.points >= 500 ? (
+          {loyaltyPoints >= 500 ? (
             <>
               <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85} onPress={handleRedeemLoyalty}>
                 <Text style={styles.loyaltyCtaText}>{t('reservations.loyalty.ctaText')}</Text>
@@ -1311,7 +1330,7 @@ export default function ReservationsScreen() {
             </>
           ) : (
             <Text style={styles.loyaltyCtaDisabled}>
-              500 {t('reservations.loyalty.pointsRequired')} ({500 - MOCK_LOYALTY.points} {t('reservations.loyalty.ctaDisabledSuffix')}
+              500 {t('reservations.loyalty.pointsRequired')} ({500 - loyaltyPoints} {t('reservations.loyalty.ctaDisabledSuffix')}
             </Text>
           )}
         </View>

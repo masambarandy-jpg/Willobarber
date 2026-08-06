@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, findNodeHandle, ScrollView, View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
@@ -34,6 +34,10 @@ export default function CoiffeurAvisScreen() {
   const [replyText, setReplyText] = useState('');
   const [submittingReplyId, setSubmittingReplyId] = useState<number | null>(null);
   const [replyError, setReplyError] = useState<string | null>(null);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const cardRefs = useRef<Record<number, View | null>>({});
+  const scrolledToReviewRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,13 +86,29 @@ export default function CoiffeurAvisScreen() {
   };
 
   // Pré-sélection de l'avis quand on arrive depuis le bouton "Répondre"
-  // d'une notification (route /coiffeur/avis?reviewId=X).
+  // d'une notification (route /coiffeur/avis?reviewId=X) : ouvre directement
+  // le champ de réponse et scrolle jusqu'à l'avis concerné.
   useEffect(() => {
-    if (!reviewId) return;
+    if (!reviewId || scrolledToReviewRef.current === reviewId) return;
     const id = Number(reviewId);
-    if (reviews.some((r) => r.id === id)) {
-      ouvrirReponse(id);
-    }
+    if (!reviews.some((r) => r.id === id)) return;
+
+    scrolledToReviewRef.current = reviewId;
+    ouvrirReponse(id);
+
+    // Laisse le temps au champ de réponse (et donc à la carte) de se relayout
+    // avant de mesurer sa position dans le ScrollView.
+    const timer = setTimeout(() => {
+      const card = cardRefs.current[id];
+      const scrollNode = scrollRef.current ? findNodeHandle(scrollRef.current) : null;
+      if (!card || !scrollNode) return;
+      card.measureLayout(
+        scrollNode,
+        (_x, y) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true }),
+        () => {}
+      );
+    }, 250);
+    return () => clearTimeout(timer);
   }, [reviewId, reviews]);
 
   const annulerReponse = () => {
@@ -153,7 +173,7 @@ export default function CoiffeurAvisScreen() {
   const maxCount = Math.max(1, ...distribution.map((d) => d.count));
 
   return (
-    <CoiffeurScreen active="avis">
+    <CoiffeurScreen active="avis" ref={scrollRef}>
       <Text style={styles.title}>Avis clients</Text>
 
       <View style={isTablet && styles.tabletRow}>
@@ -209,7 +229,7 @@ export default function CoiffeurAvisScreen() {
             <Text style={styles.emptyText}>Aucun avis pour le moment.</Text>
           ) : (
             filtered.map((r) => (
-              <View key={r.id} style={styles.reviewCard}>
+              <View key={r.id} ref={(el) => { cardRefs.current[r.id] = el; }} style={styles.reviewCard}>
                 <View style={styles.reviewTopRow}>
                   <Avatar letter={avatarLetterFor(r.client_name)} size={38} />
                   <View style={styles.reviewIdentity}>
