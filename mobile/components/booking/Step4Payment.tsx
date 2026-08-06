@@ -47,6 +47,10 @@ interface Props {
   onPaymentMethodChange: (m: PaymentMethod) => void;
   onCardFormChange: (f: CardForm) => void;
   onAmountChoiceChange: (a: AmountChoice) => void;
+  /** Hauteur réelle (mesurée) du footer CTA fixe du parent — calibre le
+   * paddingBottom du scroll pour coller le contenu au bouton "Payer" sans
+   * espace vide ni chevauchement. */
+  footerHeight?: number;
 }
 
 function BankCard({ cardForm, cardDetails }: { cardForm: CardForm; cardDetails?: CardInputDetails }) {
@@ -231,6 +235,7 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
   onPaymentMethodChange,
   onCardFormChange,
   onAmountChoiceChange,
+  footerHeight,
 }, ref) {
   const { service } = booking;
   const { t } = useLanguage();
@@ -264,7 +269,7 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
     >
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: (footerHeight || 96) + 12 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -362,7 +367,7 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
         </View>
 
         {/* ── Montant à régler maintenant ──────────────────────────────── */}
-        <View style={{ marginTop: -4 }}>
+        <View style={{ marginTop: 0, paddingTop: 0, minHeight: 0 }}>
           <Text style={styles.amountNowKicker}>{t('step4.amountNowKicker')}</Text>
 
           {/* Option 1 — Acompte fixe obligatoire */}
@@ -454,7 +459,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 120,
   },
 
   title: {
@@ -478,7 +482,7 @@ const styles = StyleSheet.create({
   },
   paymentMethodCard: {
     paddingBottom: 8,
-    marginBottom: 4,
+    marginBottom: 0,
   },
   cardTitle: {
     fontFamily: Fonts.semiBold,

@@ -94,11 +94,14 @@ function ProfilTab() {
         });
         if (!res.ok) throw new Error(`me-fetch-failed-${res.status}`);
         const data = await res.json();
+        console.log('[PARAMÈTRES] GET /api/auth/me/ →', JSON.stringify(data));
         if (cancelled) return;
         setFirstName(data.first_name ?? '');
         setLastName(data.last_name ?? '');
         setEmail(data.email ?? '');
-        setPhone(data.phone ?? '');
+        // Le backend (UserSerializer) renvoie 'phone' — on garde 'telephone' /
+        // 'phone_number' en repli défensif au cas où le nom du champ change côté API.
+        setPhone(data.phone ?? data.telephone ?? data.phone_number ?? '');
         setRole(data.role === 'barber' ? 'Gérant' : data.role ?? profile.role);
         setPhotoUrl(data.profile_picture ?? '');
       } catch (error) {
@@ -124,10 +127,12 @@ function ProfilTab() {
       });
       if (!res.ok) throw new Error(`update-failed-${res.status}`);
       const data = await res.json();
+      console.log('[PARAMÈTRES] PATCH /api/auth/me/ →', JSON.stringify(data));
+      const savedPhone = data.phone ?? data.telephone ?? data.phone_number ?? '';
       setFirstName(data.first_name ?? '');
       setLastName(data.last_name ?? '');
-      setPhone(data.phone ?? '');
-      updateProfile({ firstName: data.first_name ?? '', lastName: data.last_name ?? '', email, phone: data.phone ?? '', role });
+      setPhone(savedPhone);
+      updateProfile({ firstName: data.first_name ?? '', lastName: data.last_name ?? '', email, phone: savedPhone, role });
       setProfilEnregistre(true);
       setTimeout(() => setProfilEnregistre(false), 3000);
     } catch (error) {

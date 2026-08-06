@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useAuth } from '@/hooks/useAuth';
 import { TokenStorage } from '@/services/api';
 import { API_BASE_URL, Fonts } from '@/constants';
@@ -124,36 +126,77 @@ export function BookingConfirmation({ booking, reservationId, amountChoice, onGo
     router.push('/(tabs)/reservations');
   };
 
+  // Endpoint confirmé en production (PDF binaire, protégé par JWT) — voir
+  // core/views.py côté backend. Le nom local du fichier diverge du dépôt git
+  // (drift déploiement), donc vérifié directement contre l'API live plutôt
+  // que contre le code source local.
+  const invoiceUrl = (id: number) => `${API_BASE_URL}/reservations/${id}/acompte-invoice/`;
+
   const handleGenerateInvoice = async () => {
-    if (Platform.OS !== 'web') {
-      Alert.alert(t('bookingConfirm.invoiceWebOnlyTitle'), t('bookingConfirm.invoiceWebOnlyMsg'));
-      return;
-    }
     if (!reservationId) {
       Alert.alert('Facture indisponible', "Impossible d'identifier la réservation pour générer la facture.");
       return;
     }
 
+    if (Platform.OS === 'web') {
+      try {
+        const token = await TokenStorage.getAccess();
+        console.log('[FACTURE] Téléchargement pour reservationId:', reservationId, 'URL:', invoiceUrl(reservationId));
+        const response = await fetch(invoiceUrl(reservationId), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error(`invoice-fetch-failed-${response.status}`);
+
+        const blob = await response.blob();
+        const url  = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Facture_WilloBarber_${reservationId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error('[FACTURE] Erreur téléchargement:', e);
+        Alert.alert('Erreur', "Impossible de télécharger la facture pour le moment.");
+      }
+      return;
+    }
+
+    // Natif : le JWT doit partir dans le header de la requête de téléchargement
+    // elle-même (WebBrowser ne peut pas y attacher de header), donc on
+    // télécharge d'abord le PDF sur le disque via FileSystem, puis on
+    // l'ouvre en plein écran.
     try {
       const token = await TokenStorage.getAccess();
-      console.log('[FACTURE] Téléchargement pour reservationId:', reservationId, 'URL:', `/api/reservations/${reservationId}/acompte-invoice/`);
-      const response = await fetch(`${API_BASE_URL}/reservations/${reservationId}/acompte-invoice/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error(`invoice-fetch-failed-${response.status}`);
+      console.log('[FACTURE] Téléchargement natif pour reservationId:', reservationId, 'URL:', invoiceUrl(reservationId));
 
-      const blob = await response.blob();
-      const url  = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Facture_WilloBarber_${reservationId}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const destination = new File(Paths.cache, `Facture_WilloBarber_${reservationId}.pdf`);
+      // File.downloadFileAsync est attaché au runtime (expo-file-system/src/FileSystem.ts)
+      // mais absent des déclarations de types de cette version du SDK — cf. le même
+      // contournement déjà utilisé dans ClientMediaGrid.tsx.
+      const downloaded = await (File as any).downloadFileAsync(invoiceUrl(reservationId), destination, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        idempotent: true,
+      });
+      const fileUri: string = downloaded.uri;
+
+      try {
+        await WebBrowser.openBrowserAsync(fileUri, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
+      } catch (openError) {
+        // Android n'accepte pas toujours un file:// direct dans les Custom
+        // Tabs sous-jacentes à WebBrowser — on retombe sur la feuille de
+        // partage native (Aperçu / Drive / autre lecteur PDF installé).
+        console.log('[FACTURE] openBrowserAsync a échoué, repli sur le partage natif:', openError);
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, { mimeType: 'application/pdf' });
+        } else {
+          throw openError;
+        }
+      }
     } catch (e) {
-      console.error('[FACTURE] Erreur téléchargement:', e);
-      Alert.alert('Erreur', "Impossible de télécharger la facture pour le moment.");
+      console.error('[FACTURE] Erreur téléchargement natif:', e);
+      Alert.alert('Erreur', "Impossible d'ouvrir la facture pour le moment.");
     }
   };
 

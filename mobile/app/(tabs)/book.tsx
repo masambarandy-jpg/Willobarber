@@ -161,6 +161,10 @@ export default function BookScreen() {
   const router  = useRouter();
   const isTablet = useIsTablet();
   const insets  = useSafeAreaInsets();
+  // Hauteur réelle du footer CTA fixe, mesurée au rendu — utilisée par Step4Payment
+  // pour caler son paddingBottom exactement dessus et éviter l'espace vide résiduel
+  // (ou, à l'inverse, un chevauchement) entre le contenu et le bouton "Payer".
+  const [footerHeight, setFooterHeight] = useState(0);
   const {
     serviceId,
     quickbook,
@@ -473,6 +477,7 @@ export default function BookScreen() {
           onPaymentMethodChange={setPaymentMethod}
           onCardFormChange={setCardForm}
           onAmountChoiceChange={setAmountChoice}
+          footerHeight={footerHeight}
         />
       )}
 
@@ -494,7 +499,11 @@ export default function BookScreen() {
               son rectangle, y compris hors du bouton — ce qui rendait les
               boutons radio acompte/total du Step4Payment inatteignables dès
               qu'ils défilaient sous cette bande fixe. */}
-          <View style={[styles.footerInner, { paddingBottom }]} pointerEvents="box-none">
+          <View
+            style={[styles.footerInner, { paddingBottom }]}
+            pointerEvents="box-none"
+            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+          >
             <TouchableOpacity
               style={[styles.ctaFull, isPaying && styles.ctaDisabled]}
               onPress={handleNext}
