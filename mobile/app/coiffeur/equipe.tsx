@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
@@ -135,6 +135,15 @@ function mapApiBarber(b: ApiBarber): TeamMember {
   };
 }
 
+// Le fondateur (WilloBarber) doit toujours apparaître en premier dans la liste.
+function trierFondateurEnPremier(members: TeamMember[]): TeamMember[] {
+  return [...members].sort((a, b) => {
+    const aFondateur = a.role === 'Fondateur & Master Barber' ? 0 : 1;
+    const bFondateur = b.role === 'Fondateur & Master Barber' ? 0 : 1;
+    return aFondateur - bFondateur;
+  });
+}
+
 function slotColor(state: SlotState) {
   if (state === 'reserve') return { backgroundColor: CC.gold, borderWidth: 0 };
   if (state === 'ferme') return { backgroundColor: '#e5ddd0', borderWidth: 0 };
@@ -189,7 +198,7 @@ export default function CoiffeurEquipeScreen() {
       const data = await res.json().catch(() => null);
       console.log('ÉQUIPE — GET /api/barbers/ statut:', res.status, 'données:', JSON.stringify(data));
       if (!res.ok || !Array.isArray(data)) throw new Error(`fetch-team-failed-${res.status}`);
-      setTeam(data.map(mapApiBarber));
+      setTeam(trierFondateurEnPremier(data.map(mapApiBarber)));
       setUsingMockTeam(false);
     } catch (error) {
       console.log('ERREUR ÉQUIPE — fallback données démo:', error);
@@ -528,8 +537,13 @@ export default function CoiffeurEquipeScreen() {
       </Modal>
 
       <Modal visible={editModalVisible} transparent animationType={isTablet ? 'fade' : 'slide'} onRequestClose={fermerEdition}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
         <View style={[styles.editOverlay, isTablet && styles.editOverlayTablet]}>
-          <View style={[styles.editCard, isTablet && styles.editCardTablet]}>
+          <View style={[styles.editCard, isTablet && styles.editCardTablet, styles.editCardMaxHeight]}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <Text style={styles.editTitle}>Modifier le membre</Text>
 
             {memberEnEdition && (
@@ -611,8 +625,10 @@ export default function CoiffeurEquipeScreen() {
                 <Text style={styles.confirmBtnText}>{savingMembre ? 'Enregistrement…' : 'Enregistrer'}</Text>
               </TouchableOpacity>
             </View>
+            </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={fermerSuppression}>
@@ -1128,6 +1144,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
+  },
+  editCardMaxHeight: {
+    maxHeight: '90%',
   },
   editOverlayTablet: {
     justifyContent: 'center',
