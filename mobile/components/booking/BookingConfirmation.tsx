@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import {
   Alert,
-  Linking,
   Platform,
   ScrollView,
   StatusBar,
@@ -11,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '@/hooks/useAuth';
 import { TokenStorage } from '@/services/api';
 import { API_BASE_URL, Fonts } from '@/constants';
@@ -116,7 +116,7 @@ export function BookingConfirmation({ booking, reservationId, amountChoice, onGo
     if (Platform.OS === 'web') {
       window.open(url, '_blank');
     } else {
-      Linking.openURL(url);
+      WebBrowser.openBrowserAsync(url, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
     }
   };
 

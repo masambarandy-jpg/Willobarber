@@ -76,7 +76,12 @@ function ProfilTab() {
   const [profilEnregistre, setProfilEnregistre] = useState(false);
   const [loadingProfil, setLoadingProfil] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [savingProfil, setSavingProfil] = useState(false);
   const [profilError, setProfilError] = useState('');
+  // Distinct du profilError générique : ne doit s'afficher qu'après un refus
+  // explicite de la permission photo suite à un clic sur le bouton caméra —
+  // jamais au chargement de la page ni pour une autre erreur.
+  const [permissionError, setPermissionError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,16 +111,38 @@ function ProfilTab() {
     return () => { cancelled = true; };
   }, []);
 
-  const enregistrerProfil = () => {
-    updateProfile({ firstName, lastName, email, phone, role });
-    setProfilEnregistre(true);
-    setTimeout(() => setProfilEnregistre(false), 3000);
+  const enregistrerProfil = async () => {
+    setSavingProfil(true);
+    setProfilError('');
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/auth/me/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ first_name: firstName, last_name: lastName, phone }),
+      });
+      if (!res.ok) throw new Error(`update-failed-${res.status}`);
+      const data = await res.json();
+      setFirstName(data.first_name ?? '');
+      setLastName(data.last_name ?? '');
+      setPhone(data.phone ?? '');
+      updateProfile({ firstName: data.first_name ?? '', lastName: data.last_name ?? '', email, phone: data.phone ?? '', role });
+      setProfilEnregistre(true);
+      setTimeout(() => setProfilEnregistre(false), 3000);
+    } catch (error) {
+      console.log('ERREUR PARAMÈTRES — PATCH /api/auth/me/:', error);
+      setProfilError("Impossible d'enregistrer votre profil. Réessayez.");
+    } finally {
+      setSavingProfil(false);
+    }
   };
 
   const choisirPhoto = async () => {
+    setPermissionError(false);
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      setProfilError("Autorisez l'accès à vos photos pour changer la photo de profil.");
+      setPermissionError(true);
       return;
     }
 
@@ -176,6 +203,11 @@ function ProfilTab() {
           <Text style={styles.profilErrorText}>{profilError}</Text>
         </View>
       )}
+      {permissionError && (
+        <View style={styles.profilErrorBox}>
+          <Text style={styles.profilErrorText}>Autorisez l'accès à vos photos pour changer la photo de profil.</Text>
+        </View>
+      )}
       <View style={styles.avatarRow}>
         <View>
           <Avatar letter={(firstName ?? '').charAt(0).toUpperCase() || 'W'} size={64} photoUri={photoUrl || undefined} />
@@ -201,11 +233,16 @@ function ProfilTab() {
 
       <TouchableOpacity
         onPress={enregistrerProfil}
-        style={[styles.saveBtn, profilEnregistre && styles.saveBtnDone]}
+        disabled={savingProfil}
+        style={[styles.saveBtn, profilEnregistre && styles.saveBtnDone, savingProfil && { opacity: 0.7 }]}
       >
-        <Text style={[styles.saveBtnText, profilEnregistre && styles.saveBtnTextDone]}>
-          {profilEnregistre ? '✓ Profil enregistré !' : 'Enregistrer'}
-        </Text>
+        {savingProfil ? (
+          <ActivityIndicator size="small" color={CC.white} />
+        ) : (
+          <Text style={[styles.saveBtnText, profilEnregistre && styles.saveBtnTextDone]}>
+            {profilEnregistre ? '✓ Profil enregistré !' : 'Enregistrer'}
+          </Text>
+        )}
       </TouchableOpacity>
     </View>
   );

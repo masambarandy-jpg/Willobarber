@@ -333,12 +333,16 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
           {paymentMethod === 'card' && (
             <View>
               <BankCard cardForm={cardForm} cardDetails={cardDetails} />
-              <FieldLabel text={t('step4.cardNumberLabel')} />
-              <StripeCardField
-                ref={cardFieldRef}
-                incompleteMessage={t('step4.cardIncomplete')}
-                onChange={setCardDetails}
-              />
+              <View style={styles.cardFieldsBlock}>
+                <Text style={styles.cardFieldsLabel}>
+                  {t('step4.cardNumberLabel')} · {t('step4.cardExpiryLabel')} · {t('step4.cvcLabel')}
+                </Text>
+                <StripeCardField
+                  ref={cardFieldRef}
+                  incompleteMessage={t('step4.cardIncomplete')}
+                  onChange={setCardDetails}
+                />
+              </View>
               <Text style={styles.cardFieldHint}>{t('step4.cardFieldHint')}</Text>
             </View>
           )}
@@ -358,7 +362,7 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
         </View>
 
         {/* ── Montant à régler maintenant ──────────────────────────────── */}
-        <View style={{ marginTop: 4 }}>
+        <View style={{ marginTop: -4 }}>
           <Text style={styles.amountNowKicker}>{t('step4.amountNowKicker')}</Text>
 
           {/* Option 1 — Acompte fixe obligatoire */}
@@ -521,6 +525,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  cardFieldsBlock: {
+    marginTop: 2,
+  },
+  cardFieldsLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: 'rgba(255,255,255,0.65)',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
   cardFieldHint: {
     fontSize: 11,
     color: GREY,

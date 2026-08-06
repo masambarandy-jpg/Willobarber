@@ -5,121 +5,9 @@ import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { CalendarIcon, StarIcon, CardIcon, XCircleIcon, BellIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
+import { useCoiffeurNotifications, type Notif, type NotifType, type Section } from '@/contexts/CoiffeurNotificationsContext';
 
-type NotifType = 'rdv' | 'avis' | 'paiement' | 'annulation' | 'rappel';
-type Section = "AUJOURD'HUI" | 'HIER';
 type IconKind = 'calendar' | 'star' | 'card' | 'x' | 'bell';
-
-type Notif = {
-  id: string;
-  type: NotifType;
-  title: string;
-  desc: string;
-  time: string;
-  section: Section;
-  unread: boolean;
-  client?: string;
-  avatarLetter?: string;
-  service?: string;
-  barber?: string;
-  date?: string;
-  phone?: string;
-  cancelledAt?: string;
-  rating?: number;
-  reviewText?: string;
-  amount?: string;
-  smsInfo?: string;
-};
-
-const INITIAL_NOTIFICATIONS: Notif[] = [
-  // AUJOURD'HUI
-  {
-    id: '1',
-    type: 'rdv',
-    title: 'Nouveau rendez-vous',
-    desc: 'Antoine Rivière · Signature · 10:30',
-    time: '09:12',
-    section: "AUJOURD'HUI",
-    unread: true,
-    client: 'Antoine Rivière',
-    service: 'Signature WilloBarber',
-    barber: 'Willo',
-    date: 'Mercredi 15 juillet 2026',
-    phone: '06 12 34 56 78',
-  },
-  {
-    id: '2',
-    type: 'avis',
-    title: 'Nouvel avis 5★',
-    desc: 'Thomas Leroy a laissé un avis',
-    time: '08:40',
-    section: "AUJOURD'HUI",
-    unread: true,
-    client: 'Thomas Leroy',
-    avatarLetter: 'T',
-    rating: 5,
-    reviewText: 'Le meilleur barbier de Bruxelles. Willo prend le temps, écoute, et le résultat est toujours impeccable.',
-  },
-  {
-    id: '3',
-    type: 'paiement',
-    title: 'Acompte reçu',
-    desc: '10€ — Karim Benali',
-    time: '08:05',
-    section: "AUJOURD'HUI",
-    unread: true,
-    amount: '10€',
-    client: 'Karim Benali',
-  },
-  // HIER
-  {
-    id: '4',
-    type: 'annulation',
-    title: 'Rendez-vous annulé',
-    desc: 'Marc Dubois · Coupe express · 16:00',
-    time: '18:22',
-    section: 'HIER',
-    unread: true,
-    client: 'Marc Dubois',
-    service: 'Coupe express',
-    date: "Aujourd'hui 16:00",
-    cancelledAt: '18:22',
-  },
-  {
-    id: '5',
-    type: 'rappel',
-    title: 'Rappel envoyé',
-    desc: 'SMS de rappel · 4 clients pour demain',
-    time: '17:00',
-    section: 'HIER',
-    unread: true,
-    smsInfo: '4 clients pour demain',
-  },
-  {
-    id: '6',
-    type: 'avis',
-    title: 'Avis à traiter',
-    desc: 'Karim Benali · sans réponse',
-    time: '14:30',
-    section: 'HIER',
-    unread: false,
-    client: 'Karim Benali',
-    avatarLetter: 'K',
-    rating: 5,
-    reviewText: 'Un vrai moment de détente. La serviette chaude et le rasoir droit, c’est autre chose.',
-  },
-  {
-    id: '7',
-    type: 'paiement',
-    title: 'Virement hebdomadaire',
-    desc: '1 840€ versés sur votre compte',
-    time: '09:00',
-    section: 'HIER',
-    unread: false,
-    amount: '1 840€',
-    client: 'Virement bancaire',
-  },
-];
 
 const SECTION_ORDER: Section[] = ["AUJOURD'HUI", 'HIER'];
 const TABS = ['Toutes', 'Non lues', 'Rendez-vous', 'Avis', 'Paiements'] as const;
@@ -187,13 +75,9 @@ function DetailRow({ emoji, label, value }: { emoji: string; label: string; valu
 
 export default function CoiffeurNotificationsScreen() {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Toutes');
-  const [notifications, setNotifications] = useState<Notif[]>(INITIAL_NOTIFICATIONS);
+  const { notifications, unreadCount, marquerLue } = useCoiffeurNotifications();
   const [selectedNotif, setSelectedNotif] = useState<Notif | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
-
-  const marquerLue = (id: string) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
-  };
 
   const ouvrirDetail = (notif: Notif) => {
     setSelectedNotif(notif);
@@ -216,9 +100,9 @@ export default function CoiffeurNotificationsScreen() {
     router.push('/coiffeur/planning');
   };
 
-  const allerVersAvis = () => {
+  const allerVersAvis = (reviewId?: number) => {
     fermerDetail();
-    router.push('/coiffeur/avis');
+    router.push(reviewId != null ? `/coiffeur/avis?reviewId=${reviewId}` : '/coiffeur/avis');
   };
 
   const filtered = notifications.filter((n) => matchesTab(n, activeTab));
@@ -226,8 +110,6 @@ export default function CoiffeurNotificationsScreen() {
     section,
     items: filtered.filter((n) => n.section === section),
   })).filter((g) => g.items.length > 0);
-
-  const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
     <>
@@ -369,7 +251,7 @@ export default function CoiffeurNotificationsScreen() {
                       <TouchableOpacity style={styles.detailBtnOutline} onPress={fermerDetail}>
                         <Text style={styles.detailBtnOutlineText}>Fermer</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.detailBtnGold} onPress={allerVersAvis}>
+                      <TouchableOpacity style={styles.detailBtnGold} onPress={() => allerVersAvis(selectedNotif.reviewId)}>
                         <Text style={styles.detailBtnGoldText}>Répondre</Text>
                       </TouchableOpacity>
                     </>

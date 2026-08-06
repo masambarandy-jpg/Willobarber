@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
@@ -23,6 +24,7 @@ function formatReviewDate(iso: string): string {
 
 export default function CoiffeurAvisScreen() {
   const isTablet = useIsTablet();
+  const { reviewId } = useLocalSearchParams<{ reviewId?: string }>();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,6 +80,16 @@ export default function CoiffeurAvisScreen() {
     setReplyText('');
     setReplyError(null);
   };
+
+  // Pré-sélection de l'avis quand on arrive depuis le bouton "Répondre"
+  // d'une notification (route /coiffeur/avis?reviewId=X).
+  useEffect(() => {
+    if (!reviewId) return;
+    const id = Number(reviewId);
+    if (reviews.some((r) => r.id === id)) {
+      ouvrirReponse(id);
+    }
+  }, [reviewId, reviews]);
 
   const annulerReponse = () => {
     setActiveReplyId(null);
