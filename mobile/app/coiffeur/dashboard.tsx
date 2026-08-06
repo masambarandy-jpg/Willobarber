@@ -26,7 +26,7 @@ const JOURS_SEMAINE_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', '
 const MOIS_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 
 type CaPeriodData = { total: string; bars: { label: string; v: number }[]; active: string };
-type UpcomingClient = { letter: string; name: string; service: string; barber: string; time: string };
+type UpcomingClient = { id: number; letter: string; name: string; service: string; barber: string; time: string };
 type TopService = { name: string; pct: number };
 type TopServiceWithCount = TopService & { count: number };
 
@@ -125,10 +125,10 @@ const MOCK_TOP_SERVICES: TopServiceWithCount[] = [
 ];
 
 const MOCK_UPCOMING_CLIENTS: UpcomingClient[] = [
-  { letter: 'A', name: 'Antoine Rivière', service: 'Signature', barber: 'Willo', time: '10:30' },
-  { letter: 'K', name: 'Karim Benali', service: 'Barbe', barber: 'Malik', time: '11:15' },
-  { letter: 'L', name: 'Léo Martin', service: 'Le Rituel', barber: 'Willo', time: '14:00' },
-  { letter: 'N', name: 'Noé Vasseur', service: 'Camouflage', barber: 'Idris', time: '16:30' },
+  { id: -1, letter: 'A', name: 'Antoine Rivière', service: 'Signature', barber: 'Willo', time: '10:30' },
+  { id: -2, letter: 'K', name: 'Karim Benali', service: 'Barbe', barber: 'Malik', time: '11:15' },
+  { id: -3, letter: 'L', name: 'Léo Martin', service: 'Le Rituel', barber: 'Willo', time: '14:00' },
+  { id: -4, letter: 'N', name: 'Noé Vasseur', service: 'Camouflage', barber: 'Idris', time: '16:30' },
 ];
 
 const MOCK_STATS = { clientsTotal: 2412, prestationsCount: 14, equipeCount: 3, rdvCount: 386, rdvCountMonth: 386 };
@@ -234,6 +234,7 @@ function useDashboardData() {
           .sort((a, b) => a.time.localeCompare(b.time))
           .slice(0, 4)
           .map((r) => ({
+            id: r.id,
             letter: (r.user_username?.charAt(0) ?? 'W').toUpperCase(),
             name: r.user_username,
             service: r.service_name,
@@ -896,7 +897,7 @@ export default function CoiffeurDashboardScreen() {
         </View>
 
         {upcomingClients.map((c, i) => (
-          <View key={c.name} style={[styles.clientRow, i === upcomingClients.length - 1 && styles.clientRowLast]}>
+          <View key={c.id} style={[styles.clientRow, i === upcomingClients.length - 1 && styles.clientRowLast]}>
             <Avatar letter={c.letter} size={40} />
             <View style={styles.clientInfo}>
               <Text style={styles.clientName}>{c.name}</Text>

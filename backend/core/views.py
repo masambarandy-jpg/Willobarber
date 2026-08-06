@@ -979,6 +979,30 @@ def upload_client_media(request):
     return Response(ClientMediaSerializer(media).data, status=status.HTTP_201_CREATED)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_profile_picture(request):
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return Response({'error': 'Fichier requis.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        result = cloudinary.uploader.upload(
+            uploaded_file,
+            resource_type='image',
+            folder='willobarber/profiles',
+        )
+        logger.info(f"[CLOUDINARY UPLOAD SUCCESS] public_id={result.get('public_id')} url={result.get('secure_url')}")
+    except Exception as e:
+        logger.error(f"[CLOUDINARY UPLOAD ERROR] {e}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    request.user.profile_picture = result.get('secure_url')
+    request.user.save(update_fields=['profile_picture'])
+
+    return Response(UserSerializer(request.user).data)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def client_media_list(request, pk):

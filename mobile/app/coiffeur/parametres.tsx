@@ -1,12 +1,16 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import Slider from '@react-native-community/slider';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { CameraIcon, LockIcon, LogOutIcon, TrashIcon, ArrowRightIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useCoiffeurProfile } from '@/contexts/CoiffeurProfileContext';
+
+const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app';
 
 const TABS = ['Profil', 'Établissement', 'Notifications', 'Paiement', 'Sécurité'] as const;
 type Tab = (typeof TABS)[number];
@@ -68,7 +72,39 @@ function ProfilTab() {
   const [email, setEmail] = useState(profile.email);
   const [phone, setPhone] = useState(profile.phone);
   const [role, setRole] = useState(profile.role);
+  const [photoUrl, setPhotoUrl] = useState(profile.photoUrl);
   const [profilEnregistre, setProfilEnregistre] = useState(false);
+  const [loadingProfil, setLoadingProfil] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [profilError, setProfilError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('coiffeur_token');
+        if (!token) throw new Error('no-token');
+        const res = await fetch(`${API_BASE_URL}/api/auth/me/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`me-fetch-failed-${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setFirstName(data.first_name ?? '');
+        setLastName(data.last_name ?? '');
+        setEmail(data.email ?? '');
+        setPhone(data.phone ?? '');
+        setRole(data.role === 'barber' ? 'Gérant' : data.role ?? profile.role);
+        setPhotoUrl(data.profile_picture ?? '');
+      } catch (error) {
+        console.log('ERREUR PARAMÈTRES — GET /api/auth/me/:', error);
+        if (!cancelled) setProfilError("Impossible de charger votre profil — dernières données connues affichées.");
+      } finally {
+        if (!cancelled) setLoadingProfil(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const enregistrerProfil = () => {
     updateProfile({ firstName, lastName, email, phone, role });
@@ -76,13 +112,75 @@ function ProfilTab() {
     setTimeout(() => setProfilEnregistre(false), 3000);
   };
 
+  const choisirPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setProfilError("Autorisez l'accès à vos photos pour changer la photo de profil.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const token = await AsyncStorage.getItem('coiffeur_token');
+    if (!token) {
+      setProfilError('Session gérant expirée — reconnectez-vous.');
+      return;
+    }
+
+    const asset = result.assets[0];
+    setUploadingPhoto(true);
+    setProfilError('');
+    try {
+      const form = new FormData();
+      form.append('file', {
+        uri: asset.uri,
+        name: asset.fileName || `profil-${Date.now()}.jpg`,
+        type: asset.mimeType || 'image/jpeg',
+      } as unknown as Blob);
+
+      const res = await fetch(`${API_BASE_URL}/api/auth/me/photo/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (!res.ok) throw new Error(`photo-upload-failed-${res.status}`);
+      const data = await res.json();
+      setPhotoUrl(data.profile_picture ?? '');
+      updateProfile({ photoUrl: data.profile_picture ?? '' });
+    } catch (error) {
+      console.log('ERREUR PARAMÈTRES — upload photo:', error);
+      setProfilError("Impossible d'envoyer la photo. Réessayez.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  if (loadingProfil) {
+    return (
+      <View style={[styles.card, styles.profilLoadingCard]}>
+        <ActivityIndicator color={CC.gold} size="large" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.card}>
+      {!!profilError && (
+        <View style={styles.profilErrorBox}>
+          <Text style={styles.profilErrorText}>{profilError}</Text>
+        </View>
+      )}
       <View style={styles.avatarRow}>
         <View>
-          <Avatar letter={(firstName ?? '').charAt(0).toUpperCase() || 'W'} size={64} />
-          <TouchableOpacity style={styles.cameraBtn}>
-            <CameraIcon />
+          <Avatar letter={(firstName ?? '').charAt(0).toUpperCase() || 'W'} size={64} photoUri={photoUrl || undefined} />
+          <TouchableOpacity style={styles.cameraBtn} onPress={choisirPhoto} disabled={uploadingPhoto}>
+            {uploadingPhoto ? <ActivityIndicator size="small" color={CC.white} /> : <CameraIcon />}
           </TouchableOpacity>
         </View>
         <View>
@@ -705,6 +803,22 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
+  },
+  profilLoadingCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  profilErrorBox: {
+    backgroundColor: CC.errorBg,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  profilErrorText: {
+    fontSize: 12.5,
+    color: CC.errorText,
+    lineHeight: 18,
   },
   cardCompact: {
     backgroundColor: CC.white,

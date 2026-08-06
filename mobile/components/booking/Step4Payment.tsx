@@ -309,7 +309,7 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
         </View>
 
         {/* ── Méthode de paiement ───────────────────────────────────────── */}
-        <View style={styles.card}>
+        <View style={[styles.card, styles.paymentMethodCard]}>
           <Text style={styles.cardTitle}>{t('step4.paymentMethodTitle')}</Text>
 
           <View style={styles.tabs}>
@@ -358,7 +358,7 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
         </View>
 
         {/* ── Montant à régler maintenant ──────────────────────────────── */}
-        <View style={{ marginTop: 16 }}>
+        <View style={{ marginTop: 4 }}>
           <Text style={styles.amountNowKicker}>{t('step4.amountNowKicker')}</Text>
 
           {/* Option 1 — Acompte fixe obligatoire */}
@@ -471,6 +471,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     marginBottom: 16,
+  },
+  paymentMethodCard: {
+    paddingBottom: 8,
+    marginBottom: 4,
   },
   cardTitle: {
     fontFamily: Fonts.semiBold,
