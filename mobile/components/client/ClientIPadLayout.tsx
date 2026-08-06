@@ -123,10 +123,15 @@ export default function ClientIPadLayout({ active, children }: Props) {
   const go = (route: ClientRoute) => router.push(ROUTES[route] as never);
 
   // Même dérivation que "Prochain RDV" dans reservations.tsx : le plus proche des
-  // réservations à venir (pending/confirmed), trié par date+heure croissante.
+  // réservations à venir (pending/confirmed) dont la date+heure n'est pas déjà
+  // passée, trié par date+heure croissante.
   const upcomingList = upcoming as (Reservation & { time: string })[];
+  const now = new Date();
+  const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
   const nextReservation = isAuthenticated
-    ? [...upcomingList].sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0] ?? null
+    ? upcomingList
+        .filter((r) => `${r.date}T${r.time}` >= nowKey)
+        .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0] ?? null
     : null;
 
   return (

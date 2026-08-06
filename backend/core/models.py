@@ -13,6 +13,7 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='client')
     phone = models.CharField(max_length=20, blank=True, null=True)
+    profile_picture = models.URLField(max_length=500, blank=True, default='')
     ai_recommendations = models.BooleanField(default=True)
     is_at_risk = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)

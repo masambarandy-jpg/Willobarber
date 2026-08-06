@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { AVATAR_COLORS, AvatarKey, SERIF } from './theme';
 
 type Props = {
   letter: string;
   size?: number;
+  photoUri?: string;
 };
 
 const FALLBACK_PALETTE = Object.values(AVATAR_COLORS);
@@ -17,8 +18,21 @@ function colorFor(letter: string) {
   return FALLBACK_PALETTE[idx] ?? AVATAR_COLORS.W;
 }
 
-export default function Avatar({ letter, size = 42 }: Props) {
+export default function Avatar({ letter, size = 42, photoUri }: Props) {
   const c = colorFor(letter);
+
+  if (photoUri) {
+    return (
+      <Image
+        source={{ uri: photoUri }}
+        style={[
+          styles.circle,
+          { width: size, height: size, borderRadius: size / 2, borderColor: c.ring },
+        ]}
+      />
+    );
+  }
+
   return (
     <View
       style={[

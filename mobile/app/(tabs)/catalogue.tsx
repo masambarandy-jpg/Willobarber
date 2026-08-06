@@ -256,12 +256,6 @@ export default function CatalogueScreen() {
                 <Text style={styles.name}>{svcName(svc)}</Text>
                 <Text style={styles.desc}>{svcDesc(svc)}</Text>
 
-                {__DEV__ && (
-                  <Text style={styles.debugCat}>
-                    DEBUG · category brut API: "{svc.rawCategory ?? '(vide)'}" → mappé: "{svc.cat}"
-                  </Text>
-                )}
-
                 <View style={styles.sep} />
 
                 <View style={styles.metaRow}>
@@ -462,11 +456,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 4,
     marginBottom: 12,
-  },
-  debugCat: {
-    fontSize: 10,
-    color: '#FF6B6B',
-    marginBottom: 8,
   },
   sep: {
     height: 1,

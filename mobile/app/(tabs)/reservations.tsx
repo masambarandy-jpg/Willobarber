@@ -248,9 +248,9 @@ export default function ReservationsScreen() {
   const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
   const pastList = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
 
-  const nextReservation = [...upcomingList].sort((a, b) =>
-    `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)
-  )[0] ?? null;
+  const nextReservation = upcomingList
+    .filter((r) => `${r.date}T${r.time}` >= nowKey)
+    .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0] ?? null;
 
   const pastSorted = [...pastList].sort((a, b) =>
     `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
