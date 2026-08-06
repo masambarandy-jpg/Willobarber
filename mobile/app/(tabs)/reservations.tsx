@@ -5,6 +5,7 @@ import {
   Animated,
   Dimensions,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -32,7 +33,7 @@ import { fmtPrice } from '@/components/booking/data';
 import { useClientMedia } from '@/hooks/useClientMedia';
 import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 import ReviewCard from '@/components/client/ReviewCard';
-import { reviewsApi } from '@/services/api';
+import { reviewsApi, loyaltyApi } from '@/services/api';
 
 const MOIS_ABBR_FR = ['JANV', 'FÉVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOÛT', 'SEPT', 'OCT', 'NOV', 'DÉC'];
 const MOIS_FR_FULL = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -136,32 +137,40 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
   const { t } = useLanguage();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
-        <View style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
-          <Text style={styles.modalTitle}>{t('reservations.cancelModal.title')}</Text>
-          <Text style={styles.modalSub}>{t('reservations.cancelModal.sub')}</Text>
-          <Text style={styles.fieldLabel}>{t('reservations.cancelModal.reasonLabel')}</Text>
-          <TextInput
-            style={styles.modalInput}
-            value={reason}
-            onChangeText={setReason}
-            placeholder={t('reservations.cancelModal.placeholder')}
-            placeholderTextColor="rgba(255,255,255,0.3)"
-            multiline
-          />
-          <View style={styles.modalBtns}>
-            <TouchableOpacity style={styles.btnOutline} onPress={onClose}>
-              <Text style={styles.btnOutlineText}>{t('reservations.cancelModal.keep')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
-              {loading
-                ? <ActivityIndicator color="#C0392B" size="small" />
-                : <Text style={styles.btnDangerText}>{t('reservations.cancelModal.confirmCancel')}</Text>
-              }
-            </TouchableOpacity>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={80}
+      >
+        <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
+          <View style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>{t('reservations.cancelModal.title')}</Text>
+              <Text style={styles.modalSub}>{t('reservations.cancelModal.sub')}</Text>
+              <Text style={styles.fieldLabel}>{t('reservations.cancelModal.reasonLabel')}</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={reason}
+                onChangeText={setReason}
+                placeholder={t('reservations.cancelModal.placeholder')}
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                multiline
+              />
+              <View style={styles.modalBtns}>
+                <TouchableOpacity style={styles.btnOutline} onPress={onClose}>
+                  <Text style={styles.btnOutlineText}>{t('reservations.cancelModal.keep')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
+                  {loading
+                    ? <ActivityIndicator color="#C0392B" size="small" />
+                    : <Text style={styles.btnDangerText}>{t('reservations.cancelModal.confirmCancel')}</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -476,6 +485,36 @@ export default function ReservationsScreen() {
             Alert.alert(t('reservations.cancelNextAlert.doneTitle'), t('reservations.cancelNextAlert.doneMsg'));
           },
         },
+      ]
+    );
+  };
+
+  const handleRedeemLoyalty = () => {
+    const doRedeem = async () => {
+      try {
+        await loyaltyApi.redeem();
+      } catch {
+        // API pas encore disponible côté serveur : on affiche quand même la confirmation.
+      }
+      if (Platform.OS === 'web') {
+        window.alert(t('reservations.loyalty.redeemSuccess'));
+      } else {
+        Alert.alert(t('reservations.loyalty.redeemSuccessTitle'), t('reservations.loyalty.redeemSuccess'));
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(t('reservations.loyalty.redeemConfirm'))) {
+        doRedeem();
+      }
+      return;
+    }
+    Alert.alert(
+      t('reservations.loyalty.redeemConfirmTitle'),
+      t('reservations.loyalty.redeemConfirm'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.confirm'), onPress: doRedeem },
       ]
     );
   };
@@ -890,7 +929,7 @@ export default function ReservationsScreen() {
 
                 {MOCK_LOYALTY.points >= 500 ? (
                   <>
-                    <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85}>
+                    <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85} onPress={handleRedeemLoyalty}>
                       <Text style={styles.loyaltyCtaText}>{t('reservations.loyalty.ctaText')}</Text>
                     </TouchableOpacity>
                     <Text style={styles.loyaltyCtaNote}>{t('reservations.loyalty.ctaNote')}</Text>
@@ -1265,7 +1304,7 @@ export default function ReservationsScreen() {
 
           {MOCK_LOYALTY.points >= 500 ? (
             <>
-              <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85} onPress={handleRedeemLoyalty}>
                 <Text style={styles.loyaltyCtaText}>{t('reservations.loyalty.ctaText')}</Text>
               </TouchableOpacity>
               <Text style={styles.loyaltyCtaNote}>{t('reservations.loyalty.ctaNote')}</Text>
@@ -1736,6 +1775,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '85%',
   },
   modalBoxTablet: {
     borderRadius: 24,
