@@ -6,7 +6,7 @@ import { fr } from 'date-fns/locale';
 import { API_BASE_URL } from '@/constants';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
-import { EditIcon, MailIcon, PhoneIcon, PersonIcon } from '@/components/coiffeur/Icons';
+import { EditIcon, MailIcon, PhoneIcon, PersonIcon, CloseIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 import { useClientMedia } from '@/hooks/useClientMedia';
@@ -771,7 +771,16 @@ export default function CoiffeurClientsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { maxHeight: '80%' }]}>
-            <Text style={styles.modalTitle}>Clients archivés</Text>
+            <View style={styles.archivedModalHeader}>
+              <Text style={[styles.modalTitle, { marginBottom: 0 }]}>Clients archivés</Text>
+              <TouchableOpacity
+                onPress={() => setArchivedModalVisible(false)}
+                style={styles.archivedCloseBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <CloseIcon color={CC.black} size={18} />
+              </TouchableOpacity>
+            </View>
 
             {isLoadingArchived && (
               <ActivityIndicator color={CC.gold} style={{ marginVertical: 24 }} />
@@ -1258,6 +1267,20 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: CC.black,
     marginBottom: 18,
+  },
+  archivedModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  archivedCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: CC.grayBg,
   },
   fieldLabel: {
     fontSize: 11,
