@@ -271,7 +271,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const oauthRedirectUri = AuthSession.makeRedirectUri({ scheme: 'willobarber' });
+  const oauthRedirectUri = AuthSession.makeRedirectUri({ scheme: 'willobarber', path: 'auth' });
 
   const [googleRequest, googleResponse, googlePromptAsync] = hasGoogleConfig
     ? Google.useAuthRequest({

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useReservations } from '@/hooks/useReservations';
@@ -175,6 +176,35 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
   );
 }
 
+interface ReviewModalProps {
+  target: { id: number; service: string } | null;
+  onClose: () => void;
+  onSubmitted: (review: Review) => void;
+}
+
+function ReviewModal({ target, onClose, onSubmitted }: ReviewModalProps) {
+  const isTablet = useIsTablet();
+  return (
+    <Modal visible={!!target} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
+        <View style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
+          {target && (
+            <ReviewCard
+              reservationId={target.id}
+              serviceName={target.service}
+              existingReview={null}
+              onSubmitted={(review) => { onSubmitted(review); onClose(); }}
+            />
+          )}
+          <TouchableOpacity onPress={onClose} style={{ marginTop: 12, alignItems: 'center' }}>
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>Fermer</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 interface QrCodeModalProps {
   reservation: (Reservation & { time: string }) | null;
   onClose: () => void;
@@ -225,6 +255,12 @@ export default function ReservationsScreen() {
   const { showLoginModal } = useAuthModal();
   const { isLoading, refetch, cancel, upcoming, reservations, error } = useReservations();
   const { t } = useLanguage();
+
+  // Recharge les réservations à chaque prise de focus de l'onglet — sans ça, une
+  // réservation créée depuis l'écran "book" n'apparaît pas tant que l'app n'est pas relancée.
+  useFocusEffect(useCallback(() => {
+    refetch();
+  }, [refetch]));
   const [histFilter, setHistFilter] = useState('Tous');
   // null = aucun RDV sélectionné — le panneau de détail (tablette) affiche alors un
   // message de sélection par défaut plutôt que le premier élément de la liste.
@@ -233,6 +269,7 @@ export default function ReservationsScreen() {
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [qrTarget, setQrTarget] = useState<(Reservation & { time: string }) | null>(null);
+  const [reviewModalTarget, setReviewModalTarget] = useState<{ id: number; service: string } | null>(null);
   const [mainTab, setMainTab] = useState<'apercu' | 'coupes'>('apercu');
   const [loyaltyPoints, setLoyaltyPoints] = useState(MOCK_LOYALTY.points);
   const barAnim = useRef(new Animated.Value(0)).current;
@@ -281,6 +318,13 @@ export default function ReservationsScreen() {
 
   const nextRdvView = nextReservation ? (() => {
     const d = parseApiDate(nextReservation.date);
+    const diffDays = Math.ceil(
+      (new Date(d).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24)
+    );
+    const daysLabel =
+      diffDays <= 0 ? t('reservations.nextRdvToday')
+      : diffDays === 1 ? t('reservations.nextRdvTomorrow')
+      : `${t('reservations.nextRdvIn')} ${diffDays} ${t('reservations.nextRdvDaysWord')}`;
     return {
       jour: String(d.getDate()).padStart(2, '0'),
       mois: MOIS_ABBR_FR[d.getMonth()],
@@ -291,6 +335,7 @@ export default function ReservationsScreen() {
       barbier: 'Willo',
       dateLabel: `${d.getDate()} ${MOIS_FR_FULL[d.getMonth()]} ${d.getFullYear()}`,
       dateShort: `${d.getDate()} ${MOIS_ABBR_FR[d.getMonth()]}`,
+      daysLabel,
     };
   })() : null;
 
@@ -304,6 +349,7 @@ export default function ReservationsScreen() {
     barbier: NEXT_RDV.barbier,
     dateLabel: NEXT_RDV.dateLabel,
     dateShort: NEXT_RDV.dateShort,
+    daysLabel: `${t('reservations.nextRdvIn')} 4 ${t('reservations.nextRdvDaysWord')}`,
   };
 
   const TRANSACTIONS = TRANSACTIONS_META.map(tx => ({
@@ -411,9 +457,6 @@ export default function ReservationsScreen() {
     ? HISTORIQUE
     : HISTORIQUE.filter(h => h.annee === histFilter);
 
-  // HISTORIQUE est trié du plus récent au plus ancien (cf. pastSorted) : le premier
-  // élément complété de la liste est donc le dernier RDV honoré par le client.
-  const lastCompletedId = filteredHist.find(h => h.status === 'completed' && h.id != null)?.id ?? null;
   const visibleHist = showAllHistory ? filteredHist : filteredHist.slice(0, 5);
 
   const handleCancel = async (reason: string) => {
@@ -639,7 +682,7 @@ export default function ReservationsScreen() {
                 <>
                   <View style={styles.nextRdvBadgeWrap}>
                     <View style={styles.nextRdvBadge}>
-                      <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvBadge')}</Text>
+                      <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvPrefix')} · {rdv.daysLabel}</Text>
                     </View>
                   </View>
 
@@ -1037,7 +1080,7 @@ export default function ReservationsScreen() {
           <>
             <View style={styles.nextRdvBadgeWrap}>
               <View style={styles.nextRdvBadge}>
-                <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvBadge')}</Text>
+                <Text style={styles.nextRdvBadgeText}>{t('reservations.nextRdvPrefix')} · {rdv.daysLabel}</Text>
               </View>
             </View>
 
@@ -1231,15 +1274,15 @@ export default function ReservationsScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-              {h.status === 'completed' && h.id != null && h.id === lastCompletedId && (
-                <View style={{ marginBottom: 10 }}>
-                  <ReviewCard
-                    reservationId={h.id}
-                    serviceName={h.service}
-                    existingReview={reviewForReservation(h.id)}
-                    onSubmitted={handleReviewSubmitted}
-                  />
-                </View>
+              {h.status === 'completed' && h.id != null && !reviewForReservation(h.id) && (
+                <TouchableOpacity
+                  testID={`btn-leave-review-${i}`}
+                  style={styles.leaveReviewBtn}
+                  onPress={() => setReviewModalTarget({ id: h.id as number, service: h.service })}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.leaveReviewBtnText}>⭐ Laisser un avis</Text>
+                </TouchableOpacity>
               )}
             </React.Fragment>
           ))
@@ -1374,6 +1417,12 @@ export default function ReservationsScreen() {
       <QrCodeModal
         reservation={qrTarget}
         onClose={() => setQrTarget(null)}
+      />
+
+      <ReviewModal
+        target={reviewModalTarget}
+        onClose={() => setReviewModalTarget(null)}
+        onSubmitted={handleReviewSubmitted}
       />
 
     </View>
@@ -1670,6 +1719,22 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  leaveReviewBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(201,168,76,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.3)',
+    borderRadius: 100,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: -4,
+    marginBottom: 10,
+  },
+  leaveReviewBtnText: {
+    color: '#C9A84C',
+    fontSize: 12.5,
+    fontWeight: '600',
   },
 
   // Avatar
