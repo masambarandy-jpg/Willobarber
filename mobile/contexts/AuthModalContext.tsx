@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Easing,
   KeyboardAvoidingView,
@@ -21,10 +22,17 @@ import { BlurView } from 'expo-blur';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
 import { appointmentsApi, authApi, TokenStorage } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
+
+// Ferme le navigateur d'authentification et renvoie le contrôle à l'app une
+// fois l'utilisateur redirigé — doit être appelé au niveau module (une fois).
+WebBrowser.maybeCompleteAuthSession();
 
 type AuthModalContextType = {
   showLoginModal: (onSuccess?: () => void, message?: string) => void;
@@ -33,6 +41,25 @@ type AuthModalContextType = {
 
 const isPhone = (value: string) => /^[+]?[0-9\s\-]{8,}$/.test(value.trim());
 const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
+// À renseigner après création des apps OAuth dans Google Cloud Console et
+// Microsoft Entra (Azure AD) — voir mobile/README ou la doc du projet pour
+// les redirect URIs à y déclarer (exp://... en dev, le scheme "willobarber"
+// en build natif). Tant que ces valeurs sont vides, les boutons Gmail/Outlook
+// affichent un message d'indisponibilité plutôt que de planter.
+const GOOGLE_CLIENT_ID_IOS = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS ?? '';
+const GOOGLE_CLIENT_ID_ANDROID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID ?? '';
+const GOOGLE_CLIENT_ID_WEB = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB ?? '';
+const MICROSOFT_CLIENT_ID = process.env.EXPO_PUBLIC_MICROSOFT_CLIENT_ID ?? '';
+// Google.useAuthRequest() plante si aucun client ID n'est fourni : on ne
+// l'appelle donc que si au moins un des trois est configuré (constante de
+// module, jamais réévaluée entre deux rendus — respecte les règles des hooks).
+const hasGoogleConfig = !!(GOOGLE_CLIENT_ID_IOS || GOOGLE_CLIENT_ID_ANDROID || GOOGLE_CLIENT_ID_WEB);
+
+const MICROSOFT_DISCOVERY = {
+  authorizationEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+  tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+};
 
 const AuthModalContext = createContext<AuthModalContextType>({
   showLoginModal: () => {},
@@ -57,9 +84,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [emailSuffix, setEmailSuffix] = useState<'' | '@gmail.com' | '@outlook.com'>('');
-  const [identifierSelection, setIdentifierSelection] = useState<{ start: number; end: number } | undefined>(undefined);
-  const [suffixOffset, setSuffixOffset] = useState(0);
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'microsoft' | null>(null);
 
   const [isGerant, setIsGerant] = useState(false);
   const [gerantEmail, setGerantEmail] = useState('willo@willobarber.fr');
@@ -182,8 +207,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleAccess = async () => {
-    const rawValue = identifier.trim();
-    const value = emailSuffix && !rawValue.includes('@') ? `${rawValue}${emailSuffix}` : rawValue;
+    const value = identifier.trim();
     if (!value) {
       setError(t('authModal.errorEmpty'));
       return;
@@ -214,12 +238,6 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
 
   const focusIdentifier = () => identifierInputRef.current?.focus();
 
-  const focusIdentifierAtStart = () => {
-    identifierInputRef.current?.focus();
-    setIdentifierSelection({ start: 0, end: 0 });
-    setTimeout(() => setIdentifierSelection(undefined), 50);
-  };
-
   const triggerIdentifierHighlight = () => {
     identifierHighlightAnim.setValue(1);
     Animated.timing(identifierHighlightAnim, {
@@ -230,35 +248,117 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     }).start();
   };
 
-  const handleProviderSelect = (suffix: '@gmail.com' | '@outlook.com') => {
-    // Sur natif, googlegmail:// / ms-outlook:// ouvrent l'app externe sans
-    // authentifier personne dans WilloBarber — ça ne fait que dérouter
-    // l'utilisateur hors de l'app. On se contente donc, sur les deux
-    // plateformes, de pré-remplir le suffixe et de focus le champ identifiant ;
-    // seul le web ouvre en plus une vraie page de connexion dans un nouvel onglet.
-    if (Platform.OS === 'web') {
-      const authUrl = suffix === '@gmail.com'
-        ? 'https://accounts.google.com/signin'
-        : 'https://login.live.com';
-      window.open(authUrl, '_blank');
+  // Connexion/inscription via le profil OAuth vérifié par Google ou Microsoft
+  // (cf. useEffect ci-dessous) : crée le compte s'il n'existe pas encore
+  // (voir OAuthLoginView côté backend) puis connecte l'utilisateur.
+  const completeOAuthLogin = async (email?: string, first?: string, last?: string) => {
+    if (!email) {
+      setError(t('authModal.errorGeneric'));
+      setOauthLoading(null);
+      return;
     }
-
-    setEmailSuffix(suffix);
-    setIdentifier((prev) => prev.split('@')[0]);
-    if (error) setError('');
-    focusIdentifierAtStart();
+    setError('');
+    try {
+      const { access, refresh } = await authApi.oauthLogin(email, first, last);
+      await TokenStorage.save(access, refresh);
+      await refreshUser();
+      handleSuccess();
+    } catch (err: any) {
+      console.log('OAuth login error:', err?.response?.data || err?.message);
+      setError(t('authModal.errorGeneric'));
+    } finally {
+      setOauthLoading(null);
+    }
   };
 
-  // Sur iOS, pré-remplir @gmail.com laissait croire à l'app qu'elle "devinait"
-  // l'email du téléphone — en fait le clavier natif suggère déjà l'adresse liée
-  // à l'Apple ID de l'utilisateur, donc ce pré-remplissage n'apportait rien et
-  // semait la confusion. On se contente de donner le focus au champ identifiant.
-  const handleGmailPress = () => {
-    identifierInputRef.current?.focus();
+  const oauthRedirectUri = AuthSession.makeRedirectUri({ scheme: 'willobarber' });
+
+  const [googleRequest, googleResponse, googlePromptAsync] = hasGoogleConfig
+    ? Google.useAuthRequest({
+        iosClientId: GOOGLE_CLIENT_ID_IOS || undefined,
+        androidClientId: GOOGLE_CLIENT_ID_ANDROID || undefined,
+        webClientId: GOOGLE_CLIENT_ID_WEB || undefined,
+        redirectUri: oauthRedirectUri,
+      })
+    : [null, null, async () => {}];
+
+  const [msRequest, msResponse, msPromptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: MICROSOFT_CLIENT_ID,
+      scopes: ['openid', 'profile', 'email', 'User.Read'],
+      redirectUri: oauthRedirectUri,
+    },
+    MICROSOFT_DISCOVERY
+  );
+
+  useEffect(() => {
+    if (googleResponse?.type !== 'success') return;
+    (async () => {
+      try {
+        const accessToken =
+          googleResponse.authentication?.accessToken ?? (googleResponse.params as any)?.access_token;
+        if (!accessToken) throw new Error('no-access-token');
+        const profile = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }).then((r) => r.json());
+        await completeOAuthLogin(profile.email, profile.given_name, profile.family_name);
+      } catch (err) {
+        console.log('Google OAuth error:', err);
+        setError(t('authModal.errorGeneric'));
+        setOauthLoading(null);
+      }
+    })();
+  }, [googleResponse]);
+
+  useEffect(() => {
+    const codeVerifier = msRequest?.codeVerifier;
+    if (msResponse?.type !== 'success' || !codeVerifier) return;
+    (async () => {
+      try {
+        const tokenResult = await AuthSession.exchangeCodeAsync(
+          {
+            clientId: MICROSOFT_CLIENT_ID,
+            code: (msResponse.params as any).code,
+            redirectUri: oauthRedirectUri,
+            extraParams: { code_verifier: codeVerifier },
+          },
+          MICROSOFT_DISCOVERY
+        );
+        const profile = await fetch('https://graph.microsoft.com/v1.0/me', {
+          headers: { Authorization: `Bearer ${tokenResult.accessToken}` },
+        }).then((r) => r.json());
+        await completeOAuthLogin(profile.mail || profile.userPrincipalName, profile.givenName, profile.surname);
+      } catch (err) {
+        console.log('Microsoft OAuth error:', err);
+        setError(t('authModal.errorGeneric'));
+        setOauthLoading(null);
+      }
+    })();
+  }, [msResponse]);
+
+  const handleGooglePress = async () => {
+    if (!hasGoogleConfig || !googleRequest) {
+      Alert.alert('Google OAuth non configuré');
+      return;
+    }
+    setError('');
+    setOauthLoading('google');
+    const result = await googlePromptAsync();
+    if (result.type !== 'success') setOauthLoading(null);
+  };
+
+  const handleMicrosoftPress = async () => {
+    if (!MICROSOFT_CLIENT_ID || !msRequest) {
+      setError('Connexion Outlook indisponible pour le moment.');
+      return;
+    }
+    setError('');
+    setOauthLoading('microsoft');
+    const result = await msPromptAsync();
+    if (result.type !== 'success') setOauthLoading(null);
   };
 
   const handleOtherProvider = () => {
-    setEmailSuffix('');
     focusIdentifier();
     triggerIdentifierHighlight();
   };
@@ -320,19 +420,31 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                   <View style={styles.quickRow}>
                     <TouchableOpacity
                       style={styles.quickPill}
-                      onPress={handleGmailPress}
+                      onPress={handleGooglePress}
+                      disabled={oauthLoading !== null}
                       activeOpacity={0.75}
                     >
-                      <Text style={styles.quickPillGmailIcon}>G</Text>
-                      <Text style={styles.quickPillText}>{t('authModal.gmail')}</Text>
+                      {oauthLoading === 'google'
+                        ? <ActivityIndicator color="#EA4335" size="small" />
+                        : <>
+                            <Text style={styles.quickPillGmailIcon}>G</Text>
+                            <Text style={styles.quickPillText}>{t('authModal.gmail')}</Text>
+                          </>
+                      }
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.quickPill}
-                      onPress={() => handleProviderSelect('@outlook.com')}
+                      onPress={handleMicrosoftPress}
+                      disabled={oauthLoading !== null}
                       activeOpacity={0.75}
                     >
-                      <Feather name="mail" size={14} color="#4A9EFF" />
-                      <Text style={styles.quickPillText}>{t('authModal.outlook')}</Text>
+                      {oauthLoading === 'microsoft'
+                        ? <ActivityIndicator color="#4A9EFF" size="small" />
+                        : <>
+                            <Feather name="mail" size={14} color="#4A9EFF" />
+                            <Text style={styles.quickPillText}>{t('authModal.outlook')}</Text>
+                          </>
+                      }
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.quickPill} onPress={handleOtherProvider} activeOpacity={0.75}>
                       <Feather name="user" size={14} color="rgba(255,255,255,0.7)" />
@@ -376,13 +488,11 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                         ref={identifierInputRef}
                         style={styles.input}
                         value={identifier}
-                        selection={identifierSelection}
                         onChangeText={(t) => {
                           setIdentifier(t);
                           if (error) setError('');
-                          if (emailSuffix && t.includes('@')) setEmailSuffix('');
                         }}
-                        placeholder={emailSuffix ? '' : t('authModal.identifierPlaceholder')}
+                        placeholder={t('authModal.identifierPlaceholder')}
                         placeholderTextColor="rgba(255,255,255,0.35)"
                         keyboardType="default"
                         autoCapitalize="none"
@@ -391,28 +501,8 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                         returnKeyType="done"
                         onSubmitEditing={handleAccess}
                       />
-                      {!!emailSuffix && (
-                        <>
-                          <Text
-                            style={[styles.input, styles.measureText]}
-                            onLayout={(e) => setSuffixOffset(e.nativeEvent.layout.width)}
-                          >
-                            {identifier}
-                          </Text>
-                          <Text style={[styles.suffixOverlay, { left: suffixOffset }]} pointerEvents="none">
-                            {emailSuffix}
-                          </Text>
-                        </>
-                      )}
                     </View>
                   </Animated.View>
-                  {!!emailSuffix && (
-                    <Text style={styles.providerHint}>
-                      {emailSuffix === '@gmail.com'
-                        ? t('authModal.gmailHint')
-                        : t('authModal.outlookHint')}
-                    </Text>
-                  )}
 
                   <TouchableOpacity
                     style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
@@ -654,24 +744,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     position: 'relative',
-  },
-  measureText: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    opacity: 0,
-  },
-  suffixOverlay: {
-    position: 'absolute',
-    top: 0,
-    fontSize: 14.5,
-    color: '#6B6560',
-  },
-  providerHint: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.45)',
-    marginTop: -10,
-    marginBottom: 16,
   },
   btnPrimary: {
     backgroundColor: '#C9A84C',
