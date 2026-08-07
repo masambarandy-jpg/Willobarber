@@ -272,13 +272,17 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   };
 
   const oauthRedirectUri = AuthSession.makeRedirectUri({ scheme: 'willobarber', path: 'auth' });
+  // TEMPORAIRE — Expo Go n'accepte que le proxy auth.expo.io comme redirect URI
+  // pour Google OAuth (le scheme "willobarber" n'est routable qu'en build natif).
+  // À retirer une fois testé en dev build / build natif.
+  const googleOauthRedirectUri = 'https://auth.expo.io/@anonymous/willobarber';
 
   const [googleRequest, googleResponse, googlePromptAsync] = hasGoogleConfig
     ? Google.useAuthRequest({
         iosClientId: GOOGLE_CLIENT_ID_IOS || undefined,
         androidClientId: GOOGLE_CLIENT_ID_ANDROID || undefined,
         webClientId: GOOGLE_CLIENT_ID_WEB || undefined,
-        redirectUri: oauthRedirectUri,
+        redirectUri: googleOauthRedirectUri,
       })
     : [null, null, async () => {}];
 

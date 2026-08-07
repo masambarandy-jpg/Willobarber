@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 80,
+    paddingBottom: 200,
   },
 
   title: {
