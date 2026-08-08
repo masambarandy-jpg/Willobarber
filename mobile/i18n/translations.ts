@@ -227,7 +227,7 @@ const fr = {
   'reservations.resumeTitle': 'Reprenez là où vous en étiez',
   'reservations.resumeBadge': 'VOTRE COUPE HABITUELLE · 8 FOIS',
   'reservations.resumeServiceMeta': '45 min · avec Willo · 45€',
-  'reservations.resumeCta': 'Reprendre la même coupe',
+  'reservations.resumeCta': 'Même coupe →',
   'reservations.adaptBtn': '✏️ Adapter',
 
   'reservations.favoritesTitle': 'Vos favoris',
@@ -770,7 +770,7 @@ const nl: Record<TranslationKey, string> = {
   'reservations.resumeTitle': 'Ga verder waar u gebleven was',
   'reservations.resumeBadge': 'UW GEBRUIKELIJKE COUPE · 8 KEER',
   'reservations.resumeServiceMeta': '45 min · met Willo · 45€',
-  'reservations.resumeCta': 'Dezelfde coupe opnieuw boeken',
+  'reservations.resumeCta': 'Zelfde coupe →',
   'reservations.adaptBtn': '✏️ Aanpassen',
 
   'reservations.favoritesTitle': 'Uw favorieten',
@@ -1310,7 +1310,7 @@ const en: Record<TranslationKey, string> = {
   'reservations.resumeTitle': 'Pick up where you left off',
   'reservations.resumeBadge': 'YOUR USUAL CUT · 8 TIMES',
   'reservations.resumeServiceMeta': '45 min · with Willo · €45',
-  'reservations.resumeCta': 'Book the same cut again',
+  'reservations.resumeCta': 'Same cut →',
   'reservations.adaptBtn': '✏️ Adjust',
 
   'reservations.favoritesTitle': 'Your favourites',
