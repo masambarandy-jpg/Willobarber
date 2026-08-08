@@ -1,8 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  Dimensions,
-  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
@@ -241,21 +239,6 @@ export default function BookScreen() {
   const [createdReservationId, setCreatedReservationId] = useState<number | null>(null);
   const step4Ref = useRef<Step4PaymentHandle>(null);
   const step3Ref = useRef<Step3DateHandle>(null);
-  const footerBarRef = useRef<View>(null);
-
-  // Step4Payment s'en sert pour scroller le champ carte Stripe (composant natif,
-  // pas un TextInput RN — impossible à faire suivre par le scroll-to-focus
-  // automatique) juste au-dessus du footer, quelle que soit sa position réelle
-  // une fois le clavier ouvert et le KeyboardAvoidingView du footer stabilisé.
-  const getFooterTop = useCallback((): Promise<number> => {
-    return new Promise((resolve) => {
-      if (!footerBarRef.current) {
-        resolve(Dimensions.get('window').height);
-        return;
-      }
-      footerBarRef.current.measureInWindow((_x, y) => resolve(y));
-    });
-  }, []);
 
   // Map slugs statiques → vrais IDs Django (/api/services/)
   useEffect(() => {
@@ -586,51 +569,16 @@ export default function BookScreen() {
           onPaymentMethodChange={setPaymentMethod}
           onCardFormChange={setCardForm}
           onAmountChoiceChange={setAmountChoice}
-          getFooterTop={getFooterTop}
+          onPay={handleNext}
+          isPaying={isPaying}
         />
       )}
 
-      {/* Fixed CTA footer — outer container is pointer-transparent so clicks pass through to cards */}
-      {step === 4 ? (
-        /* Step 4: full-width pay button, no back button.
-           KeyboardAvoidingView plutôt qu'un simple View : le footer est
-           position:absolute/bottom:0, donc sans lui le clavier (ouvert par
-           les champs contact du Step4Payment) recouvre le bouton "Payer" au
-           lieu de le pousser au-dessus. */
-        <KeyboardAvoidingView
-          style={styles.footerContainer}
-          pointerEvents="box-none"
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={100}
-        >
-          {/* pointerEvents="box-none" ici aussi : sans lui, ce View (padding +
-              fond translucide autour du bouton) intercepte tous les clics dans
-              son rectangle, y compris hors du bouton — ce qui rendait les
-              boutons radio acompte/total du Step4Payment inatteignables dès
-              qu'ils défilaient sous cette bande fixe. */}
-          <View
-            ref={footerBarRef}
-            style={[styles.footerInner, { paddingBottom }]}
-            pointerEvents="box-none"
-          >
-            <TouchableOpacity
-              style={[styles.ctaFull, isPaying && styles.ctaDisabled]}
-              onPress={handleNext}
-              disabled={isPaying}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.ctaFullText}>
-                {isPaying ? t('book.cta.paying') : (() => {
-                  const price = booking.service?.price ?? 0;
-                  const amt = amountChoice === 'full' ? price : ACOMPTE_FIXE;
-                  return `${t('book.cta.payPrefix')} ${fmtPrice(amt)} ${t('book.cta.paySuffix')}`;
-                })()}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      ) : (
-        /* Steps 1-3: back button + CTA */
+      {/* Fixed CTA footer — steps 1-3 seulement. Le step 4 a son bouton "Payer"
+          intégré en dernier élément du ScrollView de Step4Payment : un footer
+          position:absolute finissait toujours par flotter au-dessus du champ
+          carte Stripe une fois le clavier ouvert. */}
+      {step !== 4 && (
         <View style={styles.footerContainer} pointerEvents="box-none">
           <View style={[styles.footerInner, { paddingBottom }]} pointerEvents="box-none">
             <TouchableOpacity
@@ -761,30 +709,6 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   ctaText: {
-    fontFamily: Fonts.semiBold,
-    fontSize: 15,
-    color: '#1a1208',
-    fontWeight: '600',
-  },
-
-  // Full-width CTA for step 4
-  ctaFull: {
-    flex: 1,
-    backgroundColor: GOLD,
-    borderRadius: 100,
-    paddingVertical: 15,
-    alignItems: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: GOLD,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 14,
-      },
-      android: { elevation: 5 },
-    }),
-  },
-  ctaFullText: {
     fontFamily: Fonts.semiBold,
     fontSize: 15,
     color: '#1a1208',
