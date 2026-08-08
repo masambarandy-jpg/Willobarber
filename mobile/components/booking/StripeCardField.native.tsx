@@ -4,21 +4,23 @@ import { CardField, useConfirmPayment, type CardFieldInput } from '@stripe/strip
 import { paymentsApi } from '@/services/api';
 import type { StripeCardFieldHandle, StripeCardFieldProps } from './StripeCardField.types';
 
-const INPUT_BG     = 'rgba(255,255,255,0.05)';
-const INPUT_BORDER = 'rgba(255,255,255,0.08)';
+// Fond clair + bordure visible : le client doit voir clairement où saisir
+// les informations de carte, plutôt que sur le fond sombre habituel de l'app.
+const INPUT_BG     = '#FAF8F4';
+const INPUT_BORDER = '#D9D2C1';
 
 const cardFieldStyle: CardFieldInput.Styles = {
   backgroundColor: INPUT_BG,
   borderColor: INPUT_BORDER,
-  borderWidth: 1,
+  borderWidth: 1.5,
   borderRadius: 10,
-  textColor: '#FFFFFF',
-  placeholderColor: 'rgba(255,255,255,0.22)',
+  textColor: '#1A1208',
+  placeholderColor: 'rgba(26,18,8,0.35)',
   fontSize: 14,
 };
 
 export const StripeCardField = forwardRef<StripeCardFieldHandle, StripeCardFieldProps>(
-  function StripeCardField({ onChange, incompleteMessage }, ref) {
+  function StripeCardField({ onChange, incompleteMessage, onFocus }, ref) {
     const { confirmPayment } = useConfirmPayment();
     const detailsRef = useRef<CardFieldInput.Details | undefined>(undefined);
 
@@ -58,6 +60,7 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, StripeCardField
         placeholders={{ number: '1234 5678 9012 3456', expiration: 'MM/AA', cvc: 'CVV' }}
         cardStyle={cardFieldStyle}
         style={styles.cardField}
+        onFocus={() => onFocus?.()}
         onCardChange={(details) => {
           detailsRef.current = details;
           onChange({

@@ -158,8 +158,8 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
                 multiline
               />
               <View style={styles.modalBtns}>
-                <TouchableOpacity style={styles.btnOutline} onPress={onClose}>
-                  <Text style={styles.btnOutlineText}>{t('reservations.cancelModal.keep')}</Text>
+                <TouchableOpacity style={styles.btnKeep} onPress={onClose}>
+                  <Text style={styles.btnKeepText}>{t('reservations.cancelModal.keep')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
                   {loading
@@ -518,8 +518,43 @@ export default function ReservationsScreen() {
   };
 
   const handleReprogrammer = () => {
-    // Le wizard (/(tabs)/book) ne lit pas encore de params de prestation/barbier : navigation simple.
-    router.push('/(tabs)/book');
+    if (!nextReservation) return;
+
+    const goDateTime = () => router.push({
+      pathname: '/(tabs)/book',
+      params: {
+        reschedule: 'true',
+        reservationId: String(nextReservation.id),
+        serviceId: String(nextReservation.service),
+        // Le salon n'a qu'un seul barbier ("Willo") — aucun champ barbier
+        // n'existe sur Reservation côté backend (cf. services/api.ts).
+        barberId: 'willo',
+      },
+    });
+    const goService = () => router.push('/(tabs)/book');
+
+    if (Platform.OS === 'web') {
+      // window.confirm ne propose que 2 choix — Alert.alert est un no-op sur
+      // web (react-native-web) donc on enchaîne deux confirmations.
+      if (window.confirm(t('reservations.rescheduleAlert.dateTimeOption'))) {
+        goDateTime();
+        return;
+      }
+      if (window.confirm(t('reservations.rescheduleAlert.serviceOption'))) {
+        goService();
+      }
+      return;
+    }
+
+    Alert.alert(
+      t('reservations.rescheduleAlert.title'),
+      undefined,
+      [
+        { text: t('reservations.rescheduleAlert.dateTimeOption'), onPress: goDateTime },
+        { text: t('reservations.rescheduleAlert.serviceOption'), onPress: goService },
+        { text: t('common.cancel'), style: 'cancel' },
+      ]
+    );
   };
 
   const handleCancelNextRdv = () => {
@@ -1447,7 +1482,7 @@ const styles = StyleSheet.create({
   headerBrand: { fontFamily: Fonts.semiBold, fontSize: 19, fontWeight: '600', color: '#fff' },
 
   scroll:        { flex: 1 },
-  scrollContent: { padding: 22, paddingBottom: 56 },
+  scrollContent: { paddingHorizontal: 22, paddingTop: 10, paddingBottom: 56 },
 
   mainTabsRow: {
     flexDirection: 'row',
@@ -1499,7 +1534,7 @@ const styles = StyleSheet.create({
   },
 
   kicker:    { fontSize: 11, fontWeight: '600', letterSpacing: 2, color: '#C9A84C', textTransform: 'uppercase', marginBottom: 6 },
-  pageTitle: { fontFamily: Fonts.bold, fontSize: 34, fontWeight: '700', color: '#fff', lineHeight: 40, marginBottom: 18 },
+  pageTitle: { fontFamily: Fonts.bold, fontSize: 34, fontWeight: '700', color: '#fff', lineHeight: 40, marginBottom: 8 },
 
   sectionKicker: {
     fontSize: 11,
@@ -1900,4 +1935,14 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   modalBtns: { flexDirection: 'row', gap: 12 },
+  btnKeep: {
+    flex: 1,
+    borderRadius: 100,
+    paddingVertical: 13,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnKeepText: { color: '#fff', fontWeight: '600', fontSize: 14.5 },
 });

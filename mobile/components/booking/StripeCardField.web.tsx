@@ -21,8 +21,8 @@ const elementOptions = {
   style: {
     base: {
       fontSize: '16px',
-      color: '#ffffff',
-      '::placeholder': { color: 'rgba(255,255,255,0.35)' },
+      color: '#1A1208',
+      '::placeholder': { color: 'rgba(26,18,8,0.35)' },
       iconColor: '#C9A84C',
     },
     invalid: { color: '#C0392B' },
@@ -31,11 +31,14 @@ const elementOptions = {
 
 // Stripe's iframes need to sit above anything react-native-web may stack on top
 // of them (absolutely-positioned overlays, etc.) to remain clickable.
+// Fond clair + bordure visible : le client doit voir immédiatement où saisir
+// chaque information de carte (numéro / expiration / CVV pris pour des champs
+// distincts autrement, sur fond sombre).
 const fieldWrapStyle: React.CSSProperties = {
   position: 'relative',
   zIndex: 1,
-  backgroundColor: 'rgba(255,255,255,0.05)',
-  border: '1px solid rgba(255,255,255,0.08)',
+  backgroundColor: '#FAF8F4',
+  border: '1.5px solid #D9D2C1',
   borderRadius: 10,
   padding: '14px 12px',
 };
@@ -46,20 +49,20 @@ const rowStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'row',
   gap: 12,
-  marginTop: 12,
+  marginTop: 10,
 };
 
 const fieldLabelStyle: React.CSSProperties = {
   fontSize: 10,
-  fontWeight: 600,
+  fontWeight: 700,
   letterSpacing: 1.5,
-  color: 'rgba(255,255,255,0.45)',
+  color: 'rgba(255,255,255,0.65)',
   textTransform: 'uppercase',
-  marginBottom: 7,
+  marginBottom: 6,
 };
 
 const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldProps>(
-  function StripeCardFieldInner({ onChange, incompleteMessage }, ref) {
+  function StripeCardFieldInner({ onChange, incompleteMessage, onFocus }, ref) {
     const { t } = useLanguage();
     const stripe = useStripe();
     const elements = useElements();
@@ -146,6 +149,7 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
         <div style={fieldWrapStyle}>
           <CardNumberElement
             options={numberOptions}
+            onFocus={() => onFocus?.()}
             onChange={(e) => {
               setNumberComplete(e.complete);
               reportChange({ number: e.complete });
@@ -158,6 +162,7 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
             <div style={fieldWrapStyle}>
               <CardExpiryElement
                 options={elementOptions}
+                onFocus={() => onFocus?.()}
                 onChange={(e) => {
                   setExpiryComplete(e.complete);
                   reportChange({ expiry: e.complete });
@@ -170,6 +175,7 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
             <div style={fieldWrapStyle}>
               <CardCvcElement
                 options={elementOptions}
+                onFocus={() => onFocus?.()}
                 onChange={(e) => {
                   setCvcComplete(e.complete);
                   reportChange({ cvc: e.complete });

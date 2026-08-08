@@ -1,5 +1,6 @@
-import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
+  Keyboard,
   Platform,
   ScrollView,
   StyleSheet,
@@ -46,6 +47,10 @@ interface Props {
   onPaymentMethodChange: (m: PaymentMethod) => void;
   onCardFormChange: (f: CardForm) => void;
   onAmountChoiceChange: (a: AmountChoice) => void;
+  // Position en Y du footer "Payer" (position:absolute, géré par book.tsx) sur
+  // l'écran — mesurée à la demande plutôt que reçue en hauteur fixe, car sa
+  // position réelle bouge avec le clavier (KeyboardAvoidingView du footer).
+  getFooterTop?: () => Promise<number>;
 }
 
 function BankCard({ cardForm, cardDetails }: { cardForm: CardForm; cardDetails?: CardInputDetails }) {
@@ -230,11 +235,65 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
   onPaymentMethodChange,
   onCardFormChange,
   onAmountChoiceChange,
+  getFooterTop,
 }, ref) {
   const { service } = booking;
   const { t } = useLanguage();
   const [cardDetails, setCardDetails] = useState<CardInputDetails>();
   const cardFieldRef = useRef<StripeCardFieldHandle>(null);
+
+  // StripeCardField est un composant natif Stripe, pas un TextInput RN : le
+  // scroll-to-focus automatique de la ScrollView (automaticallyAdjustKeyboardInsets)
+  // ne le détecte pas. On scrolle donc manuellement le bloc carte au-dessus du
+  // footer "Payer" dès que le clavier apparaît suite à son focus.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollOffsetRef = useRef(0);
+  const cardFieldWrapRef = useRef<View>(null);
+  const pendingCardFocusRef = useRef(false);
+  const keyboardVisibleRef = useRef(false);
+
+  const scrollCardFieldIntoView = () => {
+    const wrap = cardFieldWrapRef.current;
+    if (!wrap || !getFooterTop) return;
+    getFooterTop().then((footerTop) => {
+      wrap.measureInWindow((_x, y, _width, height) => {
+        const GAP = 16;
+        const overflow = y + height - (footerTop - GAP);
+        if (overflow > 0) {
+          scrollRef.current?.scrollTo({ y: scrollOffsetRef.current + overflow, animated: true });
+        }
+      });
+    });
+  };
+
+  useEffect(() => {
+    // keyboardDidShow (pas Will) : on attend que le footer ait fini de remonter
+    // au-dessus du clavier (son propre KeyboardAvoidingView) avant de le mesurer.
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      keyboardVisibleRef.current = true;
+      if (pendingCardFocusRef.current) {
+        pendingCardFocusRef.current = false;
+        scrollCardFieldIntoView();
+      }
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardVisibleRef.current = false;
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const handleCardFieldFocus = () => {
+    if (keyboardVisibleRef.current) {
+      // Le clavier est déjà ouvert (le champ reprend le focus) — pas de
+      // keyboardDidShow à attendre, on scrolle tout de suite.
+      scrollCardFieldIntoView();
+    } else {
+      pendingCardFocusRef.current = true;
+    }
+  };
 
   const price   = service ? service.price : 0;
   const deposit = ACOMPTE_FIXE;
@@ -257,11 +316,14 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={styles.scroll}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+      onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+      scrollEventThrottle={16}
     >
       {/* Title */}
       <Text style={styles.title}>{t('step4.title')}</Text>
@@ -328,7 +390,7 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
         {paymentMethod === 'card' && (
           <View>
             <BankCard cardForm={cardForm} cardDetails={cardDetails} />
-            <View style={styles.cardFieldsBlock}>
+            <View style={styles.cardFieldsBlock} ref={cardFieldWrapRef}>
               <Text style={styles.cardFieldsLabel}>
                 {t('step4.cardNumberLabel')} · {t('step4.cardExpiryLabel')} · {t('step4.cvcLabel')}
               </Text>
@@ -336,6 +398,7 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
                 ref={cardFieldRef}
                 incompleteMessage={t('step4.cardIncomplete')}
                 onChange={setCardDetails}
+                onFocus={handleCardFieldFocus}
               />
             </View>
             <Text style={styles.cardFieldHint}>{t('step4.cardFieldHint')}</Text>
