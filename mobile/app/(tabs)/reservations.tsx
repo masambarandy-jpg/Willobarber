@@ -823,7 +823,7 @@ export default function ReservationsScreen() {
                   >
                     <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.btnOutline, { paddingHorizontal: 18 }]} onPress={handleAdapter} activeOpacity={0.85}>
+                  <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]} onPress={handleAdapter} activeOpacity={0.85}>
                     <Text style={styles.btnOutlineText}>{t('reservations.adaptBtn')}</Text>
                   </TouchableOpacity>
                 </View>
@@ -1210,7 +1210,7 @@ export default function ReservationsScreen() {
             >
               <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.btnOutline, { paddingHorizontal: 18 }]} onPress={handleAdapter} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]} onPress={handleAdapter} activeOpacity={0.85}>
               <Text style={styles.btnOutlineText}>{t('reservations.adaptBtn')}</Text>
             </TouchableOpacity>
           </View>
