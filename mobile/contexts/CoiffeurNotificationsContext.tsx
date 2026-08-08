@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app';
@@ -23,6 +23,7 @@ export type Notif = {
   cancelledAt?: string;
   rating?: number;
   reviewText?: string;
+  reviewId?: number;
   amount?: string;
   smsInfo?: string;
 };
@@ -55,6 +56,7 @@ export const INITIAL_NOTIFICATIONS: Notif[] = [
     avatarLetter: 'T',
     rating: 5,
     reviewText: 'Le meilleur barbier de Bruxelles. Willo prend le temps, écoute, et le résultat est toujours impeccable.',
+    reviewId: 1,
   },
   {
     id: '3',
@@ -103,6 +105,7 @@ export const INITIAL_NOTIFICATIONS: Notif[] = [
     avatarLetter: 'K',
     rating: 5,
     reviewText: 'Un vrai moment de détente. La serviette chaude et le rasoir droit, c’est autre chose.',
+    reviewId: 2,
   },
   {
     id: '7',
@@ -117,27 +120,64 @@ export const INITIAL_NOTIFICATIONS: Notif[] = [
   },
 ];
 
+// Forme brute renvoyée par GET/PATCH /api/notifications/ (NotificationSerializer
+// côté backend) — plus étroite que Notif : les champs riches (client, service,
+// barber, date, phone, cancelledAt, rating, reviewText, reviewId, amount,
+// smsInfo) affichés dans la modale de détail ne sont pas encore produits par
+// l'API et resteront undefined pour les notifications chargées depuis le serveur.
+type ApiNotif = {
+  id: number;
+  type: NotifType;
+  title: string;
+  desc: string;
+  time: string;
+  section: Section;
+  unread: boolean;
+};
+
 type CoiffeurNotificationsContextType = {
   notifications: Notif[];
   unreadCount: number;
+  loading: boolean;
   marquerLue: (id: string) => void;
 };
 
 const CoiffeurNotificationsContext = createContext<CoiffeurNotificationsContextType>({
   notifications: INITIAL_NOTIFICATIONS,
   unreadCount: 0,
+  loading: false,
   marquerLue: () => {},
 });
 
 export function CoiffeurNotificationsProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notif[]>(INITIAL_NOTIFICATIONS);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('coiffeur_token');
+        if (!token) return;
+        const response = await fetch(`${API_BASE_URL}/api/notifications/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data: ApiNotif[] = await response.json();
+        setNotifications(data.map((n) => ({ ...n, id: String(n.id) })));
+      } catch (error) {
+        // Fallback sur les notifications hardcodées si l'API échoue.
+        console.log('ERREUR NOTIFICATIONS — GET:', error);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   const marquerLue = useCallback((id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
 
     // Best-effort côté API : le compteur local (et donc le badge du menu latéral)
-    // est déjà à jour ci-dessus, qu'importe le résultat de cet appel — l'API
-    // notifications n'existe pas encore forcément côté backend.
+    // est déjà à jour ci-dessus, qu'importe le résultat de cet appel.
     (async () => {
       try {
         const token = await AsyncStorage.getItem('coiffeur_token');
@@ -145,10 +185,10 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
         await fetch(`${API_BASE_URL}/api/notifications/${id}/`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ read: true }),
+          body: JSON.stringify({ is_read: true }),
         });
       } catch (error) {
-        console.log('ERREUR NOTIFICATIONS — PATCH read:', error);
+        console.log('ERREUR NOTIFICATIONS — PATCH is_read:', error);
       }
     })();
   }, []);
@@ -156,7 +196,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
   const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
-    <CoiffeurNotificationsContext.Provider value={{ notifications, unreadCount, marquerLue }}>
+    <CoiffeurNotificationsContext.Provider value={{ notifications, unreadCount, loading, marquerLue }}>
       {children}
     </CoiffeurNotificationsContext.Provider>
   );
