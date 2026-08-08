@@ -4,7 +4,7 @@ from django.dispatch import receiver
 from .models import Reservation, User
 
 AT_RISK_THRESHOLD = 3
-AT_RISK_STATUSES = ('cancelled', 'no_show')
+AT_RISK_STATUSES = ('cancelled', 'cancelled_client', 'no_show')
 
 
 @receiver(post_save, sender=Reservation)

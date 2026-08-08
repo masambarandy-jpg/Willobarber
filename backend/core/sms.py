@@ -45,7 +45,7 @@ def send_reminders_for_tomorrow() -> dict:
     from .models import Reservation
 
     tomorrow = timezone.localdate() + timedelta(days=1)
-    reservations = Reservation.objects.filter(date=tomorrow).exclude(status='cancelled')
+    reservations = Reservation.objects.filter(date=tomorrow).exclude(status__in=['cancelled', 'cancelled_client'])
 
     sent = 0
     failed = 0

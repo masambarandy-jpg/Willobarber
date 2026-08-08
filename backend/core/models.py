@@ -79,6 +79,7 @@ class Reservation(models.Model):
         ('pending', 'En attente'),
         ('confirmed', 'Confirmé'),
         ('cancelled', 'Annulé'),
+        ('cancelled_client', 'Annulé par le client'),
         ('no_show', 'No-show'),
     ]
 
