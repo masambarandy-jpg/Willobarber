@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -161,10 +162,6 @@ export default function BookScreen() {
   const router  = useRouter();
   const isTablet = useIsTablet();
   const insets  = useSafeAreaInsets();
-  // Hauteur réelle du footer CTA fixe, mesurée au rendu — utilisée par Step4Payment
-  // pour caler son paddingBottom exactement dessus et éviter l'espace vide résiduel
-  // (ou, à l'inverse, un chevauchement) entre le contenu et le bouton "Payer".
-  const [footerHeight, setFooterHeight] = useState(0);
   const {
     serviceId,
     quickbook,
@@ -172,6 +169,9 @@ export default function BookScreen() {
     barbier: barbierParam,
     date: dateParam,
     heure,
+    reschedule,
+    reservationId,
+    barberId,
   } = useLocalSearchParams<{
     serviceId?: string;
     quickbook?: string;
@@ -181,22 +181,31 @@ export default function BookScreen() {
     barbier?: string;
     date?: string;
     heure?: string;
+    reschedule?: string;
+    reservationId?: string;
+    barberId?: string;
   }>();
   const isQuickbook = quickbook === 'true';
+  // Mode "reprogrammer" un RDV existant (venu de Mon espace) : service et
+  // barbier verrouillés, on démarre directement à l'étape 3 (date/heure) et
+  // la confirmation PATCH le RDV au lieu d'en créer un nouveau.
+  const isRescheduleMode = reschedule === 'true';
+  const reservationIdNum = reservationId ? Number(reservationId) : null;
+  const hasBookingParams = Boolean(serviceId || isQuickbook || isRescheduleMode);
   const { isAuthenticated, user } = useAuth();
   const { showLoginModal } = useAuthModal();
   const { t } = useLanguage();
   const CTA_LABELS: Record<number, string> = {
     1: t('book.cta.continue'),
     2: t('book.cta.continue'),
-    3: t('book.cta.toPayment'),
+    3: isRescheduleMode ? t('book.cta.confirmReschedule') : t('book.cta.toPayment'),
   };
   const prefilled = useRef(false);
   // Distingue "on vient d'arriver sur la confirmation" (ne pas reset) de
   // "on revient sur cet onglet après l'avoir quitté" (reset autorisé) —
   // sans ça, useFocusEffect reset confirmed dès le premier affichage.
   const hasSeenConfirmation = useRef(false);
-  const [step,          setStep]          = useState(isQuickbook ? 4 : 1);
+  const [step,          setStep]          = useState(isQuickbook ? 4 : isRescheduleMode ? 3 : 1);
   const [confirmed,     setConfirmed]     = useState(false);
   // useFocusEffect ci-dessous doit lire la valeur la plus récente de `confirmed`
   // sans que son callback change d'identité (voir commentaire plus bas) — d'où
@@ -214,6 +223,13 @@ export default function BookScreen() {
       }
       return { ...INITIAL_BOOKING, service, barber, date, time: heure ?? null };
     }
+    if (isRescheduleMode) {
+      // Le service réel (numeric serviceId venu du backend) n'est résolu
+      // qu'une fois serviceIdMap chargé — voir l'effet ci-dessous. Le
+      // barbier, lui, est connu tout de suite (un seul barbier existe).
+      const barber = BARBERS.find(b => b.id === barberId) ?? BARBERS[0] ?? null;
+      return { ...INITIAL_BOOKING, barber };
+    }
     const preselected = SERVICES.find(s => s.id === serviceId);
     return preselected ? { ...INITIAL_BOOKING, service: preselected } : INITIAL_BOOKING;
   });
@@ -225,6 +241,21 @@ export default function BookScreen() {
   const [createdReservationId, setCreatedReservationId] = useState<number | null>(null);
   const step4Ref = useRef<Step4PaymentHandle>(null);
   const step3Ref = useRef<Step3DateHandle>(null);
+  const footerBarRef = useRef<View>(null);
+
+  // Step4Payment s'en sert pour scroller le champ carte Stripe (composant natif,
+  // pas un TextInput RN — impossible à faire suivre par le scroll-to-focus
+  // automatique) juste au-dessus du footer, quelle que soit sa position réelle
+  // une fois le clavier ouvert et le KeyboardAvoidingView du footer stabilisé.
+  const getFooterTop = useCallback((): Promise<number> => {
+    return new Promise((resolve) => {
+      if (!footerBarRef.current) {
+        resolve(Dimensions.get('window').height);
+        return;
+      }
+      footerBarRef.current.measureInWindow((_x, y) => resolve(y));
+    });
+  }, []);
 
   // Map slugs statiques → vrais IDs Django (/api/services/)
   useEffect(() => {
@@ -244,6 +275,17 @@ export default function BookScreen() {
     }).catch(() => {}); // silencieux si pas connecté
   }, []);
 
+  // Mode reprogrammation : le serviceId reçu en param est l'ID Django réel du
+  // service (venu de la réservation), pas le slug statique — on le résout dès
+  // que serviceIdMap est chargé.
+  useEffect(() => {
+    if (!isRescheduleMode || booking.service || !serviceId) return;
+    const numericId = Number(serviceId);
+    const slug = Object.keys(serviceIdMap).find(key => serviceIdMap[key] === numericId);
+    const matched = SERVICES.find(s => s.id === slug);
+    if (matched) setBooking(prev => ({ ...prev, service: matched }));
+  }, [isRescheduleMode, serviceId, serviceIdMap, booking.service]);
+
   // Pre-fill contact from authenticated user
   useEffect(() => {
     if (user && !prefilled.current) {
@@ -261,13 +303,54 @@ export default function BookScreen() {
   }, [user]);
 
   const handleBack = () => {
+    // Service et barbier sont verrouillés en mode reprogrammation — il n'y a
+    // pas d'étape 1/2 à revisiter, "Retour" quitte simplement le wizard.
+    if (isRescheduleMode) { router.back(); return; }
     if (step === 1) router.replace('/(tabs)');
     else setStep(s => s - 1);
+  };
+
+  const confirmReschedule = async () => {
+    if (!reservationIdNum || !booking.date || !booking.time) return;
+    setIsPaying(true);
+    try {
+      const d = booking.date;
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      await reservationsApi.reschedule(reservationIdNum, { date: dateStr, time: booking.time });
+    } catch (e: any) {
+      setIsPaying(false);
+      if (e?.response?.status === 409) {
+        const message = e.response?.data?.error
+          || 'Ce créneau vient d\'être pris par quelqu\'un d\'autre. Veuillez choisir un autre horaire.';
+        if (Platform.OS === 'web') window.alert(message);
+        else Alert.alert('Créneau indisponible', message);
+        setBooking(prev => ({ ...prev, time: null }));
+        step3Ref.current?.refresh();
+        return;
+      }
+      const message = t('book.rescheduleErrorMsg');
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert(t('book.rescheduleErrorTitle'), message);
+      return;
+    }
+    setIsPaying(false);
+    if (Platform.OS === 'web') {
+      window.alert(t('book.rescheduleSuccessMsg'));
+      router.back();
+    } else {
+      Alert.alert(t('book.rescheduleSuccessTitle'), t('book.rescheduleSuccessMsg'), [
+        { text: t('common.ok'), onPress: () => router.back() },
+      ]);
+    }
   };
 
   const handleNext = async () => {
     if (step === 1 && !isAuthenticated) {
       showLoginModal(() => setStep(2), t('book.loginPrompt'));
+      return;
+    }
+    if (isRescheduleMode && step === 3) {
+      await confirmReschedule();
       return;
     }
     if (step < 4) {
@@ -389,6 +472,20 @@ export default function BookScreen() {
     }, [])
   );
 
+  // "Nouveau rendez-vous" (aucun param) doit toujours repartir d'un wizard
+  // vierge. Les onglets restent montés par React Navigation d'une visite à
+  // l'autre, donc un simple state initializer ne suffit pas si l'utilisateur
+  // revient sur cet onglet après une précédente session de réservation.
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!hasBookingParams) {
+        setStep(1);
+        setBooking(INITIAL_BOOKING);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hasBookingParams])
+  );
+
   // ── State setters ─────────────────────────────────────────────────────────
 
   const selectService = (s: StaticService) =>
@@ -441,6 +538,17 @@ export default function BookScreen() {
         totalPrice={totalPrice}
       />
 
+      {/* Bouton retour — visible uniquement en mode reprogrammation (venu de Mon espace) */}
+      {isRescheduleMode && (
+        <TouchableOpacity
+          style={styles.topBackBtn}
+          onPress={() => router.back()}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.topBackBtnText}>{t('book.backBtn')}</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Fixed stepper */}
       <BookingStepper currentStep={step} />
 
@@ -465,6 +573,7 @@ export default function BookScreen() {
           onDateSelect={selectDate}
           onTimeSelect={selectTime}
           serviceId={serviceIdMap[booking.service?.id ?? ''] ?? null}
+          titleOverride={isRescheduleMode ? t('book.rescheduleTitle') : undefined}
         />
       )}
       {step === 4 && (
@@ -477,7 +586,7 @@ export default function BookScreen() {
           onPaymentMethodChange={setPaymentMethod}
           onCardFormChange={setCardForm}
           onAmountChoiceChange={setAmountChoice}
-          footerHeight={footerHeight}
+          getFooterTop={getFooterTop}
         />
       )}
 
@@ -500,9 +609,9 @@ export default function BookScreen() {
               boutons radio acompte/total du Step4Payment inatteignables dès
               qu'ils défilaient sous cette bande fixe. */}
           <View
+            ref={footerBarRef}
             style={[styles.footerInner, { paddingBottom }]}
             pointerEvents="box-none"
-            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
           >
             <TouchableOpacity
               style={[styles.ctaFull, isPaying && styles.ctaDisabled]}
@@ -532,12 +641,14 @@ export default function BookScreen() {
               <Text style={styles.backBtnText}>{t('common.back')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.cta, !ctaEnabled && styles.ctaDisabled]}
+              style={[styles.cta, (!ctaEnabled || isPaying) && styles.ctaDisabled]}
               onPress={handleNext}
-              disabled={!ctaEnabled}
+              disabled={!ctaEnabled || isPaying}
               activeOpacity={0.85}
             >
-              <Text style={styles.ctaText}>{CTA_LABELS[step]}</Text>
+              <Text style={styles.ctaText}>
+                {isPaying ? t('book.cta.rescheduling') : CTA_LABELS[step]}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -616,6 +727,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '500',
+  },
+
+  topBackBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  topBackBtnText: {
+    fontSize: 14,
+    color: GOLD,
+    fontWeight: '600',
   },
 
   cta: {
