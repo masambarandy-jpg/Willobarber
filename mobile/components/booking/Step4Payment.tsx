@@ -258,7 +258,10 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
     getFooterTop().then((footerTop) => {
       wrap.measureInWindow((_x, y, _width, height) => {
         const GAP = 16;
-        const overflow = y + height - (footerTop - GAP);
+        // Marge additionnelle pour aussi révéler les options acompte/total
+        // (radio cards) juste sous le champ carte, pas seulement le champ lui-même.
+        const EXTRA_SCROLL = 120;
+        const overflow = y + height + EXTRA_SCROLL - (footerTop - GAP);
         if (overflow > 0) {
           scrollRef.current?.scrollTo({ y: scrollOffsetRef.current + overflow, animated: true });
         }
