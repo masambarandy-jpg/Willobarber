@@ -28,6 +28,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
@@ -191,7 +192,7 @@ def available_slots(request):
         t.strftime('%H:%M')
         for t in Reservation.objects
             .filter(date=requested_date)
-            .exclude(status='cancelled')
+            .exclude(status__in=['cancelled', 'cancelled_client'])
             .values_list('time', flat=True)
     }
 
@@ -257,13 +258,28 @@ class ReservationViewSet(viewsets.ModelViewSet):
             return Reservation.objects.all()
         return Reservation.objects.filter(user=user)
 
-    def get_permissions(self):
-        # Marking a reservation as paid (payment_status/payment_method/amount_paid)
-        # is a staff-only operation — any authenticated user could otherwise
-        # tamper with another client's payment record.
-        if self.action in ('update', 'partial_update'):
-            return [IsStaffRole()]
-        return super().get_permissions()
+    # Champs qu'un client n'est jamais autorisé à modifier lui-même — seul le
+    # staff (via IsStaffRole) peut les toucher, sinon n'importe quel client
+    # pourrait falsifier son propre statut de paiement.
+    STAFF_ONLY_FIELDS = {'payment_status', 'payment_method', 'amount_paid'}
+    # Seules ces actions restent ouvertes à un client sur sa propre réservation :
+    # l'annuler (status='cancelled_client' + motif) ou la reprogrammer (date/heure)
+    # — cf. reservationsApi.cancel()/.reschedule() côté mobile.
+    CLIENT_ALLOWED_FIELDS = {'status', 'cancellation_reason', 'date', 'time'}
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        is_staff = user.is_superuser or getattr(user, 'role', None) == 'admin'
+        if not is_staff:
+            requested_fields = set(self.request.data.keys())
+            if requested_fields & self.STAFF_ONLY_FIELDS:
+                raise PermissionDenied("Seul le salon peut modifier ces informations.")
+            if requested_fields - self.CLIENT_ALLOWED_FIELDS:
+                raise PermissionDenied("Vous ne pouvez qu'annuler ou reprogrammer votre réservation.")
+            # Un client ne peut faire évoluer le statut que vers "annulé par le client".
+            if 'status' in requested_fields and self.request.data.get('status') != 'cancelled_client':
+                raise PermissionDenied("Vous ne pouvez qu'annuler votre réservation.")
+        serializer.save()
 
     def create(self, request, *args, **kwargs):
         date = request.data.get('date')
@@ -431,6 +447,52 @@ class PasswordlessLoginView(APIView):
         })
 
 
+class OAuthLoginView(APIView):
+    """Connexion via un provider OAuth externe (Gmail, Outlook) déjà vérifié
+    côté client par expo-auth-session — l'email fourni est donc considéré
+    fiable. Contrairement à PasswordlessLoginView, cette route crée le compte
+    client à la volée si l'email n'existe pas encore (aucun mot de passe
+    utilisable n'est défini : seule la connexion OAuth ou passwordless
+    permettra de s'y reconnecter)."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = (request.data.get('email') or '').strip().lower()
+        if not email:
+            return Response({'error': 'email requis'}, status=400)
+
+        first_name = (request.data.get('first_name') or '').strip()
+        last_name = (request.data.get('last_name') or '').strip()
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            base_username = email.split('@')[0] or 'client'
+            username = base_username
+            suffix = 1
+            while User.objects.filter(username=username).exists():
+                suffix += 1
+                username = f'{base_username}{suffix}'
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            user.set_unusable_password()
+            user.save()
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+            },
+        })
+
+
 class CheckClientView(APIView):
     permission_classes = [AllowAny]
 
@@ -507,7 +569,7 @@ def recommendations(request):
     if not user.ai_recommendations:
         return Response({'recommendations': [], 'ai_text': None, 'message': 'Recommandations IA désactivées.'})
 
-    history = Reservation.objects.filter(user=user).exclude(status='cancelled').order_by('-date')
+    history = Reservation.objects.filter(user=user).exclude(status__in=['cancelled', 'cancelled_client']).order_by('-date')
 
     recommendations_data = None
 
