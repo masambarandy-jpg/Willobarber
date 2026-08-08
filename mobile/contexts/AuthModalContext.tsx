@@ -22,6 +22,7 @@ import { BlurView } from 'expo-blur';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
@@ -44,9 +45,14 @@ const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim(
 
 // À renseigner après création des apps OAuth dans Google Cloud Console et
 // Microsoft Entra (Azure AD) — voir mobile/README ou la doc du projet pour
-// les redirect URIs à y déclarer (exp://... en dev, le scheme "willobarber"
-// en build natif). Tant que ces valeurs sont vides, les boutons Gmail/Outlook
-// affichent un message d'indisponibilité plutôt que de planter.
+// les redirect URIs à y déclarer (le scheme "willobarber" en build natif).
+// Tant que ces valeurs sont vides, les boutons Gmail/Outlook affichent un
+// message d'indisponibilité plutôt que de planter.
+// Google : le proxy auth.expo.io est fermé (et l'option useProxy a été
+// retirée d'expo-auth-session) — la connexion Google ne fonctionne donc plus
+// du tout dans Expo Go, seulement dans un dev build / build natif où le
+// bundle id correspond à celui déclaré dans Google Cloud Console. Voir plus
+// bas où googlePromptAsync est utilisé.
 const GOOGLE_CLIENT_ID_IOS = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS ?? '';
 const GOOGLE_CLIENT_ID_ANDROID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID ?? '';
 const GOOGLE_CLIENT_ID_WEB = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB ?? '';
@@ -55,6 +61,12 @@ const MICROSOFT_CLIENT_ID = process.env.EXPO_PUBLIC_MICROSOFT_CLIENT_ID ?? '';
 // l'appelle donc que si au moins un des trois est configuré (constante de
 // module, jamais réévaluée entre deux rendus — respecte les règles des hooks).
 const hasGoogleConfig = !!(GOOGLE_CLIENT_ID_IOS || GOOGLE_CLIENT_ID_ANDROID || GOOGLE_CLIENT_ID_WEB);
+// Google OAuth natif exige un redirect URI stable (scheme custom ou reversed
+// client ID) qu'Expo Go ne peut pas enregistrer — le proxy auth.expo.io qui
+// permettait de contourner ça a été fermé par Expo en 2023 et n'a pas de
+// remplaçant côté Expo Go. Le bouton reste donc désactivé tant qu'on tourne
+// dans Expo Go ; il redevient utilisable dans un dev build / build natif.
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 const MICROSOFT_DISCOVERY = {
   authorizationEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
@@ -272,10 +284,11 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   };
 
   const oauthRedirectUri = AuthSession.makeRedirectUri({ scheme: 'willobarber', path: 'auth' });
-  // TEMPORAIRE — Expo Go n'accepte que le proxy auth.expo.io comme redirect URI
-  // pour Google OAuth (le scheme "willobarber" n'est routable qu'en build natif).
-  // À retirer une fois testé en dev build / build natif.
-  const googleOauthRedirectUri = 'https://auth.expo.io/@anonymous/willobarber';
+  // Le proxy auth.expo.io (utilisé via `useProxy`) a été fermé par Expo en 2023 ;
+  // l'option n'existe même plus dans les types actuels. Le bouton Google est
+  // désactivé dans Expo Go (cf. isExpoGo) — ce redirect URI n'est donc utilisé
+  // qu'en dev build / build natif, où le scheme "willobarber" est routable.
+  const googleOauthRedirectUri = oauthRedirectUri;
 
   const [googleRequest, googleResponse, googlePromptAsync] = hasGoogleConfig
     ? Google.useAuthRequest({
@@ -341,17 +354,20 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   }, [msResponse]);
 
   const handleGooglePress = async () => {
+    if (isExpoGo) return;
     if (!hasGoogleConfig || !googleRequest) {
       Alert.alert('Google OAuth non configuré');
       return;
     }
     setError('');
     setOauthLoading('google');
+    console.log('REDIRECT URI USED:', googleRequest?.redirectUri);
     const result = await googlePromptAsync();
     if (result.type !== 'success') setOauthLoading(null);
   };
 
   const handleMicrosoftPress = async () => {
+    if (isExpoGo) return;
     if (!MICROSOFT_CLIENT_ID || !msRequest) {
       setError('Connexion Outlook indisponible pour le moment.');
       return;
@@ -422,34 +438,44 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                   </Text>
 
                   <View style={styles.quickRow}>
-                    <TouchableOpacity
-                      style={styles.quickPill}
-                      onPress={handleGooglePress}
-                      disabled={oauthLoading !== null}
-                      activeOpacity={0.75}
-                    >
-                      {oauthLoading === 'google'
-                        ? <ActivityIndicator color="#EA4335" size="small" />
-                        : <>
-                            <Text style={styles.quickPillGmailIcon}>G</Text>
-                            <Text style={styles.quickPillText}>{t('authModal.gmail')}</Text>
-                          </>
-                      }
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.quickPill}
-                      onPress={handleMicrosoftPress}
-                      disabled={oauthLoading !== null}
-                      activeOpacity={0.75}
-                    >
-                      {oauthLoading === 'microsoft'
-                        ? <ActivityIndicator color="#4A9EFF" size="small" />
-                        : <>
-                            <Feather name="mail" size={14} color="#4A9EFF" />
-                            <Text style={styles.quickPillText}>{t('authModal.outlook')}</Text>
-                          </>
-                      }
-                    </TouchableOpacity>
+                    <View style={styles.quickPillWrap}>
+                      <TouchableOpacity
+                        style={[styles.quickPill, isExpoGo && styles.quickPillDisabled]}
+                        onPress={handleGooglePress}
+                        disabled={oauthLoading !== null || isExpoGo}
+                        activeOpacity={0.75}
+                      >
+                        {oauthLoading === 'google'
+                          ? <ActivityIndicator color="#EA4335" size="small" />
+                          : <>
+                              <Text style={[styles.quickPillGmailIcon, isExpoGo && styles.quickPillTextDisabled]}>G</Text>
+                              <Text style={[styles.quickPillText, isExpoGo && styles.quickPillTextDisabled]}>{t('authModal.gmail')}</Text>
+                            </>
+                        }
+                      </TouchableOpacity>
+                      {isExpoGo && (
+                        <Text style={styles.quickPillCaption}>{t('authModal.googleUnavailable')}</Text>
+                      )}
+                    </View>
+                    <View style={styles.quickPillWrap}>
+                      <TouchableOpacity
+                        style={[styles.quickPill, isExpoGo && styles.quickPillDisabled]}
+                        onPress={handleMicrosoftPress}
+                        disabled={oauthLoading !== null || isExpoGo}
+                        activeOpacity={0.75}
+                      >
+                        {oauthLoading === 'microsoft'
+                          ? <ActivityIndicator color="#4A9EFF" size="small" />
+                          : <>
+                              <Feather name="mail" size={14} color={isExpoGo ? 'rgba(255,255,255,0.35)' : '#4A9EFF'} />
+                              <Text style={[styles.quickPillText, isExpoGo && styles.quickPillTextDisabled]}>{t('authModal.outlook')}</Text>
+                            </>
+                        }
+                      </TouchableOpacity>
+                      {isExpoGo && (
+                        <Text style={styles.quickPillCaption}>{t('authModal.outlookUnavailable')}</Text>
+                      )}
+                    </View>
                     <TouchableOpacity style={styles.quickPill} onPress={handleOtherProvider} activeOpacity={0.75}>
                       <Feather name="user" size={14} color="rgba(255,255,255,0.7)" />
                       <Text style={styles.quickPillText}>{t('authModal.other')}</Text>
@@ -667,8 +693,24 @@ const styles = StyleSheet.create({
   },
   quickRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 10,
     marginBottom: 20,
+  },
+  quickPillWrap: {
+    flex: 1,
+  },
+  quickPillDisabled: {
+    opacity: 0.4,
+  },
+  quickPillTextDisabled: {
+    color: 'rgba(255,255,255,0.35)',
+  },
+  quickPillCaption: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center',
+    marginTop: 4,
   },
   quickPill: {
     flex: 1,
