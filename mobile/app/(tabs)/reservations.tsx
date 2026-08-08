@@ -815,7 +815,7 @@ export default function ReservationsScreen() {
                     <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
                   </View>
                 </View>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flexDirection: 'row', gap: 16 }}>
                   <TouchableOpacity
                     style={[styles.btnPrimary, { flex: 1 }]}
                     onPress={handleResumeSameCut}
@@ -1202,7 +1202,7 @@ export default function ReservationsScreen() {
               <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
             </View>
           </View>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={{ flexDirection: 'row', gap: 16 }}>
             <TouchableOpacity
               style={[styles.btnPrimary, { flex: 1 }]}
               onPress={handleResumeSameCut}
