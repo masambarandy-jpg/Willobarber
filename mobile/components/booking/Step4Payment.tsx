@@ -46,6 +46,8 @@ interface Props {
   onPaymentMethodChange: (m: PaymentMethod) => void;
   onCardFormChange: (f: CardForm) => void;
   onAmountChoiceChange: (a: AmountChoice) => void;
+  onPay: () => void;
+  isPaying: boolean;
 }
 
 function BankCard({ cardForm, cardDetails }: { cardForm: CardForm; cardDetails?: CardInputDetails }) {
@@ -230,6 +232,8 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
   onPaymentMethodChange,
   onCardFormChange,
   onAmountChoiceChange,
+  onPay,
+  isPaying,
 }, ref) {
   const { service } = booking;
   const { t } = useLanguage();
@@ -441,6 +445,23 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
           </View>
         </View>
       )}
+
+      {/* ── Bouton Payer (dernier élément du ScrollView, pas un footer absolu :
+           reste juste sous le champ carte, poussé au-dessus du clavier par
+           automaticallyAdjustKeyboardInsets) ───────────────────────────── */}
+      <TouchableOpacity
+        testID="btn-pay"
+        style={[styles.ctaFull, isPaying && styles.ctaDisabled]}
+        onPress={onPay}
+        disabled={isPaying}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.ctaFullText}>
+          {isPaying
+            ? t('book.cta.paying')
+            : `${t('book.cta.payPrefix')} ${fmtPrice(payNow)} ${t('book.cta.paySuffix')}`}
+        </Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 });
@@ -451,6 +472,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 40,
+  },
+
+  ctaFull: {
+    backgroundColor: GOLD,
+    borderRadius: 100,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: GOLD,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 14,
+      },
+      android: { elevation: 5 },
+    }),
+  },
+  ctaFullText: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 15,
+    color: '#1a1208',
+    fontWeight: '600',
+  },
+  ctaDisabled: {
+    opacity: 0.4,
   },
 
   title: {
