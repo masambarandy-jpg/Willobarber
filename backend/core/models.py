@@ -199,6 +199,30 @@ class ClientMedia(models.Model):
         return f"{self.media_type} - {self.client} ({self.created_at:%Y-%m-%d})"
 
 
+class Notification(models.Model):
+    TYPE_CHOICES = [
+        ('rdv', 'Rendez-vous'),
+        ('avis', 'Avis'),
+        ('paiement', 'Paiement'),
+        ('annulation', 'Annulation'),
+        ('rappel', 'Rappel'),
+    ]
+
+    # Pas de FK vers User : ces notifications sont destinées au coiffeur/gérant
+    # uniquement (dashboard IsStaffRole), pas à un client en particulier.
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    title = models.CharField(max_length=255)
+    desc = models.CharField(max_length=500)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.type} — {self.title}"
+
+
 class Review(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reviews')
     reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='review')

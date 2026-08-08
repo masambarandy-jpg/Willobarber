@@ -34,7 +34,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
 from django.utils import timezone
-from .models import Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave
+from .models import Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave, Notification
 from .emails import format_date_fr, format_date_fr_short, format_heure_fr
 from .permissions import IsStaffRole
 from .sms import send_reminders_for_tomorrow
@@ -42,7 +42,7 @@ from .serializers import (
     BarbershopSerializer, BarberSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
     ClosedPeriodSerializer, ReviewSerializer, WaitingListSerializer,
-    BarberLeaveSerializer,
+    BarberLeaveSerializer, NotificationSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -149,6 +149,13 @@ class BarberLeaveViewSet(viewsets.ModelViewSet):
         if self.action in ('list', 'retrieve'):
             return [AllowAny()]
         return [IsStaffRole()]
+
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    queryset = Notification.objects.all()
+    serializer_class = NotificationSerializer
+    permission_classes = [IsStaffRole]
+    http_method_names = ['get', 'patch', 'head', 'options']
 
 
 class WaitingListViewSet(viewsets.ModelViewSet):

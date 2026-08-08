@@ -1,5 +1,6 @@
+from django.utils import timezone
 from rest_framework import serializers
-from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave
+from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave, Notification
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -136,6 +137,30 @@ class WaitingListSerializer(serializers.ModelSerializer):
         model = WaitingList
         fields = ['id', 'client', 'service', 'service_name', 'preferred_date', 'created_at', 'notified']
         read_only_fields = ['notified']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    # time/section/unread sont dérivés de created_at/is_read pour coller au
+    # format attendu par CoiffeurNotificationsContext côté mobile, sans
+    # dupliquer ces informations en base.
+    time = serializers.SerializerMethodField()
+    section = serializers.SerializerMethodField()
+    unread = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Notification
+        fields = ['id', 'type', 'title', 'desc', 'time', 'section', 'unread', 'is_read', 'created_at']
+        read_only_fields = ['type', 'title', 'desc', 'created_at']
+
+    def get_time(self, obj):
+        return timezone.localtime(obj.created_at).strftime('%H:%M')
+
+    def get_section(self, obj):
+        today = timezone.localtime(timezone.now()).date()
+        return "AUJOURD'HUI" if timezone.localtime(obj.created_at).date() == today else 'HIER'
+
+    def get_unread(self, obj):
+        return not obj.is_read
 
 
 class ClientMediaSerializer(serializers.ModelSerializer):
