@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
 from .views import (
     BarbershopViewSet, BarberViewSet, ServiceViewSet, ReservationViewSet, ClosedPeriodViewSet,
-    WaitingListViewSet, BarberLeaveViewSet,
+    WaitingListViewSet, BarberLeaveViewSet, NotificationViewSet,
 )
 
 router = DefaultRouter()
@@ -15,6 +15,7 @@ router.register(r'reservations', ReservationViewSet)
 router.register(r'closed-periods', ClosedPeriodViewSet)
 router.register(r'waiting-list', WaitingListViewSet)
 router.register(r'barber-leaves', BarberLeaveViewSet)
+router.register(r'notifications', NotificationViewSet)
 
 urlpatterns = [
     path('reservations/<int:pk>/acompte-invoice/', views.generate_invoice, name='invoice'),
@@ -29,6 +30,7 @@ urlpatterns = [
     path('auth/me/photo/', views.upload_profile_picture, name='me-photo'),
     path('auth/change-password/', views.ChangePasswordView.as_view(), name='change-password'),
     path('auth/passwordless-login/', views.PasswordlessLoginView.as_view(), name='passwordless-login'),
+    path('auth/oauth-login/', views.OAuthLoginView.as_view(), name='oauth-login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('appointments/check-client/', views.CheckClientView.as_view(), name='check-client'),
     path('recommendations/', views.recommendations, name='recommendations'),
