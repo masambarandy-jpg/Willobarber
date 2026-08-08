@@ -14,5 +14,4 @@ export interface StripeCardFieldHandle {
 export interface StripeCardFieldProps {
   onChange: (details: CardInputDetails) => void;
   incompleteMessage: string;
-  onFocus?: () => void;
 }

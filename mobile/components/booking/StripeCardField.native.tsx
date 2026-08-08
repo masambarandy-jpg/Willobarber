@@ -20,7 +20,7 @@ const cardFieldStyle: CardFieldInput.Styles = {
 };
 
 export const StripeCardField = forwardRef<StripeCardFieldHandle, StripeCardFieldProps>(
-  function StripeCardField({ onChange, incompleteMessage, onFocus }, ref) {
+  function StripeCardField({ onChange, incompleteMessage }, ref) {
     const { confirmPayment } = useConfirmPayment();
     const detailsRef = useRef<CardFieldInput.Details | undefined>(undefined);
 
@@ -60,7 +60,6 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, StripeCardField
         placeholders={{ number: '1234 5678 9012 3456', expiration: 'MM/AA', cvc: 'CVV' }}
         cardStyle={cardFieldStyle}
         style={styles.cardField}
-        onFocus={() => onFocus?.()}
         onCardChange={(details) => {
           detailsRef.current = details;
           onChange({
