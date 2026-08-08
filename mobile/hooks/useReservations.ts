@@ -24,6 +24,12 @@ export function useReservations(statusFilter?: string) {
 
   const cancel = useCallback(async (id: number, reason?: string) => {
     await reservationsApi.cancel(id, reason);
+    // Mise à jour optimiste : dès que le serveur a confirmé l'annulation, on
+    // retire le RDV de `upcoming` immédiatement (recalculé depuis `reservations`)
+    // sans attendre l'aller-retour du fetch() de réconciliation ci-dessous.
+    setReservations((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status: 'cancelled_client' } : r)),
+    );
     await fetch();
   }, [fetch]);
 
