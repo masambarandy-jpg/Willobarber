@@ -163,6 +163,7 @@ export default function BookScreen() {
   const {
     serviceId,
     quickbook,
+    fastbook,
     prestation,
     barbier: barbierParam,
     date: dateParam,
@@ -173,6 +174,7 @@ export default function BookScreen() {
   } = useLocalSearchParams<{
     serviceId?: string;
     quickbook?: string;
+    fastbook?: string;
     prestation?: string;
     prix?: string;
     duree?: string;
@@ -184,12 +186,20 @@ export default function BookScreen() {
     barberId?: string;
   }>();
   const isQuickbook = quickbook === 'true';
+  // Mode "reprise rapide" (bouton "Reprendre la même coupe" / "Adapter" de
+  // Mon espace) : la prestation est toujours pré-remplie, le barbier l'est
+  // seulement si on nous l'a fourni. On saute donc l'étape 1 (Prestation),
+  // et l'étape 2 (Barbier) seulement si le barbier est déjà connu.
+  const isFastbook = fastbook === 'true';
+  const fastbookStartStep = isFastbook
+    ? (BARBERS.find(b => b.name === barbierParam) ? 3 : 2)
+    : null;
   // Mode "reprogrammer" un RDV existant (venu de Mon espace) : service et
   // barbier verrouillés, on démarre directement à l'étape 3 (date/heure) et
   // la confirmation PATCH le RDV au lieu d'en créer un nouveau.
   const isRescheduleMode = reschedule === 'true';
   const reservationIdNum = reservationId ? Number(reservationId) : null;
-  const hasBookingParams = Boolean(serviceId || isQuickbook || isRescheduleMode);
+  const hasBookingParams = Boolean(serviceId || isQuickbook || isFastbook || isRescheduleMode);
   const { isAuthenticated, user } = useAuth();
   const { showLoginModal } = useAuthModal();
   const { t } = useLanguage();
@@ -203,7 +213,9 @@ export default function BookScreen() {
   // "on revient sur cet onglet après l'avoir quitté" (reset autorisé) —
   // sans ça, useFocusEffect reset confirmed dès le premier affichage.
   const hasSeenConfirmation = useRef(false);
-  const [step,          setStep]          = useState(isQuickbook ? 4 : isRescheduleMode ? 3 : 1);
+  const [step,          setStep]          = useState(
+    isQuickbook ? 4 : fastbookStartStep ?? (isRescheduleMode ? 3 : 1)
+  );
   const [confirmed,     setConfirmed]     = useState(false);
   // useFocusEffect ci-dessous doit lire la valeur la plus récente de `confirmed`
   // sans que son callback change d'identité (voir commentaire plus bas) — d'où
@@ -220,6 +232,11 @@ export default function BookScreen() {
         date.setHours(0, 0, 0, 0);
       }
       return { ...INITIAL_BOOKING, service, barber, date, time: heure ?? null };
+    }
+    if (isFastbook) {
+      const service = SERVICES.find(s => s.name === prestation) ?? null;
+      const barber  = BARBERS.find(b => b.name === barbierParam) ?? null;
+      return { ...INITIAL_BOOKING, service, barber };
     }
     if (isRescheduleMode) {
       // Le service réel (numeric serviceId venu du backend) n'est résolu
@@ -289,6 +306,10 @@ export default function BookScreen() {
     // Service et barbier sont verrouillés en mode reprogrammation — il n'y a
     // pas d'étape 1/2 à revisiter, "Retour" quitte simplement le wizard.
     if (isRescheduleMode) { router.back(); return; }
+    // Idem en mode reprise rapide, mais seulement jusqu'à l'étape de départ :
+    // l'étape 1 (Prestation), sautée puisque déjà pré-remplie, n'existe pas
+    // dans ce flux — "Retour" depuis l'étape d'entrée quitte le wizard.
+    if (isFastbook && step <= (fastbookStartStep ?? 1)) { router.back(); return; }
     if (step === 1) router.replace('/(tabs)');
     else setStep(s => s - 1);
   };

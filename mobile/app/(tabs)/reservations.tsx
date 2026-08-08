@@ -616,7 +616,26 @@ export default function ReservationsScreen() {
     );
   };
 
-  const handleAdapter = () => router.push('/(tabs)/book');
+  // Mode "reprise rapide" (skip l'étape 1, prestation déjà connue) : "Reprendre
+  // la même coupe" verrouille aussi le barbier (une seule étape restante, la
+  // date), tandis que "Adapter" laisse le barbier modifiable (étape 2 barbier
+  // puis étape 3 date) — cf. book.tsx (isFastbook / fastbookStartStep).
+  const handleResumeSameCut = () => router.push({
+    pathname: '/(tabs)/book',
+    params: {
+      fastbook: 'true',
+      prestation: 'Signature WilloBarber',
+      barbier: 'Willo',
+    },
+  });
+
+  const handleAdapter = () => router.push({
+    pathname: '/(tabs)/book',
+    params: {
+      fastbook: 'true',
+      prestation: 'Signature WilloBarber',
+    },
+  });
 
   const handleRebook = (h: typeof HISTORIQUE[number]) => {
     if (Platform.OS === 'web') {
@@ -799,18 +818,7 @@ export default function ReservationsScreen() {
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <TouchableOpacity
                     style={[styles.btnPrimary, { flex: 1 }]}
-                    onPress={() => router.push({
-                      pathname: '/(tabs)/book',
-                      params: {
-                        quickbook: 'true',
-                        prestation: 'Signature WilloBarber',
-                        prix: '45',
-                        duree: '45',
-                        barbier: 'Willo',
-                        date: 'Demain',
-                        heure: '11:00',
-                      },
-                    })}
+                    onPress={handleResumeSameCut}
                     activeOpacity={0.85}
                   >
                     <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
@@ -1197,18 +1205,7 @@ export default function ReservationsScreen() {
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <TouchableOpacity
               style={[styles.btnPrimary, { flex: 1 }]}
-              onPress={() => router.push({
-                pathname: '/(tabs)/book',
-                params: {
-                  quickbook: 'true',
-                  prestation: 'Signature WilloBarber',
-                  prix: '45',
-                  duree: '45',
-                  barbier: 'Willo',
-                  date: 'Demain',
-                  heure: '11:00',
-                },
-              })}
+              onPress={handleResumeSameCut}
               activeOpacity={0.85}
             >
               <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
