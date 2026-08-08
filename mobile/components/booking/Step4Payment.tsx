@@ -1,6 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
@@ -257,195 +256,190 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
   }));
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={130}
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
     >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Title */}
-        <Text style={styles.title}>{t('step4.title')}</Text>
-        <Text style={styles.subtitle}>
-          {t('step4.subtitle')}
+      {/* Title */}
+      <Text style={styles.title}>{t('step4.title')}</Text>
+      <Text style={styles.subtitle}>
+        {t('step4.subtitle')}
+      </Text>
+
+      {/* ── Informations de contact ───────────────────────────────────── */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t('step4.contactTitle')}</Text>
+        <Text style={styles.cardSubtitle}>
+          {t('step4.contactSubtitle')}
         </Text>
+        <FieldInput
+          label={t('step4.firstName')}
+          value={cardForm.prenom}
+          onChange={set('prenom')}
+          placeholder="Jean"
+        />
+        <FieldInput
+          label={t('step4.lastName')}
+          value={cardForm.nom}
+          onChange={set('nom')}
+          placeholder="Dupont"
+        />
+        <FieldInput
+          label={t('step4.email')}
+          value={cardForm.email}
+          onChange={set('email')}
+          keyboard="email-address"
+          placeholder="jean@exemple.com"
+        />
+        <FieldInput
+          label={t('step4.phone')}
+          value={cardForm.phone}
+          onChange={set('phone')}
+          keyboard="phone-pad"
+          placeholder="+32 …"
+        />
+      </View>
 
-        {/* ── Informations de contact ───────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('step4.contactTitle')}</Text>
-          <Text style={styles.cardSubtitle}>
-            {t('step4.contactSubtitle')}
-          </Text>
-          <FieldInput
-            label={t('step4.firstName')}
-            value={cardForm.prenom}
-            onChange={set('prenom')}
-            placeholder="Jean"
-          />
-          <FieldInput
-            label={t('step4.lastName')}
-            value={cardForm.nom}
-            onChange={set('nom')}
-            placeholder="Dupont"
-          />
-          <FieldInput
-            label={t('step4.email')}
-            value={cardForm.email}
-            onChange={set('email')}
-            keyboard="email-address"
-            placeholder="jean@exemple.com"
-          />
-          <FieldInput
-            label={t('step4.phone')}
-            value={cardForm.phone}
-            onChange={set('phone')}
-            keyboard="phone-pad"
-            placeholder="+32 …"
-          />
-        </View>
+      {/* ── Méthode de paiement ───────────────────────────────────────── */}
+      <View style={[styles.card, styles.paymentMethodCard]}>
+        <Text style={styles.cardTitle}>{t('step4.paymentMethodTitle')}</Text>
 
-        {/* ── Méthode de paiement ───────────────────────────────────────── */}
-        <View style={[styles.card, styles.paymentMethodCard]}>
-          <Text style={styles.cardTitle}>{t('step4.paymentMethodTitle')}</Text>
-
-          <View style={styles.tabs}>
-            {PAYMENT_TAB_KEYS.map(({ id, labelKey }) => {
-              const isOn = paymentMethod === id;
-              return (
-                <TouchableOpacity
-                  key={id}
-                  style={[styles.tab, isOn && styles.tabActive]}
-                  onPress={() => onPaymentMethodChange(id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.tabText, isOn && styles.tabTextActive]}>
-                    {t(labelKey)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {paymentMethod === 'card' && (
-            <View>
-              <BankCard cardForm={cardForm} cardDetails={cardDetails} />
-              <View style={styles.cardFieldsBlock}>
-                <Text style={styles.cardFieldsLabel}>
-                  {t('step4.cardNumberLabel')} · {t('step4.cardExpiryLabel')} · {t('step4.cvcLabel')}
+        <View style={styles.tabs}>
+          {PAYMENT_TAB_KEYS.map(({ id, labelKey }) => {
+            const isOn = paymentMethod === id;
+            return (
+              <TouchableOpacity
+                key={id}
+                style={[styles.tab, isOn && styles.tabActive]}
+                onPress={() => onPaymentMethodChange(id)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.tabText, isOn && styles.tabTextActive]}>
+                  {t(labelKey)}
                 </Text>
-                <StripeCardField
-                  ref={cardFieldRef}
-                  incompleteMessage={t('step4.cardIncomplete')}
-                  onChange={setCardDetails}
-                />
-              </View>
-              <Text style={styles.cardFieldHint}>{t('step4.cardFieldHint')}</Text>
-            </View>
-          )}
-
-          {paymentMethod !== 'card' && (
-            <View style={styles.altPay}>
-              <Text style={styles.altPayIcon}>
-                {paymentMethod === 'apple' ? '🍎' : '🔵'}
-              </Text>
-              <Text style={styles.altPayText}>
-                {paymentMethod === 'apple'
-                  ? t('step4.altPayApple')
-                  : t('step4.altPayGoogle')}
-              </Text>
-            </View>
-          )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {/* ── Montant à régler maintenant ──────────────────────────────── */}
-        <View style={{ marginTop: 0, paddingTop: 0, minHeight: 0 }}>
-          <Text style={styles.amountNowKicker}>{t('step4.amountNowKicker')}</Text>
-
-          {/* Option 1 — Acompte fixe obligatoire */}
-          <TouchableOpacity
-            style={[styles.radioCard, amountChoice === 'deposit' && styles.radioCardActive]}
-            onPress={() => onAmountChoiceChange('deposit')}
-            activeOpacity={0.85}
-          >
-            <View style={styles.radioRow}>
-              <View style={[styles.radioIconCircle, amountChoice === 'deposit' && styles.radioIconCircleActive]}>
-                <Feather name="shield" size={18} color={amountChoice === 'deposit' ? '#1A1208' : GOLD} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.radioLabelRow}>
-                  <Text style={styles.radioAmount}>{fmtPrice(deposit)}</Text>
-                  <View style={styles.badgeGreen}>
-                    <Text style={styles.badgeGreenText}>{t('step4.depositBadge')}</Text>
-                  </View>
-                </View>
-                <Text style={styles.radioSub}>{t('step4.depositSub')}</Text>
-              </View>
+        {paymentMethod === 'card' && (
+          <View>
+            <BankCard cardForm={cardForm} cardDetails={cardDetails} />
+            <View style={styles.cardFieldsBlock}>
+              <Text style={styles.cardFieldsLabel}>
+                {t('step4.cardNumberLabel')} · {t('step4.cardExpiryLabel')} · {t('step4.cvcLabel')}
+              </Text>
+              <StripeCardField
+                ref={cardFieldRef}
+                incompleteMessage={t('step4.cardIncomplete')}
+                onChange={setCardDetails}
+              />
             </View>
-          </TouchableOpacity>
-
-          {/* Option 2 — Totalité optionnelle */}
-          <TouchableOpacity
-            style={[styles.radioCard, amountChoice === 'full' && styles.radioCardActive]}
-            onPress={() => onAmountChoiceChange('full')}
-            activeOpacity={0.85}
-          >
-            <View style={styles.radioRow}>
-              <View style={[styles.radioIconCircle, amountChoice === 'full' && styles.radioIconCircleActive]}>
-                <Feather name="award" size={18} color={amountChoice === 'full' ? '#1A1208' : GOLD} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.radioLabelRow}>
-                  <Text style={styles.radioAmount}>{fmtPrice(price)}</Text>
-                  <View style={styles.badgeGrey}>
-                    <Text style={styles.badgeGreyText}>{t('step4.fullBadge')}</Text>
-                  </View>
-                </View>
-                <Text style={styles.radioSub}>{t('step4.fullSub')}</Text>
-                <View style={styles.economyRow}>
-                  <Feather name="check-circle" size={12} color={GREEN_TEXT} />
-                  <Text style={styles.economyText}>{t('step4.fullEconomy')}</Text>
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Montant à régler ──────────────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text style={styles.amountKicker}>{t('step4.amountKicker')}</Text>
-
-          <View style={styles.amountRow}>
-            <Text style={styles.amountLabel}>{serviceName}</Text>
-            <Text style={styles.amountValue}>{fmtPrice(price)}</Text>
+            <Text style={styles.cardFieldHint}>{t('step4.cardFieldHint')}</Text>
           </View>
-          <View style={styles.amountRow}>
-            <Text style={styles.amountLabel}>
-              {isFull ? t('step4.paymentTotalLabel') : t('step4.depositLabel')}
+        )}
+
+        {paymentMethod !== 'card' && (
+          <View style={styles.altPay}>
+            <Text style={styles.altPayIcon}>
+              {paymentMethod === 'apple' ? '🍎' : '🔵'}
             </Text>
-            <Text style={[styles.amountValue, { color: GREEN_TEXT }]}>
-              -{fmtPrice(payNow)}
+            <Text style={styles.altPayText}>
+              {paymentMethod === 'apple'
+                ? t('step4.altPayApple')
+                : t('step4.altPayGoogle')}
             </Text>
           </View>
+        )}
+      </View>
 
-          <View style={styles.amountSep} />
+      {/* ── Montant à régler maintenant ──────────────────────────────── */}
+      <View style={{ marginTop: 0, paddingTop: 0, minHeight: 0 }}>
+        <Text style={styles.amountNowKicker}>{t('step4.amountNowKicker')}</Text>
 
-          <View style={styles.soldeRow}>
-            <Text style={styles.soldeLabel}>{t('step4.soldeLabel')}</Text>
-            {isFull ? (
-              <Text style={[styles.soldeValue, { color: 'rgba(255,255,255,0.35)', fontSize: 15 }]}>
-                {t('step4.soldeNone')}
-              </Text>
-            ) : (
-              <Text style={styles.soldeValue}>{fmtPrice(solde)}</Text>
-            )}
+        {/* Option 1 — Acompte fixe obligatoire */}
+        <TouchableOpacity
+          style={[styles.radioCard, amountChoice === 'deposit' && styles.radioCardActive]}
+          onPress={() => onAmountChoiceChange('deposit')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.radioRow}>
+            <View style={[styles.radioIconCircle, amountChoice === 'deposit' && styles.radioIconCircleActive]}>
+              <Feather name="shield" size={18} color={amountChoice === 'deposit' ? '#1A1208' : GOLD} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.radioLabelRow}>
+                <Text style={styles.radioAmount}>{fmtPrice(deposit)}</Text>
+                <View style={styles.badgeGreen}>
+                  <Text style={styles.badgeGreenText}>{t('step4.depositBadge')}</Text>
+                </View>
+              </View>
+              <Text style={styles.radioSub}>{t('step4.depositSub')}</Text>
+            </View>
           </View>
+        </TouchableOpacity>
+
+        {/* Option 2 — Totalité optionnelle */}
+        <TouchableOpacity
+          style={[styles.radioCard, amountChoice === 'full' && styles.radioCardActive]}
+          onPress={() => onAmountChoiceChange('full')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.radioRow}>
+            <View style={[styles.radioIconCircle, amountChoice === 'full' && styles.radioIconCircleActive]}>
+              <Feather name="award" size={18} color={amountChoice === 'full' ? '#1A1208' : GOLD} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.radioLabelRow}>
+                <Text style={styles.radioAmount}>{fmtPrice(price)}</Text>
+                <View style={styles.badgeGrey}>
+                  <Text style={styles.badgeGreyText}>{t('step4.fullBadge')}</Text>
+                </View>
+              </View>
+              <Text style={styles.radioSub}>{t('step4.fullSub')}</Text>
+              <View style={styles.economyRow}>
+                <Feather name="check-circle" size={12} color={GREEN_TEXT} />
+                <Text style={styles.economyText}>{t('step4.fullEconomy')}</Text>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Montant à régler ──────────────────────────────────────────── */}
+      <View style={styles.card}>
+        <Text style={styles.amountKicker}>{t('step4.amountKicker')}</Text>
+
+        <View style={styles.amountRow}>
+          <Text style={styles.amountLabel}>{serviceName}</Text>
+          <Text style={styles.amountValue}>{fmtPrice(price)}</Text>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <View style={styles.amountRow}>
+          <Text style={styles.amountLabel}>
+            {isFull ? t('step4.paymentTotalLabel') : t('step4.depositLabel')}
+          </Text>
+          <Text style={[styles.amountValue, { color: GREEN_TEXT }]}>
+            -{fmtPrice(payNow)}
+          </Text>
+        </View>
+
+        <View style={styles.amountSep} />
+
+        <View style={styles.soldeRow}>
+          <Text style={styles.soldeLabel}>{t('step4.soldeLabel')}</Text>
+          {isFull ? (
+            <Text style={[styles.soldeValue, { color: 'rgba(255,255,255,0.35)', fontSize: 15 }]}>
+              {t('step4.soldeNone')}
+            </Text>
+          ) : (
+            <Text style={styles.soldeValue}>{fmtPrice(solde)}</Text>
+          )}
+        </View>
+      </View>
+    </ScrollView>
   );
 });
 
@@ -454,7 +448,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 200,
+    paddingBottom: 40,
   },
 
   title: {
