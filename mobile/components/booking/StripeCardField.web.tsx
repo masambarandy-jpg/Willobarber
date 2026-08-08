@@ -62,7 +62,7 @@ const fieldLabelStyle: React.CSSProperties = {
 };
 
 const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldProps>(
-  function StripeCardFieldInner({ onChange, incompleteMessage, onFocus }, ref) {
+  function StripeCardFieldInner({ onChange, incompleteMessage }, ref) {
     const { t } = useLanguage();
     const stripe = useStripe();
     const elements = useElements();
@@ -149,7 +149,6 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
         <div style={fieldWrapStyle}>
           <CardNumberElement
             options={numberOptions}
-            onFocus={() => onFocus?.()}
             onChange={(e) => {
               setNumberComplete(e.complete);
               reportChange({ number: e.complete });
@@ -162,7 +161,6 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
             <div style={fieldWrapStyle}>
               <CardExpiryElement
                 options={elementOptions}
-                onFocus={() => onFocus?.()}
                 onChange={(e) => {
                   setExpiryComplete(e.complete);
                   reportChange({ expiry: e.complete });
@@ -175,7 +173,6 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
             <div style={fieldWrapStyle}>
               <CardCvcElement
                 options={elementOptions}
-                onFocus={() => onFocus?.()}
                 onChange={(e) => {
                   setCvcComplete(e.complete);
                   reportChange({ cvc: e.complete });
