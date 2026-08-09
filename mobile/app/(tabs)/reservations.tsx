@@ -113,8 +113,7 @@ function getNextTarget(pts: number): number {
 
 function getBarProgress(pts: number): number {
   if (pts <= 0) return 0;
-  const cycleProgress = pts % 500;
-  return cycleProgress === 0 ? 1 : cycleProgress / 500;
+  return (pts % 500) / 500 || 1;
 }
 
 function GoldItalic({ children }: { children: React.ReactNode }) {
@@ -188,7 +187,7 @@ function ReviewModal({ target, onClose, onSubmitted }: ReviewModalProps) {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
           <View style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <ScrollView keyboardShouldPersistTaps="always" showsVerticalScrollIndicator={false}>
               {target && (
                 <ReviewCard
                   reservationId={target.id}
