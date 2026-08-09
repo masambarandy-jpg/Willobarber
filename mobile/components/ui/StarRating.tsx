@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Colors, Spacing } from '@/constants';
 
 interface StarRatingProps {
@@ -16,7 +16,7 @@ export function StarRating({ rating, maxStars = 5, size = 16, interactive = fals
       {Array.from({ length: maxStars }, (_, i) => {
         const filled = i < Math.round(rating);
         return (
-          <Pressable
+          <TouchableOpacity
             key={i}
             onPress={() => interactive && onRate?.(i + 1)}
             disabled={!interactive}
@@ -25,7 +25,7 @@ export function StarRating({ rating, maxStars = 5, size = 16, interactive = fals
             <Text style={[{ fontSize: size }, filled ? styles.filled : styles.empty]}>
               ★
             </Text>
-          </Pressable>
+          </TouchableOpacity>
         );
       })}
     </View>
