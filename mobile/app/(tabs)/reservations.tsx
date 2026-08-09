@@ -186,21 +186,25 @@ function ReviewModal({ target, onClose, onSubmitted }: ReviewModalProps) {
   const isTablet = useIsTablet();
   return (
     <Modal visible={!!target} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
-        <View style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
-          {target && (
-            <ReviewCard
-              reservationId={target.id}
-              serviceName={target.service}
-              existingReview={null}
-              onSubmitted={(review) => { onSubmitted(review); onClose(); }}
-            />
-          )}
-          <TouchableOpacity onPress={onClose} style={{ marginTop: 12, alignItems: 'center' }}>
-            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>Fermer</Text>
-          </TouchableOpacity>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
+          <View style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {target && (
+                <ReviewCard
+                  reservationId={target.id}
+                  serviceName={target.service}
+                  existingReview={null}
+                  onSubmitted={(review) => { onSubmitted(review); onClose(); }}
+                />
+              )}
+            </ScrollView>
+            <TouchableOpacity onPress={onClose} style={{ marginTop: 12, alignItems: 'center' }}>
+              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
