@@ -112,10 +112,9 @@ function getNextTarget(pts: number): number {
 }
 
 function getBarProgress(pts: number): number {
-  if (pts < 200) return pts / 200;
-  if (pts < 500) return (pts - 200) / 300;
-  const prev = Math.floor(pts / 500) * 500;
-  return (pts - prev) / 500;
+  if (pts <= 0) return 0;
+  const cycleProgress = pts % 500;
+  return cycleProgress === 0 ? 1 : cycleProgress / 500;
 }
 
 function GoldItalic({ children }: { children: React.ReactNode }) {
@@ -257,7 +256,7 @@ export default function ReservationsScreen() {
   const isTablet = useIsTablet();
   const { user, isAuthenticated } = useAuth();
   const { showLoginModal } = useAuthModal();
-  const { isLoading, refetch, cancel, upcoming, reservations, error } = useReservations();
+  const { isLoading, refetch, cancel, upcoming, past, reservations, error } = useReservations();
   const { t } = useLanguage();
 
   // Recharge les réservations à chaque prise de focus de l'onglet — sans ça, une
@@ -319,6 +318,16 @@ export default function ReservationsScreen() {
   const handleReviewSubmitted = (review: Review) => {
     setMyReviews((prev) => [...prev, review]);
   };
+
+  // Dernier RDV passé et terminé — sert à proposer "Laisser un avis" directement
+  // sur la carte du prochain RDV, sans que le client doive scroller l'historique.
+  const lastCompletedReservation = (past as (Reservation & { time: string })[])
+    .filter((r) => r.status === 'completed')
+    .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`))[0] ?? null;
+  const pendingReviewTarget =
+    lastCompletedReservation && lastCompletedReservation.id != null && !reviewForReservation(lastCompletedReservation.id)
+      ? { id: lastCompletedReservation.id, service: lastCompletedReservation.service_name }
+      : null;
 
   const nextRdvView = nextReservation ? (() => {
     const d = parseApiDate(nextReservation.date);
@@ -799,6 +808,17 @@ export default function ReservationsScreen() {
                         <Text style={styles.btnOutlineText}>🎫 Mon QR</Text>
                       </TouchableOpacity>
                     )}
+
+                    {pendingReviewTarget && (
+                      <TouchableOpacity
+                        testID="btn-leave-review-nextrdv"
+                        style={[styles.leaveReviewBtn, { marginTop: 10 }]}
+                        onPress={() => setReviewModalTarget(pendingReviewTarget)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.leaveReviewBtnText}>⭐ Laisser un avis</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </>
               )}
@@ -1184,6 +1204,17 @@ export default function ReservationsScreen() {
                   activeOpacity={0.85}
                 >
                   <Text style={styles.btnOutlineText}>🎫 Mon QR</Text>
+                </TouchableOpacity>
+              )}
+
+              {pendingReviewTarget && (
+                <TouchableOpacity
+                  testID="btn-leave-review-nextrdv"
+                  style={[styles.leaveReviewBtn, { marginTop: 10 }]}
+                  onPress={() => setReviewModalTarget(pendingReviewTarget)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.leaveReviewBtnText}>⭐ Laisser un avis</Text>
                 </TouchableOpacity>
               )}
             </View>
