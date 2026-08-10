@@ -26,7 +26,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
-import { appointmentsApi, authApi, TokenStorage } from '@/services/api';
+import { authApi, TokenStorage } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
@@ -92,11 +92,18 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [onSuccessCallback, setOnSuccessCallback] = useState<(() => void) | null>(null);
 
-  const [firstName, setFirstName] = useState('');
   const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [oauthLoading, setOauthLoading] = useState<'google' | 'microsoft' | null>(null);
+
+  const [isRegister, setIsRegister] = useState(false);
+  const [registerFirstName, setRegisterFirstName] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerError, setRegisterError] = useState('');
 
   const [isGerant, setIsGerant] = useState(false);
   const [gerantEmail, setGerantEmail] = useState('willo@willobarber.fr');
@@ -106,6 +113,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [gerantError, setGerantError] = useState('');
 
   const identifierInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInput>(null);
 
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const cardAnim = useRef(new Animated.Value(0.92)).current;
@@ -114,12 +122,17 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const showLoginModal = (onSuccess?: () => void, msg?: string) => {
     setOnSuccessCallback(() => onSuccess ?? null);
     setMessage(msg);
-    setFirstName('');
     setIdentifier('');
+    setPassword('');
     setError('');
     setIsGerant(false);
     setGerantPassword('');
     setGerantError('');
+    setIsRegister(false);
+    setRegisterFirstName('');
+    setRegisterEmail('');
+    setRegisterPassword('');
+    setRegisterError('');
     overlayAnim.setValue(0);
     cardAnim.setValue(0.92);
     setVisible(true);
@@ -179,6 +192,16 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     setGerantError('');
   };
 
+  const handleShowRegister = () => {
+    setIsRegister(true);
+    setRegisterError('');
+  };
+
+  const handleBackToLogin = () => {
+    setIsRegister(false);
+    setRegisterError('');
+  };
+
   const handleGerantLogin = async () => {
     setGerantLoading(true);
     setGerantError('');
@@ -220,7 +243,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
 
   const handleAccess = async () => {
     const value = identifier.trim();
-    if (!value) {
+    if (!value || !password) {
       setError(t('authModal.errorEmpty'));
       return;
     }
@@ -231,12 +254,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError('');
     try {
-      const res = await appointmentsApi.checkClient(value);
-      if (res.status !== 'exists') {
-        setError(t('authModal.errorNotFound'));
-        return;
-      }
-      const { access, refresh } = await authApi.passwordlessLogin(value);
+      const { access, refresh } = await authApi.login({ username: value, password });
       await TokenStorage.save(access, refresh);
       await refreshUser();
       handleSuccess();
@@ -248,7 +266,40 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleRegister = async () => {
+    const email = registerEmail.trim();
+    if (!registerFirstName.trim() || !email || !registerPassword) {
+      setRegisterError(t('authModal.errorEmpty'));
+      return;
+    }
+    if (!isEmail(email)) {
+      setRegisterError(t('authModal.errorInvalid'));
+      return;
+    }
+    setRegisterLoading(true);
+    setRegisterError('');
+    try {
+      const { access, refresh } = await authApi.register({
+        username: email,
+        email,
+        first_name: registerFirstName.trim(),
+        last_name: '',
+        password: registerPassword,
+        password2: registerPassword,
+      });
+      await TokenStorage.save(access, refresh);
+      await refreshUser();
+      handleSuccess();
+    } catch (err: any) {
+      console.log('Register error:', err?.response?.data || err?.message);
+      setRegisterError(t('authModal.errorGeneric'));
+    } finally {
+      setRegisterLoading(false);
+    }
+  };
+
   const focusIdentifier = () => identifierInputRef.current?.focus();
+  const focusPassword = () => passwordInputRef.current?.focus();
 
   const triggerIdentifierHighlight = () => {
     identifierHighlightAnim.setValue(1);
@@ -429,7 +480,148 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
 
-              {!isGerant ? (
+              {isGerant ? (
+                <>
+                  <Text style={styles.kicker}>{t('gerant.kicker')}</Text>
+                  <Text style={styles.title}>{t('gerant.title')}</Text>
+                  <Text style={styles.subtitle}>{t('gerant.subtitle')}</Text>
+
+                  {!!gerantError && (
+                    <View style={styles.errorBox}>
+                      <Text style={styles.errorText}>{gerantError}</Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.label}>{t('gerant.emailLabel')}</Text>
+                  <View style={styles.inputWrap}>
+                    <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
+                    <TextInput
+                      style={styles.input}
+                      value={gerantEmail}
+                      onChangeText={setGerantEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                    />
+                  </View>
+
+                  <Text style={styles.label}>{t('gerant.passwordLabel')}</Text>
+                  <View style={styles.gerantPasswordWrap}>
+                    <Feather name="lock" size={16} color="rgba(255,255,255,0.4)" />
+                    <TextInput
+                      style={[
+                        styles.gerantPasswordInput,
+                        Platform.OS === 'web' && ({
+                          backgroundColor: 'transparent',
+                          background: 'none',
+                          WebkitBoxShadow: '0 0 0 1000px #1A1814 inset',
+                          WebkitTextFillColor: '#FFFFFF',
+                          caretColor: '#FFFFFF',
+                        } as any),
+                      ]}
+                      value={gerantPassword}
+                      onChangeText={setGerantPassword}
+                      secureTextEntry={!showGerantPassword}
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      onSubmitEditing={handleGerantLogin}
+                    />
+                    <TouchableOpacity onPress={() => setShowGerantPassword((v) => !v)} hitSlop={10}>
+                      <Feather name={showGerantPassword ? 'eye-off' : 'eye'} size={16} color="rgba(255,255,255,0.4)" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.btnPrimary, gerantLoading && { opacity: 0.7 }]}
+                    onPress={handleGerantLogin}
+                    disabled={gerantLoading}
+                    activeOpacity={0.85}
+                  >
+                    {gerantLoading
+                      ? <ActivityIndicator color="#1A1208" size="small" />
+                      : <Text style={styles.btnPrimaryText}>{t('gerant.submitBtn')} →</Text>
+                    }
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={handleBackToClient} activeOpacity={0.7} style={[styles.gerantBtn, { marginTop: 16 }]}>
+                    <Text style={styles.backToClientText}>{t('gerant.backToClient')}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : isRegister ? (
+                <>
+                  <Text style={styles.kicker}>{t('authModal.kicker')}</Text>
+                  <Text style={styles.title}>{t('authModal.registerTitle')}</Text>
+                  <Text style={styles.subtitle}>{t('authModal.registerSubtitle')}</Text>
+
+                  {!!registerError && (
+                    <View style={styles.errorBox}>
+                      <Text style={styles.errorText}>{registerError}</Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.label}>{t('authModal.firstNameLabel')}</Text>
+                  <View style={styles.inputWrap}>
+                    <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
+                    <TextInput
+                      style={styles.input}
+                      value={registerFirstName}
+                      onChangeText={setRegisterFirstName}
+                      placeholder="Antoine"
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      autoCorrect={false}
+                      returnKeyType="next"
+                    />
+                  </View>
+
+                  <Text style={styles.label}>{t('authModal.emailLabel')}</Text>
+                  <View style={styles.inputWrap}>
+                    <Feather name="mail" size={16} color="rgba(255,255,255,0.4)" />
+                    <TextInput
+                      style={styles.input}
+                      value={registerEmail}
+                      onChangeText={setRegisterEmail}
+                      placeholder={t('authModal.identifierPlaceholder')}
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="next"
+                    />
+                  </View>
+
+                  <Text style={styles.label}>{t('authModal.passwordLabel')}</Text>
+                  <View style={styles.inputWrap}>
+                    <Feather name="lock" size={16} color="rgba(255,255,255,0.4)" />
+                    <TextInput
+                      style={styles.input}
+                      value={registerPassword}
+                      onChangeText={setRegisterPassword}
+                      placeholder="••••••••"
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      onSubmitEditing={handleRegister}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.btnPrimary, registerLoading && { opacity: 0.7 }]}
+                    onPress={handleRegister}
+                    disabled={registerLoading}
+                    activeOpacity={0.85}
+                  >
+                    {registerLoading
+                      ? <ActivityIndicator color="#1A1208" size="small" />
+                      : <Text style={styles.btnPrimaryText}>{t('authModal.registerSubmit')}</Text>
+                    }
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={handleBackToLogin} activeOpacity={0.7} style={[styles.gerantBtn, { marginTop: 16 }]}>
+                    <Text style={styles.backToClientText}>{t('authModal.backToLogin')}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
                 <>
                   <Text style={styles.kicker}>{t('authModal.kicker')}</Text>
                   <Text style={styles.title}>{t('authModal.title')}</Text>
@@ -494,22 +686,6 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                     </View>
                   )}
 
-                  <Text style={styles.label}>{t('authModal.firstNameLabel')}</Text>
-                  <View style={styles.inputWrap}>
-                    <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
-                    <TextInput
-                      style={styles.input}
-                      value={firstName}
-                      onChangeText={setFirstName}
-                      placeholder="Antoine"
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                      autoCorrect={false}
-                      returnKeyType="next"
-                      onSubmitEditing={focusIdentifier}
-                    />
-                    <Feather name="chevron-down" size={16} color="rgba(255,255,255,0.4)" />
-                  </View>
-
                   <Text style={styles.label}>{t('authModal.identifierLabel')}</Text>
                   <Animated.View style={[styles.inputWrap, { borderColor: identifierBorderColor }]}>
                     <Feather name={isPhone(identifier) ? 'phone' : 'mail'} size={16} color="rgba(255,255,255,0.4)" />
@@ -528,11 +704,32 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                         autoCapitalize="none"
                         autoCorrect={false}
                         autoComplete="off"
-                        returnKeyType="done"
-                        onSubmitEditing={handleAccess}
+                        returnKeyType="next"
+                        onSubmitEditing={focusPassword}
                       />
                     </View>
                   </Animated.View>
+
+                  <Text style={styles.label}>{t('authModal.passwordLabel')}</Text>
+                  <View style={styles.inputWrap}>
+                    <Feather name="lock" size={16} color="rgba(255,255,255,0.4)" />
+                    <TextInput
+                      ref={passwordInputRef}
+                      style={styles.input}
+                      value={password}
+                      onChangeText={(txt) => {
+                        setPassword(txt);
+                        if (error) setError('');
+                      }}
+                      placeholder="••••••••"
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      onSubmitEditing={handleAccess}
+                    />
+                  </View>
 
                   <TouchableOpacity
                     style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
@@ -546,75 +743,13 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                     }
                   </TouchableOpacity>
 
+                  <TouchableOpacity onPress={handleShowRegister} activeOpacity={0.6} style={styles.registerLinkBtn}>
+                    <Text style={styles.registerLinkText}>{t('authModal.noAccount')}</Text>
+                  </TouchableOpacity>
+
                   <View style={styles.gerantSeparator} />
                   <TouchableOpacity onPress={handleGerantAccess} activeOpacity={0.6} style={styles.gerantBtn}>
                     <Text style={styles.gerantBtnText}>⚙ Espace gérant →</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.kicker}>{t('gerant.kicker')}</Text>
-                  <Text style={styles.title}>{t('gerant.title')}</Text>
-                  <Text style={styles.subtitle}>{t('gerant.subtitle')}</Text>
-
-                  {!!gerantError && (
-                    <View style={styles.errorBox}>
-                      <Text style={styles.errorText}>{gerantError}</Text>
-                    </View>
-                  )}
-
-                  <Text style={styles.label}>{t('gerant.emailLabel')}</Text>
-                  <View style={styles.inputWrap}>
-                    <Feather name="user" size={16} color="rgba(255,255,255,0.4)" />
-                    <TextInput
-                      style={styles.input}
-                      value={gerantEmail}
-                      onChangeText={setGerantEmail}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                    />
-                  </View>
-
-                  <Text style={styles.label}>{t('gerant.passwordLabel')}</Text>
-                  <View style={styles.gerantPasswordWrap}>
-                    <Feather name="lock" size={16} color="rgba(255,255,255,0.4)" />
-                    <TextInput
-                      style={[
-                        styles.gerantPasswordInput,
-                        Platform.OS === 'web' && ({
-                          backgroundColor: 'transparent',
-                          background: 'none',
-                          WebkitBoxShadow: '0 0 0 1000px #1A1814 inset',
-                          WebkitTextFillColor: '#FFFFFF',
-                          caretColor: '#FFFFFF',
-                        } as any),
-                      ]}
-                      value={gerantPassword}
-                      onChangeText={setGerantPassword}
-                      secureTextEntry={!showGerantPassword}
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                      onSubmitEditing={handleGerantLogin}
-                    />
-                    <TouchableOpacity onPress={() => setShowGerantPassword((v) => !v)} hitSlop={10}>
-                      <Feather name={showGerantPassword ? 'eye-off' : 'eye'} size={16} color="rgba(255,255,255,0.4)" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <TouchableOpacity
-                    style={[styles.btnPrimary, gerantLoading && { opacity: 0.7 }]}
-                    onPress={handleGerantLogin}
-                    disabled={gerantLoading}
-                    activeOpacity={0.85}
-                  >
-                    {gerantLoading
-                      ? <ActivityIndicator color="#1A1208" size="small" />
-                      : <Text style={styles.btnPrimaryText}>{t('gerant.submitBtn')} →</Text>
-                    }
-                  </TouchableOpacity>
-
-                  <TouchableOpacity onPress={handleBackToClient} activeOpacity={0.7} style={[styles.gerantBtn, { marginTop: 16 }]}>
-                    <Text style={styles.backToClientText}>{t('gerant.backToClient')}</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -809,6 +944,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.2,
+  },
+  registerLinkBtn: {
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  registerLinkText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.5)',
   },
   gerantSeparator: {
     height: 1,
