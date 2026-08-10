@@ -36,6 +36,17 @@ function renderIcon(kind: IconKind, size = 18) {
   return <BellIcon color="#3a6a8a" size={size} />;
 }
 
+// Repli quand l'API ne renvoie pas encore de champs dédiés pour les avis
+// (voir commentaire ApiNotif dans CoiffeurNotificationsContext) : le signal
+// Django notify_on_new_review formate toujours desc en
+// "Prénom Nom · Prestation · N★", donc on peut en extraire le vrai nom du
+// client et la vraie note sans toucher au backend.
+function parseAvisDesc(desc: string): { client?: string; rating?: number } {
+  const match = desc.match(/^(.+?)\s*·.*·\s*(\d)★$/);
+  if (!match) return {};
+  return { client: match[1], rating: Number(match[2]) };
+}
+
 function matchesTab(n: Notif, tab: (typeof TABS)[number]) {
   if (tab === 'Toutes') return true;
   if (tab === 'Non lues') return n.unread === true;
@@ -190,20 +201,32 @@ export default function CoiffeurNotificationsScreen() {
                   </>
                 )}
 
-                {selectedNotif.type === 'avis' && (
-                  <View style={styles.avisBlock}>
-                    <View style={styles.avisTopRow}>
-                      <Avatar letter={selectedNotif.avatarLetter ?? '?'} size={32} />
-                      <Text style={styles.avisName}>{selectedNotif.client}</Text>
+                {selectedNotif.type === 'avis' && (() => {
+                  const fallback = parseAvisDesc(selectedNotif.desc);
+                  const client = selectedNotif.client ?? fallback.client ?? '';
+                  const rating = selectedNotif.rating ?? fallback.rating ?? 0;
+
+                  return (
+                    <View style={styles.avisBlock}>
+                      <View style={styles.avisTopRow}>
+                        <Avatar letter={selectedNotif.avatarLetter ?? (client.charAt(0).toUpperCase() || '?')} size={32} />
+                        <Text style={styles.avisName}>{client}</Text>
+                      </View>
+                      <View style={styles.avisStarsRow}>
+                        {Array.from({ length: 5 }, (_, i) => (
+                          <StarIcon key={i} filled={i < rating} />
+                        ))}
+                      </View>
+                      {/* reviewText n'est jamais renvoyé par l'API (le modèle
+                          Notification ne garde pas de lien vers le Review) —
+                          on retombe sur desc, qui contient au moins client/
+                          prestation/note. */}
+                      <Text style={styles.avisQuote}>
+                        {selectedNotif.reviewText ? `« ${selectedNotif.reviewText} »` : selectedNotif.desc}
+                      </Text>
                     </View>
-                    <View style={styles.avisStarsRow}>
-                      {Array.from({ length: 5 }, (_, i) => (
-                        <StarIcon key={i} filled={i < (selectedNotif.rating ?? 0)} />
-                      ))}
-                    </View>
-                    <Text style={styles.avisQuote}>« {selectedNotif.reviewText} »</Text>
-                  </View>
-                )}
+                  );
+                })()}
 
                 {selectedNotif.type === 'paiement' && (
                   <>
