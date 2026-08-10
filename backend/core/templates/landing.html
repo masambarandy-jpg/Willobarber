@@ -528,6 +528,53 @@
     .services-grid, .team-grid, .review-grid { grid-template-columns: 1fr; }
     .footer-grid { grid-template-columns: 1fr 1fr; }
   }
+
+  /* ───── Mobile (≤768px) ───── */
+  @media (max-width: 768px) {
+    /* 1. Navigation — logo only, links hidden */
+    .nav { padding: 16px 20px; }
+    .nav-links { display: none; }
+    .nav-logo .mark { width: 34px; height: 34px; }
+    .nav-logo .wordmark { font-size: 18px; }
+    .nav-right { gap: 8px; }
+    .btn-signin { padding: 8px 12px; font-size: 12.5px; }
+    .nav-right .btn-light { padding: 10px 16px; font-size: 13px; }
+    .nav-user-chip .uname { display: none; }
+
+    /* 2. Hero — 1 column, smaller title */
+    .hero-body { grid-template-columns: 1fr; gap: 40px; padding: 32px 20px 96px; }
+    .hero-left { padding-left: 18px; }
+    .eyebrow { font-size: 11px; letter-spacing: 0.18em; margin-bottom: 20px; }
+    .hero h1 { font-size: clamp(32px, 9vw, 44px); margin-bottom: 18px; }
+    .hero-sub { font-size: 14.5px; line-height: 1.6; margin-bottom: 28px; }
+
+    /* 5. Stat card — auto width */
+    .hero-right { align-items: stretch; }
+    .stat-card { width: auto; padding: 18px 20px; }
+
+    /* 7. Hero buttons — stacked */
+    .hero-ctas { flex-direction: column; gap: 12px; }
+    .hero-ctas .btn { width: 100%; justify-content: center; }
+
+    /* 3. Sections — reduced padding */
+    section.block { padding: 60px 24px; }
+    .section-head { margin-bottom: 44px; }
+    .section-title { font-size: clamp(28px, 7vw, 36px); }
+    .cta-band { padding: 64px 24px; }
+    .qr-download { padding: 60px 24px !important; }
+
+    /* 4. Grids — single column */
+    .services-grid, .team-grid, .review-grid { grid-template-columns: 1fr; gap: 18px; }
+    .team-avatar { width: 110px; height: 110px; }
+
+    /* 6. Footer — stacked */
+    .footer-grid { grid-template-columns: 1fr; gap: 32px; }
+    footer { padding: 56px 24px 28px; }
+    .footer-bottom { flex-direction: column; align-items: flex-start; gap: 10px; }
+
+    /* Modal — full-bleed on small screens */
+    .modal { padding: 28px 24px; }
+  }
 </style>
 </head>
 <body>
@@ -916,7 +963,7 @@
 </section>
 
 <!-- ─────────── QR CODE APPLICATION ─────────── -->
-<section style="background:#0e0e0e;padding:80px 56px;text-align:center">
+<section class="qr-download" style="background:#0e0e0e;padding:80px 56px;text-align:center">
   <p style="color:#c8951a;font-size:13px;letter-spacing:0.25em;text-transform:uppercase;margin-bottom:16px">APPLICATION MOBILE</p>
   <h2 style="font-family:'Playfair Display',serif;color:#fff;font-size:36px;margin-bottom:12px">Téléchargez <em style="color:#d6a93a;font-style:italic">l'application</em></h2>
   <p style="color:rgba(255,255,255,0.6);margin-bottom:32px">Scannez pour accéder directement à WilloBarber</p>
