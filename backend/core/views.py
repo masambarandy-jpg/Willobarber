@@ -33,6 +33,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
+from django.template.response import TemplateResponse
 from django.utils import timezone
 from .models import Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave, Notification
 from .emails import format_date_fr, format_date_fr_short, format_heure_fr
@@ -1251,3 +1252,7 @@ def reply_to_review(request, pk):
     review.save(update_fields=['reply', 'replied_at'])
 
     return Response(ReviewSerializer(review).data)
+
+
+def landing_page(request):
+    return TemplateResponse(request, 'landing.html', {})
