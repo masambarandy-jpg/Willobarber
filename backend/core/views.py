@@ -8,6 +8,7 @@ from datetime import datetime
 
 import anthropic
 import cloudinary.uploader
+import qrcode
 import sendgrid
 import stripe
 from django.conf import settings
@@ -1256,3 +1257,15 @@ def reply_to_review(request, pk):
 
 def landing_page(request):
     return TemplateResponse(request, 'landing.html', {})
+
+
+def qr_code(request):
+    url = "https://willobarber-production-6951.up.railway.app"
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    return HttpResponse(buffer, content_type="image/png")

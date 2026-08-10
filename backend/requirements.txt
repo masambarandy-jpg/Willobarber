@@ -20,3 +20,4 @@ sendgrid
 stripe
 cloudinary
 twilio==9.10.9
+qrcode[pil]
