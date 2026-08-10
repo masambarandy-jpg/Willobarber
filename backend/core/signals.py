@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
-from .models import Notification, Reservation, User
+from .models import Notification, Reservation, Review, User
 
 AT_RISK_THRESHOLD = 3
 AT_RISK_STATUSES = ('cancelled', 'cancelled_client', 'no_show')
@@ -55,3 +55,19 @@ def notify_on_reservation_change(sender, instance, created, **kwargs):
             title='Rendez-vous annulé',
             desc=f"{client_name} · {instance.service.name} · {heure}",
         )
+
+
+@receiver(post_save, sender=Review)
+def notify_on_new_review(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    client_name = f"{instance.user.first_name} {instance.user.last_name}".strip() or instance.user.username
+    service_name = instance.reservation.service.name
+    rating = instance.rating
+
+    Notification.objects.create(
+        type='avis',
+        title=f"Nouvel avis {'⭐' * rating}",
+        desc=f"{client_name} · {service_name} · {rating}★",
+    )
