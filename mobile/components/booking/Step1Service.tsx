@@ -25,9 +25,10 @@ interface Props {
   booking: BookingState;
   onSelect: (s: StaticService) => void;
   onChildCountChange: (n: number) => void;
+  footerHeight?: number;
 }
 
-export function Step1Service({ booking, onSelect, onChildCountChange }: Props) {
+export function Step1Service({ booking, onSelect, onChildCountChange, footerHeight }: Props) {
   const selected   = booking.service;
   const childCount = booking.childCount;
   const { t } = useLanguage();
@@ -35,7 +36,7 @@ export function Step1Service({ booking, onSelect, onChildCountChange }: Props) {
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: footerHeight ?? 100 }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
