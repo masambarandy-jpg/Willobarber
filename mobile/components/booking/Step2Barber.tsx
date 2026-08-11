@@ -20,9 +20,10 @@ const BORDER_MED = 'rgba(255,255,255,0.16)';
 interface Props {
   booking: BookingState;
   onSelect: (b: StaticBarber) => void;
+  footerHeight?: number;
 }
 
-export function Step2Barber({ booking, onSelect }: Props) {
+export function Step2Barber({ booking, onSelect, footerHeight }: Props) {
   const selected = booking.barber;
   const { t } = useLanguage();
 
@@ -41,7 +42,7 @@ export function Step2Barber({ booking, onSelect }: Props) {
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: footerHeight ?? 100 }]}
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.kicker}>{t('booking.kicker')}</Text>

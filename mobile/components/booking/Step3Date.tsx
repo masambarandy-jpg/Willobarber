@@ -221,6 +221,8 @@ interface Props {
   onDateSelect: (d: Date) => void;
   onTimeSelect: (t: string) => void;
   serviceId: number | null;
+  titleOverride?: string;
+  footerHeight?: number;
 }
 
 export interface Step3DateHandle {
@@ -229,7 +231,7 @@ export interface Step3DateHandle {
 }
 
 export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
-  { booking, onDateSelect, onTimeSelect, serviceId },
+  { booking, onDateSelect, onTimeSelect, serviceId, titleOverride, footerHeight },
   ref
 ) {
   const { date: selectedDate, time: selectedTime, service } = booking;
@@ -323,10 +325,10 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: footerHeight ?? 100 }]}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.title}>{t('step3.title')}</Text>
+      <Text style={styles.title}>{titleOverride ?? t('step3.title')}</Text>
       <Text style={styles.subtitle}>
         {t('step3.subtitle')}
       </Text>

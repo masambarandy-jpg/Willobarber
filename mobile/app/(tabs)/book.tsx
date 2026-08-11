@@ -254,6 +254,10 @@ export default function BookScreen() {
   const [serviceIdMap,  setServiceIdMap]  = useState<Record<string, number>>({});
   const [isPaying,      setIsPaying]      = useState(false);
   const [createdReservationId, setCreatedReservationId] = useState<number | null>(null);
+  // Hauteur réelle du footer (absolute + hauteur dynamique selon insets.bottom) —
+  // mesurée via onLayout et transmise aux Steps pour que leur ScrollView réserve
+  // exactement l'espace nécessaire, sans zone vide ni contenu masqué dessous.
+  const [footerHeight, setFooterHeight] = useState(100);
   const step4Ref = useRef<Step4PaymentHandle>(null);
   const step3Ref = useRef<Step3DateHandle>(null);
 
@@ -562,12 +566,14 @@ export default function BookScreen() {
           booking={booking}
           onSelect={selectService}
           onChildCountChange={changeChildCount}
+          footerHeight={footerHeight}
         />
       )}
       {step === 2 && (
         <Step2Barber
           booking={booking}
           onSelect={selectBarber}
+          footerHeight={footerHeight}
         />
       )}
       {step === 3 && (
@@ -578,6 +584,7 @@ export default function BookScreen() {
           onTimeSelect={selectTime}
           serviceId={serviceIdMap[booking.service?.id ?? ''] ?? null}
           titleOverride={isRescheduleMode ? t('book.rescheduleTitle') : undefined}
+          footerHeight={footerHeight}
         />
       )}
       {step === 4 && (
@@ -601,7 +608,11 @@ export default function BookScreen() {
           carte Stripe une fois le clavier ouvert. */}
       {step !== 4 && (
         <View style={styles.footerContainer} pointerEvents="box-none">
-          <View style={[styles.footerInner, { paddingBottom }]} pointerEvents="box-none">
+          <View
+            style={[styles.footerInner, { paddingBottom }]}
+            pointerEvents="box-none"
+            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+          >
             <TouchableOpacity
               style={styles.backBtn}
               onPress={handleBack}
