@@ -846,35 +846,39 @@ export default function ReservationsScreen() {
                 </>
               )}
 
-              {/* Resume card */}
-              <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
+              {/* Resume card — masqué pour un nouveau client sans historique */}
+              {hasHistory && (
+                <>
+                  <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
 
-              <View style={styles.resumeCard}>
-                <View style={styles.resumeBadge}>
-                  <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge')}</Text>
-                </View>
-                <View style={styles.resumeRow}>
-                  <View style={styles.scissorsBox}>
-                    <Text style={{ fontSize: 22 }}>✂️</Text>
+                  <View style={styles.resumeCard}>
+                    <View style={styles.resumeBadge}>
+                      <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge')}</Text>
+                    </View>
+                    <View style={styles.resumeRow}>
+                      <View style={styles.scissorsBox}>
+                        <Text style={{ fontSize: 22 }}>✂️</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.resumeServiceName}>{t('reservations.hist.signature')}</Text>
+                        <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 16 }}>
+                      <TouchableOpacity
+                        style={[styles.btnPrimary, { flex: 1 }]}
+                        onPress={handleResumeSameCut}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]} onPress={handleAdapter} activeOpacity={0.85}>
+                        <Text style={styles.btnOutlineText}>{t('reservations.adaptBtn')}</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.resumeServiceName}>{t('reservations.hist.signature')}</Text>
-                    <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', gap: 16 }}>
-                  <TouchableOpacity
-                    style={[styles.btnPrimary, { flex: 1 }]}
-                    onPress={handleResumeSameCut}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]} onPress={handleAdapter} activeOpacity={0.85}>
-                    <Text style={styles.btnOutlineText}>{t('reservations.adaptBtn')}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+                </>
+              )}
 
               {/* Vos favoris */}
               <Text style={styles.sectionTitle}>{t('reservations.favoritesTitle')}</Text>
@@ -1252,35 +1256,39 @@ export default function ReservationsScreen() {
           </>
         )}
 
-        {/* ── 4. REPRENEZ LÀ OÙ VOUS EN ÉTIEZ ────────────────────── */}
-        <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
+        {/* ── 4. REPRENEZ LÀ OÙ VOUS EN ÉTIEZ ── masqué pour un nouveau client sans historique */}
+        {hasHistory && (
+          <>
+            <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
 
-        <View style={styles.resumeCard}>
-          <View style={styles.resumeBadge}>
-            <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge')}</Text>
-          </View>
-          <View style={styles.resumeRow}>
-            <View style={styles.scissorsBox}>
-              <Text style={{ fontSize: 22 }}>✂️</Text>
+            <View style={styles.resumeCard}>
+              <View style={styles.resumeBadge}>
+                <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge')}</Text>
+              </View>
+              <View style={styles.resumeRow}>
+                <View style={styles.scissorsBox}>
+                  <Text style={{ fontSize: 22 }}>✂️</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.resumeServiceName}>{t('reservations.hist.signature')}</Text>
+                  <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 16 }}>
+                <TouchableOpacity
+                  style={[styles.btnPrimary, { flex: 1 }]}
+                  onPress={handleResumeSameCut}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]} onPress={handleAdapter} activeOpacity={0.85}>
+                  <Text style={styles.btnOutlineText}>{t('reservations.adaptBtn')}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.resumeServiceName}>{t('reservations.hist.signature')}</Text>
-              <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 16 }}>
-            <TouchableOpacity
-              style={[styles.btnPrimary, { flex: 1 }]}
-              onPress={handleResumeSameCut}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.btnPrimaryText}>{t('reservations.resumeCta')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]} onPress={handleAdapter} activeOpacity={0.85}>
-              <Text style={styles.btnOutlineText}>{t('reservations.adaptBtn')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        )}
 
         {/* ── 5. VOS FAVORIS ────────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>{t('reservations.favoritesTitle')}</Text>

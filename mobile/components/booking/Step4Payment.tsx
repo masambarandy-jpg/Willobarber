@@ -33,9 +33,7 @@ const INPUT_BG     = 'rgba(255,255,255,0.05)';
 const INPUT_BORDER = 'rgba(255,255,255,0.08)';
 
 const PAYMENT_TAB_KEYS: { id: PaymentMethod; labelKey: TranslationKey }[] = [
-  { id: 'card',   labelKey: 'step4.tabCard'   },
-  { id: 'apple',  labelKey: 'step4.tabApple'  },
-  { id: 'google', labelKey: 'step4.tabGoogle' },
+  { id: 'card', labelKey: 'step4.tabCard' },
 ];
 
 interface Props {
