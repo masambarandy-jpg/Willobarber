@@ -275,7 +275,9 @@ export default function ReservationsScreen() {
   const [qrTarget, setQrTarget] = useState<(Reservation & { time: string }) | null>(null);
   const [reviewModalTarget, setReviewModalTarget] = useState<{ id: number; service: string } | null>(null);
   const [mainTab, setMainTab] = useState<'apercu' | 'coupes'>('apercu');
-  const [loyaltyPoints, setLoyaltyPoints] = useState(MOCK_LOYALTY.points);
+  // 0 par défaut (nouveau compte) — corrigé vers MOCK_LOYALTY.points une fois
+  // l'historique chargé, uniquement s'il n'est pas vide (cf. effet plus bas).
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const barAnim = useRef(new Animated.Value(0)).current;
   const { media: myMedia, isLoading: myMediaLoading } = useClientMedia(user?.id ?? null);
 
@@ -298,6 +300,17 @@ export default function ReservationsScreen() {
   const now = new Date();
   const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
   const pastList = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
+  const hasHistory = pastList.length > 0;
+
+  // Initialise le solde de points une seule fois, après le premier chargement
+  // des réservations : 0 pour un compte sans historique, sinon le solde du
+  // compte de démo (MOCK_LOYALTY). Ne se redéclenche pas après (ex: refetch
+  // suite à un rachat de points), sans quoi le rachat serait annulé.
+  useEffect(() => {
+    if (!hasLoadedOnce) return;
+    setLoyaltyPoints(pastList.length === 0 ? 0 : MOCK_LOYALTY.points);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLoadedOnce]);
 
   const nextReservation = upcomingList
     .filter((r) => `${r.date}T${r.time}` >= nowKey)
@@ -431,7 +444,7 @@ export default function ReservationsScreen() {
     );
   }
 
-  const username = user?.username || user?.first_name || 'Client';
+  const username = user?.first_name || user?.username || 'Client';
   const nextTarget  = getNextTarget(loyaltyPoints);
   const ptsRestants = nextTarget - loyaltyPoints;
 
@@ -727,7 +740,7 @@ export default function ReservationsScreen() {
               {/* Stats */}
               <View style={styles.statsGrid}>
                 <View style={styles.statCard}>
-                  <Text style={styles.statNum}>12</Text>
+                  <Text style={styles.statNum}>{pastList.length}</Text>
                   <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
                 </View>
                 <View style={styles.statCard}>
@@ -857,6 +870,9 @@ export default function ReservationsScreen() {
               {/* Vos favoris */}
               <Text style={styles.sectionTitle}>{t('reservations.favoritesTitle')}</Text>
 
+              {!hasHistory ? (
+                <Text style={styles.emptyHist}>{t('reservations.favoritesEmpty')}</Text>
+              ) : (
               <View style={styles.favGrid}>
                 {FAVORIS.map((fav, i) => (
                   <View key={i} style={[styles.favCard, styles.favCardTablet]}>
@@ -870,6 +886,7 @@ export default function ReservationsScreen() {
                   </View>
                 ))}
               </View>
+              )}
             </ScrollView>
 
             {/* ═══ COLONNE DROITE (60%) ═══════════════════════════════ */}
@@ -1073,7 +1090,9 @@ export default function ReservationsScreen() {
 
               {/* Historique des points */}
               <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
-              {TRANSACTIONS.map(tx => {
+              {!hasHistory ? (
+                <Text style={styles.emptyHist}>{t('reservations.transactionsEmpty')}</Text>
+              ) : TRANSACTIONS.map(tx => {
                 const isSpend = tx.type === 'spend';
                 const isBonus = tx.type === 'bonus';
                 const iconColor = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#C9A84C';
@@ -1125,7 +1144,7 @@ export default function ReservationsScreen() {
         {/* ── 2. GRILLE STATS ───────────────────────────────────────── */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Text style={styles.statNum}>12</Text>
+            <Text style={styles.statNum}>{pastList.length}</Text>
             <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
           </View>
           <View style={styles.statCard}>
@@ -1255,7 +1274,9 @@ export default function ReservationsScreen() {
         {/* ── 5. VOS FAVORIS ────────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>{t('reservations.favoritesTitle')}</Text>
 
-        {isTablet ? (
+        {!hasHistory ? (
+          <Text style={styles.emptyHist}>{t('reservations.favoritesEmpty')}</Text>
+        ) : isTablet ? (
           <View style={styles.favGrid}>
             {FAVORIS.map((fav, i) => (
               <View key={i} style={[styles.favCard, styles.favCardTablet]}>
@@ -1448,7 +1469,9 @@ export default function ReservationsScreen() {
 
         {/* ── 8. HISTORIQUE DES POINTS ──────────────────────────────── */}
         <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
-        {TRANSACTIONS.map(tx => {
+        {!hasHistory ? (
+          <Text style={styles.emptyHist}>{t('reservations.transactionsEmpty')}</Text>
+        ) : TRANSACTIONS.map(tx => {
           const isSpend = tx.type === 'spend';
           const isBonus = tx.type === 'bonus';
           const iconColor = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#C9A84C';

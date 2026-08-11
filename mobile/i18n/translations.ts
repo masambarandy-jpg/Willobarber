@@ -231,6 +231,7 @@ const fr = {
   'reservations.adaptBtn': '✏️ Adapter',
 
   'reservations.favoritesTitle': 'Vos favoris',
+  'reservations.favoritesEmpty': 'Vos favoris apparaîtront ici après vos premières visites.',
   'reservations.favLastPrefix': 'dernière',
 
   'reservations.historyTitle': 'Historique',
@@ -257,6 +258,7 @@ const fr = {
   'reservations.loyalty.redeemSuccess': 'Coupe offerte ajoutée à votre prochain RDV !',
 
   'reservations.pointsHistoryTitle': 'HISTORIQUE DES POINTS',
+  'reservations.transactionsEmpty': 'Aucune transaction pour le moment.',
   'reservations.pointsSuffix': 'pts',
 
   'reservations.hist.signature': 'Signature WilloBarber',
@@ -781,6 +783,7 @@ const nl: Record<TranslationKey, string> = {
   'reservations.adaptBtn': '✏️ Aanpassen',
 
   'reservations.favoritesTitle': 'Uw favorieten',
+  'reservations.favoritesEmpty': 'Uw favorieten verschijnen hier na uw eerste bezoeken.',
   'reservations.favLastPrefix': 'laatste',
 
   'reservations.historyTitle': 'Geschiedenis',
@@ -807,6 +810,7 @@ const nl: Record<TranslationKey, string> = {
   'reservations.loyalty.redeemSuccess': 'Gratis coupe toegevoegd aan uw volgende afspraak!',
 
   'reservations.pointsHistoryTitle': 'PUNTENGESCHIEDENIS',
+  'reservations.transactionsEmpty': 'Nog geen transacties.',
   'reservations.pointsSuffix': 'pt',
 
   'reservations.hist.signature': 'Signature WilloBarber',
@@ -1328,6 +1332,7 @@ const en: Record<TranslationKey, string> = {
   'reservations.adaptBtn': '✏️ Adjust',
 
   'reservations.favoritesTitle': 'Your favourites',
+  'reservations.favoritesEmpty': 'Your favourites will appear here after your first visits.',
   'reservations.favLastPrefix': 'last',
 
   'reservations.historyTitle': 'History',
@@ -1354,6 +1359,7 @@ const en: Record<TranslationKey, string> = {
   'reservations.loyalty.redeemSuccess': 'Free cut added to your next appointment!',
 
   'reservations.pointsHistoryTitle': 'POINTS HISTORY',
+  'reservations.transactionsEmpty': 'No transactions yet.',
   'reservations.pointsSuffix': 'pts',
 
   'reservations.hist.signature': 'Signature WilloBarber',
