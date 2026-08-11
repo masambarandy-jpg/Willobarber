@@ -320,6 +320,13 @@ export default function ReservationsScreen() {
     `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
   );
 
+  // pastSorted[0] est le RDV passé le plus récent (tri décroissant ci-dessus) —
+  // parseApiDate() plutôt que `new Date(string)` pour éviter le décalage de
+  // fuseau horaire d'un parsing UTC sur une date "YYYY-MM-DD".
+  const lastVisitDays = pastSorted.length === 0
+    ? null
+    : Math.floor((Date.now() - parseApiDate(pastSorted[0].date).getTime()) / (1000 * 60 * 60 * 24));
+
   const [myReviews, setMyReviews] = useState<Review[]>([]);
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -744,8 +751,10 @@ export default function ReservationsScreen() {
                   <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
                 </View>
                 <View style={styles.statCard}>
-                  <Text style={styles.statNum}>28</Text>
-                  <Text style={styles.statNumSub}>{t('reservations.stats.days')}</Text>
+                  <Text style={styles.statNum}>{lastVisitDays === null ? '—' : lastVisitDays}</Text>
+                  {lastVisitDays !== null && (
+                    <Text style={styles.statNumSub}>{t('reservations.stats.days')}</Text>
+                  )}
                   <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
                 </View>
                 <View style={styles.statCard}>
@@ -1148,8 +1157,10 @@ export default function ReservationsScreen() {
             <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNum}>28</Text>
-            <Text style={styles.statNumSub}>{t('reservations.stats.days')}</Text>
+            <Text style={styles.statNum}>{lastVisitDays === null ? '—' : lastVisitDays}</Text>
+            {lastVisitDays !== null && (
+              <Text style={styles.statNumSub}>{t('reservations.stats.days')}</Text>
+            )}
             <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
           </View>
           <View style={styles.statCard}>
