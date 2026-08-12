@@ -38,7 +38,10 @@ from django.db.models import Count, Max, Sum
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
-from .models import Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave, Notification
+from .models import (
+    Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList,
+    BarberLeave, Notification, NotificationPreference, PaymentCard, UserSession,
+)
 from .emails import format_date_fr, format_date_fr_short, format_heure_fr
 from .permissions import IsStaffRole
 from .sms import send_reminders_for_tomorrow
@@ -47,6 +50,7 @@ from .serializers import (
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
     ClosedPeriodSerializer, ReviewSerializer, WaitingListSerializer,
     BarberLeaveSerializer, NotificationSerializer,
+    NotificationPreferenceSerializer, PaymentCardSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -381,10 +385,19 @@ class LoginView(APIView):
         user = authenticate(request=request, username=username, password=password)
         if user:
             refresh = RefreshToken.for_user(user)
+            access = str(refresh.access_token)
+            refresh_str = str(refresh)
+            if user.role == 'admin':
+                UserSession.objects.create(
+                    user=user,
+                    device=request.META.get('HTTP_USER_AGENT', '')[:255],
+                    access_token=access,
+                    refresh_token=refresh_str,
+                )
             return Response({
                 'user': UserSerializer(user).data,
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
+                'refresh': refresh_str,
+                'access': access,
             })
         return Response(
             {'detail': 'Identifiants invalides.', 'debug': {'username_received': username, 'password_empty': not password}},
@@ -396,12 +409,14 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        refresh_str = request.data.get('refresh')
         try:
-            token = RefreshToken(request.data.get('refresh'))
+            token = RefreshToken(refresh_str)
             token.blacklist()
-            return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception:
             return Response(status=status.HTTP_400_BAD_REQUEST)
+        UserSession.objects.filter(user=request.user, refresh_token=refresh_str).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MeView(APIView):
@@ -1275,6 +1290,131 @@ def restore_client(request, pk):
     client.deleted_at = None
     client.save(update_fields=['is_deleted', 'deleted_at'])
     return Response(_serialize_clients(User.objects.filter(pk=client.pk))[0])
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsStaffRole])
+def notification_preferences(request):
+    prefs, _ = NotificationPreference.objects.get_or_create(user=request.user)
+
+    if request.method == 'PATCH':
+        serializer = NotificationPreferenceSerializer(prefs, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    return Response(NotificationPreferenceSerializer(prefs).data)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsStaffRole])
+def payment_cards(request):
+    if request.method == 'POST':
+        is_first_card = not request.user.payment_cards.exists()
+        serializer = PaymentCardSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(owner=request.user, is_primary=is_first_card)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    cards = request.user.payment_cards.all()
+    return Response(PaymentCardSerializer(cards, many=True).data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsStaffRole])
+def payment_card_set_primary(request, pk):
+    try:
+        card = PaymentCard.objects.get(pk=pk, owner=request.user)
+    except PaymentCard.DoesNotExist:
+        return Response({'error': 'Carte introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    with transaction.atomic():
+        request.user.payment_cards.exclude(pk=card.pk).update(is_primary=False)
+        card.is_primary = True
+        card.save(update_fields=['is_primary'])
+
+    return Response(PaymentCardSerializer(card).data)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsStaffRole])
+def payment_card_delete(request, pk):
+    try:
+        card = PaymentCard.objects.get(pk=pk, owner=request.user)
+    except PaymentCard.DoesNotExist:
+        return Response({'error': 'Carte introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    card.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsStaffRole])
+def commission_settings(request):
+    shop = Barbershop.objects.filter(owner=request.user).first() or Barbershop.objects.first()
+    if not shop:
+        return Response({'error': 'Aucun salon configuré.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'PATCH':
+        rate = request.data.get('commission_rate')
+        try:
+            shop.commission_rate = round(float(rate), 1)
+        except (TypeError, ValueError):
+            return Response({'error': 'Taux de commission invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+        shop.save(update_fields=['commission_rate'])
+
+    return Response({'commission_rate': float(shop.commission_rate)})
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def security_settings(request):
+    return Response({'two_factor_enabled': request.user.two_factor_enabled})
+
+
+@api_view(['PATCH'])
+@permission_classes([IsStaffRole])
+def toggle_two_factor(request):
+    enabled = request.data.get('enabled')
+    if not isinstance(enabled, bool):
+        return Response({'error': "Le champ 'enabled' doit être un booléen."}, status=status.HTTP_400_BAD_REQUEST)
+    request.user.two_factor_enabled = enabled
+    request.user.save(update_fields=['two_factor_enabled'])
+    return Response({'two_factor_enabled': request.user.two_factor_enabled})
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def session_list(request):
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    current_access_token = auth_header.split(' ')[-1] if auth_header else ''
+
+    sessions = request.user.sessions.all()
+    return Response([
+        {
+            'id': s.id,
+            'device': s.device or 'Appareil inconnu',
+            'created_at': s.created_at.isoformat(),
+            'current': s.access_token == current_access_token,
+        }
+        for s in sessions
+    ])
+
+
+@api_view(['DELETE'])
+@permission_classes([IsStaffRole])
+def session_delete(request, pk):
+    try:
+        session = UserSession.objects.get(pk=pk, user=request.user)
+    except UserSession.DoesNotExist:
+        return Response({'error': 'Session introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        RefreshToken(session.refresh_token).blacklist()
+    except Exception:
+        pass
+    session.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['POST'])

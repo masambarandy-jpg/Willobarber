@@ -18,6 +18,7 @@ class User(AbstractUser):
     is_at_risk = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
+    two_factor_enabled = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.username} ({self.role})"
@@ -28,6 +29,7 @@ class Barbershop(models.Model):
     address = models.CharField(max_length=255)
     phone = models.CharField(max_length=20)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    commission_rate = models.DecimalField(max_digits=4, decimal_places=1, default=4.0)
 
     def __str__(self):
         return self.name
@@ -237,3 +239,60 @@ class Review(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.rating}★"
+
+
+class NotificationPreference(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notification_preferences')
+
+    new_rdv_email = models.BooleanField(default=True)
+    new_rdv_sms = models.BooleanField(default=True)
+    new_rdv_push = models.BooleanField(default=True)
+
+    cancellation_email = models.BooleanField(default=True)
+    cancellation_sms = models.BooleanField(default=True)
+    cancellation_push = models.BooleanField(default=False)
+
+    new_review_email = models.BooleanField(default=True)
+    new_review_sms = models.BooleanField(default=False)
+    new_review_push = models.BooleanField(default=True)
+
+    daily_reminder_email = models.BooleanField(default=False)
+    daily_reminder_sms = models.BooleanField(default=True)
+    daily_reminder_push = models.BooleanField(default=True)
+
+    weekly_report_email = models.BooleanField(default=True)
+    weekly_report_sms = models.BooleanField(default=False)
+    weekly_report_push = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Préférences notifications — {self.user}"
+
+
+class PaymentCard(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='payment_cards')
+    brand = models.CharField(max_length=20)
+    last4 = models.CharField(max_length=4)
+    exp_month = models.IntegerField()
+    exp_year = models.IntegerField()
+    is_primary = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_primary', '-created_at']
+
+    def __str__(self):
+        return f"{self.brand} •••• {self.last4} ({self.owner})"
+
+
+class UserSession(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sessions')
+    device = models.CharField(max_length=255, blank=True, default='')
+    access_token = models.TextField()
+    refresh_token = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user} — {self.device or 'Appareil inconnu'}"
