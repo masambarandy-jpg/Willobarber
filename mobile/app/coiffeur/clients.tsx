@@ -122,6 +122,7 @@ export default function CoiffeurClientsScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [addClientErrors, setAddClientErrors] = useState<{ phone?: string }>({});
 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [clientEnEdition, setClientEnEdition] = useState<Client | null>(null);
@@ -273,15 +274,22 @@ export default function CoiffeurClientsScreen() {
 
   const updateField = (key: keyof typeof EMPTY_FORM, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    if (key === 'phone') setAddClientErrors((prev) => ({ ...prev, phone: undefined }));
   };
 
   const closeModal = () => {
     setForm(EMPTY_FORM);
+    setAddClientErrors({});
     setModalVisible(false);
   };
 
   const handleAddClient = () => {
     if (!form.firstName.trim() || !form.lastName.trim()) return;
+
+    if (!form.phone.trim()) {
+      setAddClientErrors({ phone: 'Le téléphone est obligatoire' });
+      return;
+    }
 
     const newClient: Client = {
       id: Date.now(),
@@ -681,6 +689,7 @@ export default function CoiffeurClientsScreen() {
             />
 
             <Text style={styles.fieldLabel}>EMAIL</Text>
+            <Text style={styles.fieldOptionalText}>(optionnel)</Text>
             <TextInput
               value={form.email}
               onChangeText={(v) => updateField('email', v)}
@@ -700,6 +709,9 @@ export default function CoiffeurClientsScreen() {
               placeholderTextColor={CC.textSecondary}
               keyboardType="phone-pad"
             />
+            {addClientErrors.phone && (
+              <Text style={styles.fieldErrorText}>{addClientErrors.phone}</Text>
+            )}
 
             <View style={styles.modalActionsRow}>
               <TouchableOpacity style={styles.cancelBtn} onPress={closeModal}>
@@ -1349,6 +1361,18 @@ const styles = StyleSheet.create({
     color: CC.textSecondary,
     letterSpacing: 0.5,
     marginBottom: 7,
+  },
+  fieldOptionalText: {
+    fontSize: 12,
+    color: CC.textSecondary,
+    marginTop: -5,
+    marginBottom: 7,
+  },
+  fieldErrorText: {
+    fontSize: 12,
+    color: CC.errorText,
+    marginTop: -10,
+    marginBottom: 12,
   },
   input: {
     backgroundColor: CC.white,
