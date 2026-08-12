@@ -602,35 +602,33 @@ export default function BookScreen() {
         />
       )}
 
-      {/* Fixed CTA footer — steps 1-3 seulement. Le step 4 a son bouton "Payer"
-          intégré en dernier élément du ScrollView de Step4Payment : un footer
-          position:absolute finissait toujours par flotter au-dessus du champ
-          carte Stripe une fois le clavier ouvert. */}
+      {/* CTA footer — steps 1-3 seulement, en flux normal (pas absolute) sous le
+          ScrollView du step : celui-ci (flex:1) se redimensionne donc tout seul
+          pour laisser exactement la place du footer, sans jamais cacher les
+          cartes en bas de liste. Le step 4 a son bouton "Payer" intégré en
+          dernier élément du ScrollView de Step4Payment, sans footer partagé. */}
       {step !== 4 && (
-        <View style={styles.footerContainer} pointerEvents="box-none">
-          <View
-            style={[styles.footerInner, { paddingBottom }]}
-            pointerEvents="box-none"
-            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+        <View
+          style={[styles.footerInner, { paddingBottom }]}
+          onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+        >
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={handleBack}
+            activeOpacity={0.8}
           >
-            <TouchableOpacity
-              style={styles.backBtn}
-              onPress={handleBack}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.backBtnText}>{t('common.back')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.cta, (!ctaEnabled || isPaying) && styles.ctaDisabled]}
-              onPress={handleNext}
-              disabled={!ctaEnabled || isPaying}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.ctaText}>
-                {isPaying ? t('book.cta.rescheduling') : CTA_LABELS[step]}
-              </Text>
-            </TouchableOpacity>
-          </View>
+            <Text style={styles.backBtnText}>{t('common.back')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.cta, (!ctaEnabled || isPaying) && styles.ctaDisabled]}
+            onPress={handleNext}
+            disabled={!ctaEnabled || isPaying}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.ctaText}>
+              {isPaying ? t('book.cta.rescheduling') : CTA_LABELS[step]}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
       </View>
@@ -675,13 +673,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
 
-  footerContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-
   footerInner: {
     flexDirection: 'row',
     gap: 12,
@@ -690,7 +681,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(13,12,10,0.85)',
-    zIndex: 10,
   },
 
   backBtn: {
