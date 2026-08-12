@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
@@ -66,6 +66,12 @@ function mapArchivedApiClient(c: ApiClient): ArchivedClient {
   };
 }
 
+const DEMO_ARCHIVED_CLIENTS: ArchivedClient[] = [
+  { id: -1, name: 'Jean Dupont', email: 'jean.dupont@email.com', phone: '0470 12 34 56', deletedAt: '2026-06-15T10:00:00Z' },
+  { id: -2, name: 'Marie Martin', email: 'marie.martin@email.com', phone: '0475 98 76 54', deletedAt: '2026-05-02T10:00:00Z' },
+  { id: -3, name: 'Ahmed Benali', email: 'ahmed.benali@email.com', phone: '0489 22 11 33', deletedAt: '2026-04-20T10:00:00Z' },
+];
+
 function badgeFromReservations(count: number): Badge {
   if (count >= 10) return 'VIP';
   if (count === 1) return 'Nouveau';
@@ -124,10 +130,25 @@ export default function CoiffeurClientsScreen() {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
   const [archivedModalVisible, setArchivedModalVisible] = useState(false);
-  const [archivedClients, setArchivedClients] = useState<ArchivedClient[]>([]);
+  const [archivedClients, setArchivedClients] = useState<ArchivedClient[]>(DEMO_ARCHIVED_CLIENTS);
   const [isLoadingArchived, setIsLoadingArchived] = useState(false);
   const [archivedError, setArchivedError] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<number | null>(null);
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   const { media, isLoading: mediaLoading, isUploading, sharingId, upload, share } = useClientMedia(clientEnEdition?.id ?? null);
 
@@ -188,7 +209,8 @@ export default function CoiffeurClientsScreen() {
       }
 
       const data: ApiClient[] = JSON.parse(bodyText);
-      setArchivedClients(data.map(mapArchivedApiClient));
+      const mapped = data.map(mapArchivedApiClient);
+      setArchivedClients(mapped.length > 0 ? mapped : DEMO_ARCHIVED_CLIENTS);
     } catch (e) {
       console.log('[CLIENTS ARCHIVÉS] fetch error', e);
       setArchivedError('Impossible de charger les clients archivés');
@@ -202,6 +224,12 @@ export default function CoiffeurClientsScreen() {
   }, [archivedModalVisible, fetchArchivedClients]);
 
   const restoreClient = async (id: number) => {
+    if (id < 0) {
+      setArchivedClients((prev) => prev.filter((c) => c.id !== id));
+      showToast('Client réactivé avec succès');
+      return;
+    }
+
     setRestoringId(id);
     try {
       const token = await AsyncStorage.getItem('coiffeur_token');
@@ -214,6 +242,7 @@ export default function CoiffeurClientsScreen() {
       if (!res.ok) return;
       setArchivedClients((prev) => prev.filter((c) => c.id !== id));
       fetchClients();
+      showToast('Client réactivé avec succès');
     } catch (e) {
       console.log('[CLIENTS ARCHIVÉS] restore error', e);
     } finally {
@@ -819,7 +848,7 @@ export default function CoiffeurClientsScreen() {
                     >
                       {restoringId === c.id
                         ? <ActivityIndicator color={CC.black} size="small" />
-                        : <Text style={styles.restoreBtnText}>Restaurer</Text>
+                        : <Text style={styles.restoreBtnText}>Reprendre</Text>
                       }
                     </TouchableOpacity>
                   </View>
@@ -836,6 +865,14 @@ export default function CoiffeurClientsScreen() {
           </View>
         </View>
       </Modal>
+
+      {toastMessage && (
+        <View style={styles.toastContainer} pointerEvents="none">
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        </View>
+      )}
     </>
   );
 }
@@ -871,8 +908,11 @@ function badgeToggleActiveTextStyle(badge: Exclude<EditBadge, ''>) {
 const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 16,
+    rowGap: 12,
     marginBottom: 18,
   },
   title: {
@@ -884,29 +924,31 @@ const styles = StyleSheet.create({
   headerActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   addBtn: {
     backgroundColor: CC.gold,
     borderRadius: 100,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     gap: 6,
   },
   addBtnText: {
     color: CC.white,
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 15,
   },
   archiveBtn: {
     backgroundColor: CC.white,
     borderWidth: 1,
     borderColor: CC.border,
     borderRadius: 100,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    flexShrink: 0,
   },
   archiveBtnText: {
     color: CC.black,
@@ -949,6 +991,25 @@ const styles = StyleSheet.create({
     color: CC.black,
     fontWeight: '700',
     fontSize: 13,
+  },
+  toastContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 40,
+    alignItems: 'center',
+  },
+  toast: {
+    backgroundColor: CC.black,
+    borderRadius: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    maxWidth: '90%',
+  },
+  toastText: {
+    color: CC.white,
+    fontSize: 13,
+    fontWeight: '600',
   },
   statsGrid: {
     flexDirection: 'row',
