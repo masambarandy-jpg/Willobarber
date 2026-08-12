@@ -8,6 +8,8 @@ from datetime import datetime
 
 import anthropic
 import cloudinary.uploader
+import openpyxl
+from openpyxl.styles import Font, PatternFill
 import qrcode
 import sendgrid
 import stripe
@@ -808,6 +810,109 @@ def generate_invoice(request, pk):
 
     response = HttpResponse(buffer.read(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="Facture_WilloBarber_{invoice_number}.pdf"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def export_reservations_pdf(request):
+    reservations = Reservation.objects.select_related('user', 'service').order_by('-date', '-time')
+
+    gold = colors.HexColor('#C9A84C')
+    dark = colors.HexColor('#1A1814')
+    cream = colors.HexColor('#F5F0E8')
+    grey = colors.HexColor('#888888')
+
+    now = timezone.localtime(timezone.now())
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+        rightMargin=15*mm, leftMargin=15*mm,
+        topMargin=20*mm, bottomMargin=15*mm)
+
+    elements = [
+        Paragraph('<font size=20><b>Rapport WilloBarber</b></font>', getSampleStyleSheet()['Normal']),
+        Paragraph(
+            f'<font size=9 color=grey>Généré le {format_date_fr(now.date())} à {now.strftime("%H:%M")}</font>',
+            getSampleStyleSheet()['Normal'],
+        ),
+        Spacer(1, 8*mm),
+    ]
+
+    data = [['Date', 'Heure', 'Client', 'Service', 'Statut', 'Montant']]
+    for r in reservations:
+        client_name = r.user.get_full_name() or r.user.username
+        data.append([
+            r.date.strftime('%d/%m/%Y'),
+            r.time.strftime('%H:%M'),
+            client_name,
+            r.service.name,
+            r.get_status_display(),
+            fmt_eur(float(r.service.price)),
+        ])
+
+    table = Table(data, colWidths=[24*mm, 16*mm, 40*mm, 40*mm, 30*mm, 30*mm], repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), dark),
+        ('TEXTCOLOR', (0, 0), (-1, 0), gold),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8.5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, cream]),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dddddd')),
+        ('PADDING', (0, 0), (-1, -1), 6),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    elements.append(table)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    response = HttpResponse(buffer.read(), content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="rapport_willobarber.pdf"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def export_reservations_excel(request):
+    reservations = Reservation.objects.select_related('user', 'service').order_by('-date', '-time')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Réservations'
+
+    headers = ['Date', 'Heure', 'Client', 'Service', 'Statut', 'Montant']
+    ws.append(headers)
+    header_fill = PatternFill(start_color='1A1814', end_color='1A1814', fill_type='solid')
+    header_font = Font(color='C9A84C', bold=True)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for r in reservations:
+        client_name = r.user.get_full_name() or r.user.username
+        ws.append([
+            r.date.strftime('%d/%m/%Y'),
+            r.time.strftime('%H:%M'),
+            client_name,
+            r.service.name,
+            r.get_status_display(),
+            float(r.service.price),
+        ])
+
+    for col in ws.columns:
+        width = max(len(str(cell.value)) if cell.value is not None else 0 for cell in col) + 2
+        ws.column_dimensions[col[0].column_letter].width = width
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    response = HttpResponse(
+        buffer.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = 'attachment; filename="willobarber.xlsx"'
     return response
 
 

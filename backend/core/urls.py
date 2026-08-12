@@ -18,6 +18,8 @@ router.register(r'barber-leaves', BarberLeaveViewSet)
 router.register(r'notifications', NotificationViewSet)
 
 urlpatterns = [
+    path('export/pdf/', views.export_reservations_pdf, name='export-pdf'),
+    path('export/excel/', views.export_reservations_excel, name='export-excel'),
     path('reservations/<int:pk>/acompte-invoice/', views.generate_invoice, name='invoice'),
     path('reservations/<int:pk>/qr/', views.reservation_qr_code, name='reservation-qr'),
     path('checkin/<uuid:qr_code>/', views.checkin_reservation, name='checkin'),
