@@ -527,7 +527,7 @@ export default function BookScreen() {
 
   const ctaEnabled   = isCTAEnabled(step, booking);
   const paddingTop   = insets.top;
-  const paddingBottom = insets.bottom + 14;
+  const paddingBottom = 14;
 
   const totalPrice = booking.service
     ? booking.service.price * (booking.service.counter ? booking.childCount : 1)
