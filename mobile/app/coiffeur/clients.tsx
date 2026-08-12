@@ -117,6 +117,7 @@ const BADGE_OPTIONS: Exclude<EditBadge, ''>[] = ['VIP', 'Nouveau', 'Fidèle', 'I
 export default function CoiffeurClientsScreen() {
   const isTablet = useIsTablet();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
+  const [searchQuery, setSearchQuery] = useState('');
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -252,11 +253,18 @@ export default function CoiffeurClientsScreen() {
   };
 
   const filter = TAB_TO_BADGE[activeTab];
-  const filtered = filter === 'ALL'
+  const badgeFiltered = filter === 'ALL'
     ? clients
     : filter === 'AT_RISK'
       ? clients.filter((c) => c.atRisk)
       : clients.filter((c) => c.badge === filter);
+
+  const searchQueryNormalized = searchQuery.trim().toLowerCase();
+  const filtered = searchQueryNormalized
+    ? badgeFiltered.filter(
+        (c) => c.name.toLowerCase().includes(searchQueryNormalized) || c.email.toLowerCase().includes(searchQueryNormalized)
+      )
+    : badgeFiltered;
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -505,6 +513,17 @@ export default function CoiffeurClientsScreen() {
           })}
         </View>
 
+        <View style={styles.searchBar}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+            placeholder="Rechercher un client..."
+            placeholderTextColor={CC.textSecondary}
+          />
+        </View>
+
         {isLoadingClients && clients.length === 0 && (
           <ActivityIndicator color={CC.gold} style={{ marginVertical: 24 }} />
         )}
@@ -565,6 +584,10 @@ export default function CoiffeurClientsScreen() {
           </TouchableOpacity>
           );
         })}
+
+        {!isLoadingClients && !loadError && filtered.length === 0 && searchQueryNormalized !== '' && (
+          <Text style={styles.searchEmptyText}>Aucun client trouvé pour cette recherche</Text>
+        )}
         </View>
 
         {isTablet && (
@@ -1200,6 +1223,32 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
     flexWrap: 'wrap',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: CC.white,
+    borderWidth: 1,
+    borderColor: CC.inputBorder,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    gap: 8,
+  },
+  searchIcon: {
+    fontSize: 14,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: CC.black,
+  },
+  searchEmptyText: {
+    fontSize: 14,
+    color: CC.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 24,
   },
   errorWrap: {
     alignItems: 'center',
