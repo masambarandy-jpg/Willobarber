@@ -28,7 +28,7 @@ interface Props {
   footerHeight?: number;
 }
 
-export function Step1Service({ booking, onSelect, onChildCountChange, footerHeight }: Props) {
+export function Step1Service({ booking, onSelect, onChildCountChange }: Props) {
   const selected   = booking.service;
   const childCount = booking.childCount;
   const { t } = useLanguage();
@@ -36,7 +36,7 @@ export function Step1Service({ booking, onSelect, onChildCountChange, footerHeig
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={[styles.content, { paddingBottom: footerHeight ?? 100 }]}
+      contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
