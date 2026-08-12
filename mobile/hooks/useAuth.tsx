@@ -12,6 +12,7 @@ interface AuthContextValue extends AuthState {
   login: (payload: LoginPayload) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -68,8 +69,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const deleteAccount = useCallback(async () => {
+    const refresh = await TokenStorage.getRefresh();
+    try {
+      await authApi.deleteAccount(refresh ?? undefined);
+    } finally {
+      await TokenStorage.clear();
+      setState({ user: null, isAuthenticated: false, isLoading: false });
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ ...state, login, register, logout, deleteAccount, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -43,19 +43,21 @@ type Event = {
   date: string; // dateKey() format, matches Date-derived keys used throughout this screen
   service: string;
   client: string;
+  status: string;
   barber: Barber;
   amount: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethodType;
 };
 
-// Réel : /api/reservations/ → id, user, user_username, service, service_name,
+// Réel : /api/reservations/ → id, user, user_username, client_display_name, service, service_name,
 // service_price, date, time, status, payment_intent_id, payment_status,
 // payment_method, amount_paid (pas de champ barbier côté API)
 type ApiReservation = {
   id: number;
   user: number;
   user_username: string;
+  client_display_name: string;
   service: number;
   service_name: string;
   service_price: string;
@@ -241,6 +243,7 @@ function buildMockEventsByDate(): Record<string, Event[]> {
       date: todayKey,
       service,
       client: MOCK_CLIENTS[i % MOCK_CLIENTS.length],
+      status: 'confirmed',
       barber: MOCK_BARBERS[i % MOCK_BARBERS.length],
       amount: MOCK_SERVICE_PRICES[service],
       paymentStatus: paid ? 'paid_onsite' : 'unpaid',
@@ -269,6 +272,7 @@ function buildMockEventsByDate(): Record<string, Event[]> {
         date: key,
         service,
         client: MOCK_CLIENTS[Math.floor(rand() * MOCK_CLIENTS.length)],
+        status: 'confirmed',
         barber: MOCK_BARBERS[Math.floor(rand() * MOCK_BARBERS.length)],
         amount: MOCK_SERVICE_PRICES[service],
         paymentStatus: paid ? 'paid_onsite' : 'unpaid',
@@ -438,7 +442,8 @@ export default function CoiffeurPlanningScreen() {
               time: r.time.slice(0, 5),
               date: key,
               service: r.service_name,
-              client: r.user_username,
+              client: r.client_display_name,
+              status: r.status,
               barber: 'Willo', // pas d'endpoint équipe/affectation barbier : fallback
               amount: parseFloat(r.service_price) || 0,
               paymentStatus: r.payment_status,
@@ -979,6 +984,7 @@ export default function CoiffeurPlanningScreen() {
           )}
 
           {dayEvents.map((e) => {
+            const cancelled = e.status === 'cancelled_client';
             const style = BARBER_STYLE[e.barber];
             return (
               <View
@@ -987,14 +993,14 @@ export default function CoiffeurPlanningScreen() {
                   styles.event,
                   {
                     top: timeOffset(e.time) + 2,
-                    backgroundColor: style.bg,
-                    borderLeftColor: style.border,
+                    backgroundColor: cancelled ? 'rgba(192,57,43,0.08)' : style.bg,
+                    borderLeftColor: cancelled ? '#C0392B' : style.border,
                   },
                 ]}
               >
                 <TouchableOpacity activeOpacity={0.8} onPress={() => ouvrirDetailRdv(e)}>
-                  <Text style={[styles.eventText, { color: style.border }]}>
-                    {e.time} · {e.service}{e.paymentStatus !== 'unpaid' ? ' ✅' : ''}
+                  <Text style={[styles.eventText, { color: cancelled ? '#C0392B' : style.border }]}>
+                    {e.time} · {e.service}{e.paymentStatus !== 'unpaid' ? ' ✅' : ''}{cancelled ? ' · Annulé' : ''}
                   </Text>
                   <Text style={styles.eventClient}>{e.client}</Text>
                 </TouchableOpacity>
@@ -1026,16 +1032,20 @@ export default function CoiffeurPlanningScreen() {
                   {capitalize(d.toLocaleDateString('fr-FR', { weekday: 'short' })).replace('.', '')} {d.getDate()}
                 </Text>
                 {events.map((e) => {
+                  const cancelled = e.status === 'cancelled_client';
                   const style = BARBER_STYLE[e.barber];
                   return (
                     <TouchableOpacity
                       key={e.id}
                       activeOpacity={0.8}
                       onPress={() => ouvrirDetailRdv(e)}
-                      style={[styles.weekEventCard, { backgroundColor: style.bg, borderLeftColor: style.border }]}
+                      style={[
+                        styles.weekEventCard,
+                        { backgroundColor: cancelled ? 'rgba(192,57,43,0.08)' : style.bg, borderLeftColor: cancelled ? '#C0392B' : style.border },
+                      ]}
                     >
-                      <Text style={[styles.weekEventText, { color: style.border }]} numberOfLines={1}>
-                        {e.time}{e.paymentStatus !== 'unpaid' ? ' ✅' : ''}
+                      <Text style={[styles.weekEventText, { color: cancelled ? '#C0392B' : style.border }]} numberOfLines={1}>
+                        {e.time}{e.paymentStatus !== 'unpaid' ? ' ✅' : ''}{cancelled ? ' · Annulé' : ''}
                       </Text>
                       <Text style={styles.weekEventClient} numberOfLines={1}>
                         {e.client}

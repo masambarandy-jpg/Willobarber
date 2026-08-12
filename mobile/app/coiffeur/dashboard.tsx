@@ -49,12 +49,13 @@ type ApiProduct = {
   stock_alert: number;
 };
 
-// Réel : /api/reservations/ → {id, user, user_username, service, service_name, date, time,
-// status, payment_status} (pas de champ barber_name / client_name côté API)
+// Réel : /api/reservations/ → {id, user, user_username, client_display_name, service, service_name, date, time,
+// status, payment_status} (pas de champ barber_name côté API)
 type ApiReservation = {
   id: number;
   user: number;
   user_username: string;
+  client_display_name: string;
   service: number;
   service_name: string;
   date: string;
@@ -238,8 +239,8 @@ function useDashboardData() {
           .slice(0, 4)
           .map((r) => ({
             id: r.id,
-            letter: (r.user_username?.charAt(0) ?? 'W').toUpperCase(),
-            name: r.user_username,
+            letter: (r.client_display_name?.charAt(0) ?? 'W').toUpperCase(),
+            name: r.client_display_name,
             service: r.service_name,
             barber: 'Willo',
             time: r.time.slice(0, 5),
@@ -327,7 +328,7 @@ function useDashboardData() {
         // ── Client le plus fidèle (nombre de réservations) ──
         const countByClient: Record<string, number> = {};
         activeReservations.forEach((r) => {
-          countByClient[r.user_username] = (countByClient[r.user_username] ?? 0) + 1;
+          countByClient[r.client_display_name] = (countByClient[r.client_display_name] ?? 0) + 1;
         });
         const topClientEntry = Object.entries(countByClient).sort((a, b) => b[1] - a[1])[0];
         const topClient = topClientEntry ? { name: topClientEntry[0], count: topClientEntry[1] } : null;
@@ -682,7 +683,7 @@ async function genererExcel(data: ExcelData) {
   // ── Onglet Réservations ──
   const reservationsRows = data.reservations.map((r) => ({
     ID: r.id,
-    Client: r.user_username,
+    Client: r.client_display_name,
     Service: r.service_name,
     Date: r.date,
     Heure: r.time.slice(0, 5),
