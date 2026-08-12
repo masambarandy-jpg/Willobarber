@@ -42,6 +42,7 @@ type ApiClient = {
   date_joined: string;
   is_at_risk: boolean;
   deleted_at: string | null;
+  deletion_reason: string;
 };
 
 type ArchivedClient = {
@@ -50,6 +51,7 @@ type ArchivedClient = {
   email: string;
   phone: string;
   deletedAt: string | null;
+  deletedByClient: boolean;
 };
 
 function mapArchivedApiClient(c: ApiClient): ArchivedClient {
@@ -63,13 +65,14 @@ function mapArchivedApiClient(c: ApiClient): ArchivedClient {
     email: c.email ?? '',
     phone: c.phone ?? '',
     deletedAt: c.deleted_at,
+    deletedByClient: c.deletion_reason === 'client',
   };
 }
 
 const DEMO_ARCHIVED_CLIENTS: ArchivedClient[] = [
-  { id: -1, name: 'Jean Dupont', email: 'jean.dupont@email.com', phone: '0470 12 34 56', deletedAt: '2026-06-15T10:00:00Z' },
-  { id: -2, name: 'Marie Martin', email: 'marie.martin@email.com', phone: '0475 98 76 54', deletedAt: '2026-05-02T10:00:00Z' },
-  { id: -3, name: 'Ahmed Benali', email: 'ahmed.benali@email.com', phone: '0489 22 11 33', deletedAt: '2026-04-20T10:00:00Z' },
+  { id: -1, name: 'Jean Dupont', email: 'jean.dupont@email.com', phone: '0470 12 34 56', deletedAt: '2026-06-15T10:00:00Z', deletedByClient: false },
+  { id: -2, name: 'Marie Martin', email: 'marie.martin@email.com', phone: '0475 98 76 54', deletedAt: '2026-05-02T10:00:00Z', deletedByClient: false },
+  { id: -3, name: 'Client supprimé', email: 'deleted_20260420100000_ahmed@willobarber.fr', phone: '', deletedAt: '2026-04-20T10:00:00Z', deletedByClient: true },
 ];
 
 function badgeFromReservations(count: number): Badge {
@@ -875,6 +878,9 @@ export default function CoiffeurClientsScreen() {
                           Supprimé le {format(new Date(c.deletedAt), 'd MMM yyyy', { locale: fr })}
                         </Text>
                       )}
+                      {c.deletedByClient && (
+                        <Text style={styles.archivedSelfDeletedBadge}>Compte supprimé par le client</Text>
+                      )}
                     </View>
                     <TouchableOpacity
                       style={styles.restoreBtn}
@@ -1013,6 +1019,12 @@ const styles = StyleSheet.create({
   archivedMeta: {
     fontSize: 12,
     color: CC.textSecondary,
+  },
+  archivedSelfDeletedBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#C0392B',
+    marginTop: 4,
   },
   restoreBtn: {
     backgroundColor: CC.gold,

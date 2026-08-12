@@ -149,8 +149,18 @@ export const authApi = {
   passwordlessLogin: (identifier: string) =>
     http.post<AuthResponse>('/auth/passwordless-login/', { email: identifier }).then((r) => r.data),
 
+  // Connexion via un provider OAuth externe (Gmail, Outlook) déjà vérifié
+  // côté client — crée le compte s'il n'existe pas encore (cf. OAuthLoginView).
+  oauthLogin: (email: string, firstName?: string, lastName?: string) =>
+    http
+      .post<AuthResponse>('/auth/oauth-login/', { email, first_name: firstName, last_name: lastName })
+      .then((r) => r.data),
+
   logout: (refresh: string) =>
     http.post('/auth/logout/', { refresh }),
+
+  deleteAccount: (refresh?: string) =>
+    http.delete('/auth/delete-account/', { data: refresh ? { refresh } : undefined }),
 
   me: () => http.get<User>('/auth/me/').then((r) => r.data),
 
@@ -199,8 +209,22 @@ export const reservationsApi = {
   create: (payload: CreateReservationPayload) =>
     http.post<Reservation>('/reservations/', payload).then((r) => r.data),
 
+  // Le endpoint POST /reservations/{id}/cancel/ n'existe pas sur le backend
+  // déployé (confirmé en prod : 404 — seules les routes CRUD standard du
+  // ReservationViewSet sont enregistrées). L'annulation client passe donc par
+  // un PATCH classique sur la ressource, comme le reste du CRUD.
   cancel: (id: number, reason?: string) =>
-    http.post(`/reservations/${id}/cancel/`, { reason: reason ?? '' }).then((r) => r.data),
+    http
+      .patch<Reservation>(`/reservations/${id}/`, {
+        status: 'cancelled_client',
+        cancellation_reason: reason ?? '',
+      })
+      .then((r) => r.data),
+
+  // Reprogrammer un RDV existant — même endpoint CRUD que cancel(), avec
+  // 'date'/'time' (les noms de champs réels du serializer, pas 'start_time').
+  reschedule: (id: number, payload: { date: string; time: string }) =>
+    http.patch<Reservation>(`/reservations/${id}/`, payload).then((r) => r.data),
 
   qr: (id: number) =>
     http.get<{ reservation_id: number; qr_code: string; checked_in: boolean }>(`/reservations/${id}/qr/`).then((r) => r.data),
@@ -250,6 +274,12 @@ export const reviewsApi = {
 
   create: (payload: { reservation: number; rating: number; comment?: string }) =>
     http.post<Review>('/reviews/', payload).then((r) => r.data),
+};
+
+// ─── Loyalty API ───────────────────────────────────────────────────────────────
+
+export const loyaltyApi = {
+  redeem: () => http.post('/loyalty/redeem/').then((r) => r.data),
 };
 
 // ─── Salon settings API ───────────────────────────────────────────────────────

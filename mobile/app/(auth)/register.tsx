@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/hooks/useAuth';
 import { Fonts } from '@/constants';
+import { LegalModal, LegalModalType } from '@/components/LegalModal';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -25,6 +26,7 @@ interface FormErrors {
   email?: string;
   password?: string;
   password2?: string;
+  terms?: string;
   general?: string;
 }
 
@@ -84,6 +86,8 @@ export default function RegisterScreen() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [legalModal, setLegalModal] = useState<LegalModalType>(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -96,6 +100,7 @@ export default function RegisterScreen() {
     if (!password) e.password = 'Mot de passe requis (min. 8 caractères)';
     else if (password.length < 8) e.password = 'Min. 8 caractères';
     if (password !== password2) e.password2 = 'Les mots de passe ne correspondent pas';
+    if (!acceptedTerms) e.terms = 'Vous devez accepter les conditions pour continuer';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -197,6 +202,29 @@ export default function RegisterScreen() {
           <FieldLabel label="Confirmer le mot de passe" />
           <FieldInput value={password2} onChangeText={setPassword2} placeholder="Confirmez le mot de passe" secureTextEntry error={errors.password2} returnKeyType="done" onSubmitEditing={handleRegister} />
 
+          <View style={styles.rgpdBox}>
+            <Pressable
+              style={styles.rgpdRow}
+              onPress={() => setAcceptedTerms((v) => !v)}
+              hitSlop={8}
+            >
+              <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+                {acceptedTerms && <Text style={styles.checkboxMark}>✓</Text>}
+              </View>
+              <Text style={styles.rgpdText}>
+                J'accepte les{' '}
+                <Text style={styles.rgpdLink} onPress={() => setLegalModal('terms')}>
+                  Conditions d'utilisation
+                </Text>{' '}
+                et la{' '}
+                <Text style={styles.rgpdLink} onPress={() => setLegalModal('privacy')}>
+                  Politique de confidentialité
+                </Text>
+              </Text>
+            </Pressable>
+            {!!errors.terms && <Text style={styles.rgpdError}>{errors.terms}</Text>}
+          </View>
+
           <TouchableOpacity
             style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
             onPress={handleRegister}
@@ -212,10 +240,10 @@ export default function RegisterScreen() {
               <Text style={styles.loginLink}> Se connecter</Text>
             </Pressable>
           </View>
-
-          <Text style={styles.legal}>En créant un compte vous acceptez nos conditions d'utilisation.</Text>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <LegalModal type={legalModal} onClose={() => setLegalModal(null)} />
     </View>
   );
 }
@@ -282,5 +310,28 @@ const styles = StyleSheet.create({
   loginText: { fontSize: 13.5, color: '#6B6560' },
   loginLink: { fontSize: 13.5, fontWeight: '600', color: '#8B6914' },
 
-  legal: { fontSize: 11.5, color: '#a89f93', textAlign: 'center', lineHeight: 17 },
+  rgpdBox: {
+    backgroundColor: '#1A1814',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 14,
+    marginBottom: 18,
+  },
+  rgpdRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#C9A84C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  checkboxChecked: { backgroundColor: '#C9A84C' },
+  checkboxMark: { color: '#1A1208', fontSize: 13, fontWeight: '700' },
+  rgpdText: { flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 19 },
+  rgpdLink: { color: '#C9A84C', fontWeight: '600', textDecorationLine: 'underline' },
+  rgpdError: { fontSize: 12, color: '#E4574C', marginTop: 8 },
 });

@@ -23,6 +23,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { authApi, recommendationsApi, TokenStorage } from '@/services/api';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
+import { LegalModal } from '@/components/LegalModal';
 
 
 function LoadingDots() {
@@ -95,63 +96,8 @@ function ModalField({ label, value, onChangeText, placeholder, secureTextEntry, 
   );
 }
 
-const TERMS_TEXT = `1. Objet de l'application
-
-WilloBarber est une application de réservation en ligne permettant à ses utilisateurs de prendre rendez-vous auprès du salon de coiffure WilloBarber, situé Rue Auguste Van Zande 78 à Bruxelles. L'utilisation de l'application implique l'acceptation pleine et entière des présentes conditions d'utilisation.
-
-2. Accès et inscription
-
-L'accès à certaines fonctionnalités (réservation, historique, recommandations) nécessite la création d'un compte utilisateur. L'utilisateur s'engage à fournir des informations exactes et à jour et est responsable de la confidentialité de ses identifiants. Toute utilisation du compte est présumée effectuée par son titulaire.
-
-3. Réservations
-
-La réservation d'un rendez-vous via l'application est confirmée dès réception d'une notification de confirmation. WilloBarber se réserve le droit de demander un acompte lors de la prise de rendez-vous pour certaines prestations ; cet acompte est déduit du montant total dû en salon. Toute annulation doit intervenir au moins 24 heures avant l'heure du rendez-vous. Une annulation tardive ou une absence non signalée (« no-show ») peut entraîner la perte de l'acompte versé et être comptabilisée parmi les annulations tardives du compte client, pouvant restreindre l'accès à la réservation en ligne en cas de récidive.
-
-4. Responsabilités
-
-WilloBarber s'engage à assurer la disponibilité de l'application dans la mesure du possible, sans garantie d'absence d'interruption ou d'erreur technique. WilloBarber ne saurait être tenu responsable des dommages indirects résultant de l'utilisation de l'application. Le client s'engage à utiliser l'application conformément à sa destination et à ne pas porter atteinte à son bon fonctionnement.
-
-5. Propriété intellectuelle
-
-L'ensemble des éléments de l'application (textes, logos, identité visuelle, structure, code source) est la propriété exclusive de WilloBarber ou de ses concédants et est protégé par le droit belge et international de la propriété intellectuelle. Toute reproduction, représentation ou exploitation non autorisée est interdite.
-
-6. Droit applicable et juridiction compétente
-
-Les présentes conditions d'utilisation sont régies par le droit belge. En cas de litige relatif à leur interprétation ou leur exécution, et à défaut de résolution amiable, les tribunaux de l'arrondissement judiciaire de Bruxelles seront seuls compétents.`;
-
-const PRIVACY_TEXT = `1. Responsable du traitement
-
-WilloBarber, dont le siège est établi Rue Auguste Van Zande 78, 1000 Bruxelles, est responsable du traitement des données à caractère personnel collectées via la présente application, conformément au Règlement (UE) 2016/679 (RGPD).
-
-2. Données collectées
-
-Dans le cadre de l'utilisation de l'application, WilloBarber collecte : le nom et prénom, l'adresse e-mail, le numéro de téléphone, l'historique des rendez-vous et prestations réservées, ainsi que les points de fidélité associés au compte client.
-
-3. Finalités et bases juridiques
-
-Ces données sont traitées pour les finalités suivantes :
-— l'exécution du contrat de prestation de services (gestion des réservations, du compte client et du programme de fidélité), sur la base de l'article 6.1.b du RGPD ;
-— l'envoi de recommandations personnalisées et de communications facultatives, sur la base du consentement de l'utilisateur (article 6.1.a du RGPD), révocable à tout moment ;
-— l'amélioration du service et la prévention des abus (annulations tardives répétées), sur la base de l'intérêt légitime de WilloBarber (article 6.1.f du RGPD).
-
-4. Durée de conservation
-
-Les données liées au compte utilisateur sont conservées pendant une durée de 2 ans à compter de la dernière activité du compte. Les données à caractère comptable (factures, preuves de paiement) sont conservées 7 ans, conformément aux obligations légales belges en matière de comptabilité.
-
-5. Droits des utilisateurs
-
-Conformément au RGPD, chaque utilisateur dispose d'un droit d'accès, de rectification, d'effacement, de portabilité et d'opposition concernant ses données à caractère personnel. Ces droits peuvent être exercés directement depuis l'application ou en contactant le délégué à la protection des données.
-
-6. Contact du délégué à la protection des données (DPO)
-
-Pour toute question relative au traitement de vos données ou pour exercer vos droits, vous pouvez contacter notre DPO à l'adresse : privacy@willobarber.be
-
-7. Droit de réclamation
-
-Si vous estimez que le traitement de vos données ne respecte pas la réglementation applicable, vous disposez du droit d'introduire une réclamation auprès de l'Autorité de Protection des Données (APD) belge, Rue de la Presse 35, 1000 Bruxelles — www.autoriteprotectiondonnees.be`;
-
 export default function ProfileScreen() {
-  const { user, isAuthenticated, logout, refreshUser } = useAuth();
+  const { user, isAuthenticated, logout, deleteAccount, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
   const { t } = useLanguage();
   const router = useRouter();
@@ -160,6 +106,7 @@ export default function ProfileScreen() {
   const [pwModal, setPwModal] = useState(false);
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
@@ -341,6 +288,30 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const performDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      await deleteAccount();
+      router.replace('/');
+    } catch {
+      Alert.alert('Erreur', 'Impossible de supprimer votre compte pour le moment. Réessayez plus tard.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    const message = 'Êtes-vous sûr ? Cette action est irréversible.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) performDeleteAccount();
+      return;
+    }
+    Alert.alert('Supprimer mon compte', message, [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: performDeleteAccount },
+    ]);
+  };
+
   const aiBlock = (
     <>
       {aiRec && aiLoading && (
@@ -512,6 +483,18 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Delete account */}
+        <TouchableOpacity
+          style={[styles.deleteAccountBtn, deletingAccount && { opacity: 0.7 }]}
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.deleteAccountBtnText}>
+            {deletingAccount ? 'Suppression…' : '🗑 Supprimer mon compte'}
+          </Text>
+        </TouchableOpacity>
+
         <Text style={styles.version}>WilloBarber v1.0.0 · TFE 2025-2026</Text>
       </ScrollView>
 
@@ -578,26 +561,14 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* Legal texts modal (terms / privacy) */}
-      <Modal visible={legalModal !== null} transparent animationType="slide" onRequestClose={() => setLegalModal(null)}>
-        <View style={[styles.legalOverlay, isTablet && styles.overlayTablet]}>
-          <View style={[styles.legalModalBox, isTablet && styles.legalModalBoxTablet]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.legalTitle}>
-                {legalModal === 'terms' ? t('profile.info.terms') : t('profile.info.privacy')}
-              </Text>
-              <Pressable onPress={() => setLegalModal(null)}><Text style={styles.legalClose}>✕</Text></Pressable>
-            </View>
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-              <Text style={styles.legalBodyText}>
-                {legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
-              </Text>
-            </ScrollView>
-            <TouchableOpacity style={styles.legalCloseBtn} onPress={() => setLegalModal(null)} activeOpacity={0.85}>
-              <Text style={styles.legalCloseBtnText}>{t('profile.legalModal.close')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <LegalModal
+        type={legalModal}
+        onClose={() => setLegalModal(null)}
+        isTablet={isTablet}
+        termsTitle={t('profile.info.terms')}
+        privacyTitle={t('profile.info.privacy')}
+        closeLabel={t('profile.legalModal.close')}
+      />
     </View>
   );
 }
@@ -738,6 +709,17 @@ const styles = StyleSheet.create({
   },
   logoutBtnText: { color: '#C0392B', fontWeight: '700', fontSize: 14.5 },
 
+  // Delete account
+  deleteAccountBtn: {
+    backgroundColor: '#C0392B',
+    borderRadius: 100,
+    marginHorizontal: 22,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deleteAccountBtnText: { color: '#fff', fontWeight: '700', fontSize: 14.5 },
+
   version: { fontSize: 11.5, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginBottom: 8 },
 
   // Buttons
@@ -792,40 +774,4 @@ const styles = StyleSheet.create({
   },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, marginBottom: 8 },
   switchLabel: { fontSize: 14.5, color: '#fff' },
-
-  // Legal texts modal
-  legalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  legalModalBox: {
-    backgroundColor: '#0D0C0A',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    // Hauteur fixe plutôt que maxHeight : le ScrollView enfant (flex: 1) a
-    // besoin d'une base de calcul non ambiguë. maxHeight seul (sans height ni
-    // flex sur ce conteneur) laisse Yoga résoudre la dépendance circulaire
-    // "hauteur du parent dépend du flex:1 de l'enfant" en hauteur 0 sur iOS —
-    // le texte (bien réel) du modal Conditions/Politique s'affichait "vide".
-    height: '70%',
-    borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-  },
-  legalModalBoxTablet: {
-    borderRadius: 24,
-    width: '90%',
-    maxWidth: 620,
-    height: '80%',
-    paddingBottom: 24,
-  },
-  legalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#FFFFFF', flex: 1, paddingRight: 12 },
-  legalClose: { fontSize: 18, color: 'rgba(255,255,255,0.45)', padding: 4 },
-  legalBodyText: { fontSize: 14, lineHeight: 22, color: '#FFFFFF', paddingBottom: 8 },
-  legalCloseBtn: {
-    backgroundColor: '#C9A84C',
-    borderRadius: 100,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  legalCloseBtnText: { color: '#1A1208', fontWeight: '700', fontSize: 15 },
 });
