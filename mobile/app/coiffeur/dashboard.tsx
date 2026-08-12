@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
 import * as XLSX from 'xlsx';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
@@ -455,6 +457,32 @@ function useProductStock() {
   return { products, loadingProducts, updatingProductId, ajusterStock };
 }
 
+const EXPORT_PDF_URL = 'https://willobarber-production-6951.up.railway.app/api/export/pdf/';
+const EXPORT_EXCEL_URL = 'https://willobarber-production-6951.up.railway.app/api/export/excel/';
+
+// Natif : le JWT doit partir dans le header de la requête de téléchargement
+// elle-même (WebBrowser ne peut pas y attacher de header), donc on télécharge
+// d'abord le fichier sur le disque via FileSystem, puis on le partage —
+// même pattern que la facture dans BookingConfirmation.tsx.
+async function downloadAndShare(url: string, filename: string, mimeType: string) {
+  const token = await AsyncStorage.getItem('coiffeur_token');
+  const destination = new File(Paths.cache, filename);
+  // File.downloadFileAsync est attaché au runtime (expo-file-system/src/FileSystem.ts)
+  // mais absent des déclarations de types de cette version du SDK — cf. le même
+  // contournement utilisé dans BookingConfirmation.tsx / ClientMediaGrid.tsx.
+  const downloaded = await (File as any).downloadFileAsync(url, destination, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    idempotent: true,
+  });
+  const fileUri: string = downloaded.uri;
+
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(fileUri, { mimeType });
+  } else {
+    await WebBrowser.openBrowserAsync(fileUri);
+  }
+}
+
 type RapportData = {
   clientsTotal: number;
   prestationsCount: number;
@@ -469,7 +497,7 @@ type RapportData = {
 
 async function genererRapport(data: RapportData) {
   if (Platform.OS !== 'web' || !jsPDF) {
-    await WebBrowser.openBrowserAsync('https://willobarber-production-6951.up.railway.app/api/export/pdf/');
+    await downloadAndShare(EXPORT_PDF_URL, 'rapport_willobarber.pdf', 'application/pdf');
     return;
   }
 
@@ -643,7 +671,11 @@ async function genererExcel(data: ExcelData) {
   // XLSX.writeFile() déclenche un téléchargement via des API navigateur
   // (Blob, document.createElement('a')) indisponibles sur iOS/Android natif.
   if (Platform.OS !== 'web') {
-    await WebBrowser.openBrowserAsync('https://willobarber.up.railway.app/api/export/excel/');
+    await downloadAndShare(
+      EXPORT_EXCEL_URL,
+      'willobarber.xlsx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return;
   }
 
