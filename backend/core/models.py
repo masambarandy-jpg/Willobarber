@@ -18,6 +18,9 @@ class User(AbstractUser):
     is_at_risk = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
+    # '' = archivé par le staff (comportement historique), 'client' = suppression RGPD
+    # initiée par le client lui-même via /auth/delete-account/.
+    deletion_reason = models.CharField(max_length=20, blank=True, default='')
     two_factor_enabled = models.BooleanField(default=False)
 
     def __str__(self):

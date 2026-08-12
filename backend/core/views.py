@@ -445,6 +445,54 @@ class ChangePasswordView(APIView):
         return Response({'detail': 'Mot de passe mis à jour.'})
 
 
+class DeleteAccountView(APIView):
+    """Suppression RGPD initiée par le client (droit à l'effacement).
+
+    Soft delete anonymisé plutôt que suppression réelle de la ligne User :
+    Reservation.user est en CASCADE, une vraie suppression détruirait
+    l'historique de réservations passées qu'on doit garder pour la
+    comptabilité. Même mécanisme que l'archivage staff (delete_client) mais
+    avec anonymisation des données personnelles et is_active=False pour
+    bloquer toute reconnexion.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        user = request.user
+
+        Reservation.objects.filter(
+            user=user,
+            date__gte=timezone.localdate(),
+            status__in=['pending', 'confirmed'],
+        ).update(status='cancelled_client')
+
+        timestamp = timezone.now().strftime('%Y%m%d%H%M%S%f')
+        user.first_name = 'Client supprimé'
+        user.last_name = ''
+        user.email = f'deleted_{timestamp}_{user.pk}@willobarber.fr'
+        user.phone = ''
+        user.is_deleted = True
+        user.deleted_at = timezone.now()
+        user.deletion_reason = 'client'
+        user.is_active = False
+        user.save(update_fields=[
+            'first_name', 'last_name', 'email', 'phone',
+            'is_deleted', 'deleted_at', 'deletion_reason', 'is_active',
+        ])
+
+        UserSession.objects.filter(user=user).delete()
+        PaymentCard.objects.filter(owner=user).delete()
+
+        refresh_str = request.data.get('refresh')
+        if refresh_str:
+            try:
+                RefreshToken(refresh_str).blacklist()
+            except Exception:
+                pass
+
+        return Response(status=status.HTTP_200_OK)
+
+
 class PasswordlessLoginView(APIView):
     permission_classes = [AllowAny]
 
@@ -1240,6 +1288,7 @@ def _serialize_clients(queryset):
             'date_joined': c.date_joined.isoformat(),
             'is_at_risk': c.is_at_risk,
             'deleted_at': c.deleted_at.isoformat() if c.deleted_at else None,
+            'deletion_reason': c.deletion_reason,
             'status': (
                 'VIP' if c.total_reservations >= 10
                 else 'Nouveau' if c.total_reservations == 1
@@ -1288,7 +1337,12 @@ def restore_client(request, pk):
 
     client.is_deleted = False
     client.deleted_at = None
-    client.save(update_fields=['is_deleted', 'deleted_at'])
+    client.deletion_reason = ''
+    # Réactive la connexion pour une auto-suppression restaurée (delete_client
+    # côté staff ne touche jamais is_active, donc ce champ ne peut valoir False
+    # ici que si le compte a été anonymisé via /auth/delete-account/).
+    client.is_active = True
+    client.save(update_fields=['is_deleted', 'deleted_at', 'deletion_reason', 'is_active'])
     return Response(_serialize_clients(User.objects.filter(pk=client.pk))[0])
 
 
