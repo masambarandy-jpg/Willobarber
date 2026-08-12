@@ -169,6 +169,9 @@ export const authApi = {
 
   changePassword: (payload: { old_password: string; new_password: string; new_password2: string }) =>
     http.post('/auth/change-password/', payload).then((r) => r.data),
+
+  requestPasswordReset: (email: string) =>
+    http.post<{ detail: string }>('/auth/password-reset/', { email }).then((r) => r.data),
 };
 
 // ─── Barbers API ─────────────────────────────────────────────────────────────
