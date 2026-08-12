@@ -109,6 +109,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [gerantEmail, setGerantEmail] = useState('willo@willobarber.fr');
   const [gerantPassword, setGerantPassword] = useState('');
   const [showGerantPassword, setShowGerantPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [gerantLoading, setGerantLoading] = useState(false);
   const [gerantError, setGerantError] = useState('');
 
@@ -723,12 +724,15 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                       }}
                       placeholder="••••••••"
                       placeholderTextColor="rgba(255,255,255,0.35)"
-                      secureTextEntry
+                      secureTextEntry={!showPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
                       returnKeyType="done"
                       onSubmitEditing={handleAccess}
                     />
+                    <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={10}>
+                      <Feather name={showPassword ? 'eye-off' : 'eye'} size={16} color="rgba(255,255,255,0.4)" />
+                    </TouchableOpacity>
                   </View>
 
                   <TouchableOpacity
