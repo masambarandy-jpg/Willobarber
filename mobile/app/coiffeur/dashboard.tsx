@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import * as XLSX from 'xlsx';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
@@ -466,9 +467,9 @@ type RapportData = {
   clients: UpcomingClient[];
 };
 
-function genererRapport(data: RapportData) {
+async function genererRapport(data: RapportData) {
   if (Platform.OS !== 'web' || !jsPDF) {
-    Alert.alert('Export PDF', "L'export PDF est disponible uniquement sur web.");
+    await WebBrowser.openBrowserAsync('https://willobarber-production-6951.up.railway.app/api/export/pdf/');
     return;
   }
 
@@ -638,11 +639,11 @@ type ExcelData = {
   rdvCount: number;
 };
 
-function genererExcel(data: ExcelData) {
+async function genererExcel(data: ExcelData) {
   // XLSX.writeFile() déclenche un téléchargement via des API navigateur
   // (Blob, document.createElement('a')) indisponibles sur iOS/Android natif.
   if (Platform.OS !== 'web') {
-    Alert.alert('Export Excel', "L'export Excel est disponible uniquement sur web.");
+    await WebBrowser.openBrowserAsync('https://willobarber.up.railway.app/api/export/excel/');
     return;
   }
 
@@ -727,8 +728,8 @@ export default function CoiffeurDashboardScreen() {
     });
   };
 
-  const handleGenererRapport = () => {
-    genererRapport({
+  const handleGenererRapport = async () => {
+    await genererRapport({
       clientsTotal: stats.clientsTotal,
       prestationsCount: stats.prestationsCount,
       equipeCount: stats.equipeCount,
@@ -741,8 +742,8 @@ export default function CoiffeurDashboardScreen() {
     });
   };
 
-  const handleExporterExcel = () => {
-    genererExcel({
+  const handleExporterExcel = async () => {
+    await genererExcel({
       reservations: exportReservations,
       services: exportServices,
       analytics,

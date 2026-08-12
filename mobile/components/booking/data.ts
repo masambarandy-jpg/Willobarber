@@ -180,7 +180,7 @@ export const SLOT_GROUPS: SlotGroup[] = [
   },
   {
     label: 'SOIRÉE',
-    slots: ['17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'],
+    slots: ['17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '20:30'],
   },
 ];
 
@@ -188,7 +188,7 @@ export const LOYALTY_DISCOUNT = 5;
 
 export const ACOMPTE_FIXE = 5;
 
-const CLOSING_MINUTES = 20 * 60;
+const CLOSING_MINUTES = 21 * 60;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
