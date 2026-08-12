@@ -30,6 +30,7 @@ import { authApi, TokenStorage } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
+import { ForgotPasswordModal } from '@/components/ForgotPasswordModal';
 
 // Ferme le navigateur d'authentification et renvoie le contrôle à l'app une
 // fois l'utilisateur redirigé — doit être appelé au niveau module (une fois).
@@ -112,6 +113,8 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [showPassword, setShowPassword] = useState(false);
   const [gerantLoading, setGerantLoading] = useState(false);
   const [gerantError, setGerantError] = useState('');
+
+  const [forgotPasswordVisible, setForgotPasswordVisible] = useState(false);
 
   const identifierInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
@@ -531,6 +534,10 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                     </TouchableOpacity>
                   </View>
 
+                  <TouchableOpacity onPress={() => setForgotPasswordVisible(true)} activeOpacity={0.7} style={styles.forgotPasswordBtn}>
+                    <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[styles.btnPrimary, gerantLoading && { opacity: 0.7 }]}
                     onPress={handleGerantLogin}
@@ -735,6 +742,10 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                     </TouchableOpacity>
                   </View>
 
+                  <TouchableOpacity onPress={() => setForgotPasswordVisible(true)} activeOpacity={0.7} style={styles.forgotPasswordBtn}>
+                    <Text style={styles.forgotPasswordText}>{t('authModal.forgotPassword')}</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
                     onPress={handleAccess}
@@ -760,6 +771,8 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
             </Animated.View>
           </KeyboardAvoidingView>
         )}
+
+        <ForgotPasswordModal visible={forgotPasswordVisible} onClose={() => setForgotPasswordVisible(false)} />
       </View>
     </AuthModalContext.Provider>
   );
@@ -1000,5 +1013,14 @@ const styles = StyleSheet.create({
   backToClientText: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.4)',
+  },
+  forgotPasswordBtn: {
+    alignItems: 'flex-end',
+    marginTop: -8,
+    marginBottom: 4,
+  },
+  forgotPasswordText: {
+    fontSize: 12.5,
+    color: 'rgba(201,168,76,0.6)',
   },
 });

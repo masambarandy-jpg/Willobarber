@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { Fonts } from '@/constants';
+import { ForgotPasswordModal } from '@/components/ForgotPasswordModal';
 
 export default function CoiffeurLoginScreen() {
   const { width } = useWindowDimensions();
@@ -24,6 +25,7 @@ export default function CoiffeurLoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [forgotPasswordVisible, setForgotPasswordVisible] = useState(false);
 
   const handleLogin = async () => {
     setLoading(true);
@@ -117,6 +119,10 @@ export default function CoiffeurLoginScreen() {
           </TouchableOpacity>
         </View>
 
+        <TouchableOpacity onPress={() => setForgotPasswordVisible(true)} activeOpacity={0.7} style={styles.forgotPasswordBtn}>
+          <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
           onPress={handleLogin}
@@ -133,6 +139,8 @@ export default function CoiffeurLoginScreen() {
       </View>
       </ScrollView>
       </KeyboardAvoidingView>
+
+      <ForgotPasswordModal visible={forgotPasswordVisible} onClose={() => setForgotPasswordVisible(false)} />
     </View>
   );
 }
@@ -266,6 +274,15 @@ const styles = StyleSheet.create({
           WebkitAppearance: 'none',
         } as any)
       : {}),
+  },
+  forgotPasswordBtn: {
+    alignItems: 'flex-end',
+    marginTop: -8,
+    marginBottom: 4,
+  },
+  forgotPasswordText: {
+    fontSize: 12.5,
+    color: 'rgba(201,168,76,0.6)',
   },
   btnPrimary: {
     width: '100%',
