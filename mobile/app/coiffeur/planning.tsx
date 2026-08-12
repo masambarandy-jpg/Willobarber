@@ -831,6 +831,7 @@ export default function CoiffeurPlanningScreen() {
     <CoiffeurScreen active="planning">
       <View style={styles.headerRow}>
         <Text style={styles.title}>Planning</Text>
+        {/* Désactivé temporairement — à réactiver en octobre
         <TouchableOpacity
           style={[styles.remindersBtn, sendingReminders && styles.remindersBtnDisabled]}
           onPress={envoyerRappelsSms}
@@ -840,6 +841,7 @@ export default function CoiffeurPlanningScreen() {
             {sendingReminders ? 'Envoi…' : '📱 Envoyer rappels SMS'}
           </Text>
         </TouchableOpacity>
+        */}
       </View>
 
       {usingMockData && (
@@ -1334,9 +1336,11 @@ export default function CoiffeurPlanningScreen() {
                 <TouchableOpacity style={styles.rdvCancelBtn} onPress={fermerDetailRdv}>
                   <Text style={styles.rdvCancelBtnText}>Fermer</Text>
                 </TouchableOpacity>
+                {/* Désactivé temporairement — à réactiver en octobre
                 <TouchableOpacity style={styles.rdvCallBtn}>
                   <Text style={styles.rdvCallBtnText}>Appeler</Text>
                 </TouchableOpacity>
+                */}
               </View>
             </>
           )}
