@@ -413,7 +413,7 @@ const fr = {
   // ── Step3Date ────────────────────────────────────────────────────────────
   'step3.title': 'Date & heure',
   'step3.subtitle': 'Choisissez le jour, puis le créneau qui vous arrange.',
-  'step3.hoursNote': 'Ouvert du mardi au dimanche, 11h – 20h. Fermé le lundi.',
+  'step3.hoursNote': 'Ouvert du mardi au dimanche, 11h – 21h. Fermé le lundi.',
   'step3.waitingListTitle': 'Liste d\'attente',
   'step3.waitingListConfirm': 'Vous avez rejoint la liste d\'attente pour cette date. Nous vous préviendrons dès qu\'un créneau se libère.',
   'step3.waitingListError': 'Impossible de vous inscrire à la liste d\'attente pour le moment. Réessayez plus tard.',
@@ -964,7 +964,7 @@ const nl: Record<TranslationKey, string> = {
   // ── Step3Date ────────────────────────────────────────────────────────────
   'step3.title': 'Datum & uur',
   'step3.subtitle': 'Kies de dag, dan het tijdslot dat u past.',
-  'step3.hoursNote': 'Open van dinsdag tot zondag, 11u – 20u. Gesloten op maandag.',
+  'step3.hoursNote': 'Open van dinsdag tot zondag, 11u – 21u. Gesloten op maandag.',
   'step3.waitingListTitle': 'Wachtlijst',
   'step3.waitingListConfirm': 'U staat op de wachtlijst voor deze datum. We laten u weten zodra er een plaats vrijkomt.',
   'step3.waitingListError': 'Inschrijving op de wachtlijst is momenteel niet mogelijk. Probeer het later opnieuw.',
@@ -1513,7 +1513,7 @@ const en: Record<TranslationKey, string> = {
   // ── Step3Date ────────────────────────────────────────────────────────────
   'step3.title': 'Date & time',
   'step3.subtitle': 'Choose the day, then the slot that suits you.',
-  'step3.hoursNote': 'Open Tuesday to Sunday, 11am – 8pm. Closed Monday.',
+  'step3.hoursNote': 'Open Tuesday to Sunday, 11am – 9pm. Closed Monday.',
   'step3.waitingListTitle': 'Waiting list',
   'step3.waitingListConfirm': 'You\'ve joined the waiting list for this date. We\'ll let you know as soon as a slot opens up.',
   'step3.waitingListError': 'Unable to join the waiting list right now. Please try again later.',

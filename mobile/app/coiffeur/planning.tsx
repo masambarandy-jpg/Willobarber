@@ -17,7 +17,7 @@ import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 
 const HOUR_HEIGHT = 66;
 const START_HOUR = 11;
-const END_HOUR = 20;
+const END_HOUR = 21;
 const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app';
 
 type Barber = 'Willo' | 'Malik' | 'Idris';
