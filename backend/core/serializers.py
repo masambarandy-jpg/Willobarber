@@ -1,6 +1,6 @@
 from django.utils import timezone
 from rest_framework import serializers
-from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave, Notification
+from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave, Notification, NotificationPreference, PaymentCard
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -178,3 +178,22 @@ class ClientMediaSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = ['cloudinary_url', 'cloudinary_public_id', 'shared_with_client']
+
+
+class NotificationPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NotificationPreference
+        fields = [
+            'new_rdv_email', 'new_rdv_sms', 'new_rdv_push',
+            'cancellation_email', 'cancellation_sms', 'cancellation_push',
+            'new_review_email', 'new_review_sms', 'new_review_push',
+            'daily_reminder_email', 'daily_reminder_sms', 'daily_reminder_push',
+            'weekly_report_email', 'weekly_report_sms', 'weekly_report_push',
+        ]
+
+
+class PaymentCardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentCard
+        fields = ['id', 'brand', 'last4', 'exp_month', 'exp_year', 'is_primary', 'created_at']
+        read_only_fields = ['id', 'is_primary', 'created_at']

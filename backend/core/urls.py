@@ -50,4 +50,13 @@ urlpatterns = [
     path('reviews/client/', views.my_reviews, name='reviews-client'),
     path('reviews/<int:pk>/reply/', views.reply_to_review, name='review-reply'),
     path('reviews/', views.ReviewListCreateView.as_view(), name='reviews'),
+    path('settings/notifications/', views.notification_preferences, name='notification-preferences'),
+    path('settings/commission/', views.commission_settings, name='commission-settings'),
+    path('settings/security/2fa/', views.toggle_two_factor, name='toggle-two-factor'),
+    path('settings/security/', views.security_settings, name='security-settings'),
+    path('payment/cards/<int:pk>/set-primary/', views.payment_card_set_primary, name='payment-card-set-primary'),
+    path('payment/cards/<int:pk>/', views.payment_card_delete, name='payment-card-delete'),
+    path('payment/cards/', views.payment_cards, name='payment-cards'),
+    path('auth/sessions/<int:pk>/', views.session_delete, name='session-delete'),
+    path('auth/sessions/', views.session_list, name='session-list'),
 ]
