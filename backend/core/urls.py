@@ -33,6 +33,13 @@ urlpatterns = [
     path('auth/change-password/', views.ChangePasswordView.as_view(), name='change-password'),
     path('auth/delete-account/', views.DeleteAccountView.as_view(), name='delete-account'),
     path('auth/passwordless-login/', views.PasswordlessLoginView.as_view(), name='passwordless-login'),
+    path('auth/password-reset/', views.PasswordResetRequestView.as_view(), name='password-reset'),
+    path('auth/password-reset/confirm/', views.PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
+    path(
+        'auth/password-reset/confirm-page/<uidb64>/<token>/',
+        views.password_reset_confirm_page,
+        name='password-reset-confirm-page',
+    ),
     path('auth/oauth-login/', views.OAuthLoginView.as_view(), name='oauth-login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('appointments/check-client/', views.CheckClientView.as_view(), name='check-client'),
