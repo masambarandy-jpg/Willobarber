@@ -256,13 +256,13 @@ function ProfilTab() {
 type DayHours = { day: string; open: boolean; debut: string; fin: string };
 
 const DEFAULT_HOURS: DayHours[] = [
-  { day: 'Lundi', open: false, debut: '11:00', fin: '20:00' },
-  { day: 'Mardi', open: true, debut: '11:00', fin: '20:00' },
-  { day: 'Mercredi', open: true, debut: '11:00', fin: '20:00' },
-  { day: 'Jeudi', open: true, debut: '11:00', fin: '20:00' },
-  { day: 'Vendredi', open: true, debut: '11:00', fin: '20:00' },
-  { day: 'Samedi', open: true, debut: '11:00', fin: '20:00' },
-  { day: 'Dimanche', open: true, debut: '11:00', fin: '20:00' },
+  { day: 'Lundi', open: false, debut: '11:00', fin: '21:00' },
+  { day: 'Mardi', open: true, debut: '11:00', fin: '21:00' },
+  { day: 'Mercredi', open: true, debut: '11:00', fin: '21:00' },
+  { day: 'Jeudi', open: true, debut: '11:00', fin: '21:00' },
+  { day: 'Vendredi', open: true, debut: '11:00', fin: '21:00' },
+  { day: 'Samedi', open: true, debut: '11:00', fin: '21:00' },
+  { day: 'Dimanche', open: true, debut: '11:00', fin: '21:00' },
 ];
 
 const HOURS_OPTIONS = [
