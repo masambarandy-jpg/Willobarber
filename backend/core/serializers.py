@@ -49,9 +49,13 @@ class ServiceSerializer(serializers.ModelSerializer):
 class ReservationSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(read_only=True)
     user_username = serializers.CharField(source='user.username', read_only=True)
+    client_display_name = serializers.SerializerMethodField()
     service_name = serializers.CharField(source='service.name', read_only=True)
     service_price = serializers.DecimalField(source='service.price', max_digits=6, decimal_places=2, read_only=True)
     qr_code = serializers.CharField(read_only=True)
+
+    def get_client_display_name(self, obj):
+        return 'Client supprimé' if obj.user.is_deleted else obj.user.username
 
     class Meta:
         model = Reservation
@@ -59,6 +63,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             'id',
             'user',
             'user_username',
+            'client_display_name',
             'service',
             'service_name',
             'service_price',

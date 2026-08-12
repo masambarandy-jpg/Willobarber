@@ -31,6 +31,7 @@ urlpatterns = [
     path('auth/me/', views.MeView.as_view(), name='me'),
     path('auth/me/photo/', views.upload_profile_picture, name='me-photo'),
     path('auth/change-password/', views.ChangePasswordView.as_view(), name='change-password'),
+    path('auth/delete-account/', views.DeleteAccountView.as_view(), name='delete-account'),
     path('auth/passwordless-login/', views.PasswordlessLoginView.as_view(), name='passwordless-login'),
     path('auth/oauth-login/', views.OAuthLoginView.as_view(), name='oauth-login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
