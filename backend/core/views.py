@@ -14,7 +14,13 @@ import qrcode
 import sendgrid
 import stripe
 from django.conf import settings
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
+from django.urls import reverse
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from sendgrid.helpers.mail import (
     Mail, Email, To, Content,
     Attachment, FileContent, FileName, FileType, Disposition,
@@ -260,6 +266,168 @@ def send_confirmation_email(to_email, first_name, service_name, date, time, barb
     except Exception as e:
         print(f"[EMAIL ERROR] Échec envoi confirmation à {to_email}: {e}")
         return False
+
+
+password_reset_token_generator = PasswordResetTokenGenerator()
+
+
+def send_password_reset_email(request, user):
+    try:
+        sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
+        uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+        token = password_reset_token_generator.make_token(user)
+        reset_url = request.build_absolute_uri(
+            reverse('password-reset-confirm-page', args=[uidb64, token])
+        )
+        html_content = f"""
+        <div style="font-family: Georgia, serif; background-color: #0D0C0A; color: #FFFFFF; padding: 40px; max-width: 600px; margin: auto;">
+            <h1 style="color: #C9A84C; font-size: 32px; margin-bottom: 4px;">WilloBarber</h1>
+            <p style="color: #6B6560; font-size: 12px; letter-spacing: 2px; margin-top: 0;">SALON DE BARBIER · BRUXELLES</p>
+            <hr style="border: 1px solid #1A1814; margin: 24px 0;">
+            <h2 style="color: #FFFFFF;">Réinitialisation du mot de passe</h2>
+            <p style="color: #CCCCCC;">Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous pour en choisir un nouveau.</p>
+            <div style="text-align: center; margin: 32px 0;">
+                <a href="{reset_url}" style="background: #C9A84C; color: #1A1208; text-decoration: none; font-weight: bold; padding: 14px 28px; border-radius: 100px; display: inline-block;">Réinitialiser mon mot de passe</a>
+            </div>
+            <p style="color: #6B6560; font-size: 12px;">Ce lien est valable 3 jours. Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet email.</p>
+            <hr style="border: 1px solid #1A1814; margin: 24px 0;">
+            <p style="color: #C9A84C; font-size: 14px; text-align: center;">À bientôt chez WilloBarber ✂️</p>
+        </div>
+        """
+        message = Mail(
+            from_email=Email('masamba.randy@gmail.com', 'WilloBarber'),
+            to_emails=To(user.email),
+            subject='🔑 Réinitialisation de votre mot de passe WilloBarber',
+            html_content=Content('text/html', html_content)
+        )
+        response = sg.send(message)
+        print(f"[EMAIL] Reset mot de passe envoyé à {user.email} — SendGrid status={response.status_code}")
+        return True
+    except Exception as e:
+        print(f"[EMAIL ERROR] Échec envoi reset mot de passe à {user.email}: {e}")
+        return False
+
+
+def _reset_user_password(uidb64, token, new_password):
+    """Vérifie l'uid/token et applique le nouveau mot de passe.
+
+    Retourne (user, None) en cas de succès, (None, message_erreur) sinon.
+    """
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return None, "Lien de réinitialisation invalide."
+
+    if not password_reset_token_generator.check_token(user, token):
+        return None, "Ce lien de réinitialisation est invalide ou a expiré."
+
+    try:
+        validate_password(new_password, user=user)
+    except DjangoValidationError as e:
+        return None, ' '.join(e.messages)
+
+    user.set_password(new_password)
+    user.save()
+    return user, None
+
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = (request.data.get('email') or '').strip()
+        generic_response = Response(
+            {'detail': "Si un compte existe avec cet email, un lien de réinitialisation vient d'être envoyé."}
+        )
+        if not email:
+            return Response({'error': 'email requis'}, status=400)
+
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+        if user:
+            send_password_reset_email(request, user)
+        return generic_response
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        uidb64 = request.data.get('uid')
+        token = request.data.get('token')
+        new_password = request.data.get('new_password')
+        new_password2 = request.data.get('new_password2')
+
+        if not uidb64 or not token or not new_password:
+            return Response({'error': 'uid, token et new_password sont requis.'}, status=400)
+        if new_password2 is not None and new_password != new_password2:
+            return Response({'error': 'Les mots de passe ne correspondent pas.'}, status=400)
+
+        user, error = _reset_user_password(uidb64, token, new_password)
+        if error:
+            return Response({'error': error}, status=400)
+        return Response({'detail': 'Mot de passe réinitialisé avec succès.'})
+
+
+def _password_reset_page_html(*, uidb64, token, error=None, success=False):
+    if success:
+        body = """
+            <h2 style="color:#FFFFFF;">Mot de passe mis à jour ✂️</h2>
+            <p style="color:#CCCCCC;">Votre mot de passe a bien été réinitialisé. Vous pouvez maintenant vous reconnecter dans l'app WilloBarber.</p>
+        """
+    else:
+        error_html = f'<div style="background:rgba(192,57,43,0.15);border:1px solid #C0392B;border-radius:10px;padding:12px;margin-bottom:20px;color:#FF6B6B;font-size:14px;">{error}</div>' if error else ''
+        body = f"""
+            <h2 style="color:#FFFFFF;margin-bottom:8px;">Nouveau mot de passe</h2>
+            <p style="color:#CCCCCC;margin-bottom:20px;">Choisissez votre nouveau mot de passe ci-dessous.</p>
+            {error_html}
+            <form method="post">
+                <label style="display:block;font-size:11px;letter-spacing:1px;color:#C9A84C;text-transform:uppercase;margin-bottom:6px;">Nouveau mot de passe</label>
+                <input type="password" name="new_password" required minlength="8"
+                    style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.12);border-radius:12px;padding:14px 16px;color:#FFFFFF;font-size:15px;margin-bottom:16px;" />
+                <label style="display:block;font-size:11px;letter-spacing:1px;color:#C9A84C;text-transform:uppercase;margin-bottom:6px;">Confirmer le mot de passe</label>
+                <input type="password" name="new_password2" required minlength="8"
+                    style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.12);border-radius:12px;padding:14px 16px;color:#FFFFFF;font-size:15px;margin-bottom:20px;" />
+                <button type="submit"
+                    style="width:100%;background:#C9A84C;color:#1A1208;font-weight:bold;font-size:15px;border:none;border-radius:100px;padding:15px;cursor:pointer;">
+                    Réinitialiser mon mot de passe
+                </button>
+            </form>
+        """
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WilloBarber — Réinitialisation du mot de passe</title>
+</head>
+<body style="margin:0;background:#0D0C0A;font-family:Georgia,serif;">
+    <div style="max-width:440px;margin:60px auto;padding:32px;background:#1A1814;border-radius:24px;">
+        <h1 style="color:#C9A84C;font-size:26px;margin:0 0 2px 0;">WilloBarber</h1>
+        <p style="color:#6B6560;font-size:11px;letter-spacing:2px;margin:0 0 20px 0;">SALON DE BARBIER · BRUXELLES</p>
+        <hr style="border:1px solid #252018;margin:0 0 24px 0;" />
+        {body}
+    </div>
+</body>
+</html>"""
+
+
+def password_reset_confirm_page(request, uidb64, token):
+    if request.method == 'POST':
+        new_password = request.POST.get('new_password') or ''
+        new_password2 = request.POST.get('new_password2') or ''
+        if new_password != new_password2:
+            html = _password_reset_page_html(uidb64=uidb64, token=token, error="Les mots de passe ne correspondent pas.")
+            return HttpResponse(html)
+
+        user, error = _reset_user_password(uidb64, token, new_password)
+        if error:
+            html = _password_reset_page_html(uidb64=uidb64, token=token, error=error)
+            return HttpResponse(html)
+
+        return HttpResponse(_password_reset_page_html(uidb64=uidb64, token=token, success=True))
+
+    return HttpResponse(_password_reset_page_html(uidb64=uidb64, token=token))
 
 
 class ReservationViewSet(viewsets.ModelViewSet):
