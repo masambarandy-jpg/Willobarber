@@ -1790,7 +1790,7 @@ const styles = StyleSheet.create({
     maxHeight: '100%',
   },
   scanCardScrollContent: {
-    paddingBottom: 4,
+    paddingBottom: 80,
   },
   rdvCloseBtn: {
     position: 'absolute',
