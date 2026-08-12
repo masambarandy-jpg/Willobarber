@@ -12,6 +12,7 @@ import {
   Easing,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   Text,
   TextInput,
   TouchableOpacity,
@@ -31,6 +32,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
 import { ForgotPasswordModal } from '@/components/ForgotPasswordModal';
+import { LegalModal, LegalModalType } from '@/components/LegalModal';
 
 // Ferme le navigateur d'authentification et renvoie le contrôle à l'app une
 // fois l'utilisateur redirigé — doit être appelé au niveau module (une fois).
@@ -105,6 +107,9 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerLoading, setRegisterLoading] = useState(false);
   const [registerError, setRegisterError] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [registerTermsError, setRegisterTermsError] = useState('');
+  const [legalModal, setLegalModal] = useState<LegalModalType>(null);
 
   const [isGerant, setIsGerant] = useState(false);
   const [gerantEmail, setGerantEmail] = useState('willo@willobarber.fr');
@@ -137,6 +142,8 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     setRegisterEmail('');
     setRegisterPassword('');
     setRegisterError('');
+    setAcceptedTerms(false);
+    setRegisterTermsError('');
     overlayAnim.setValue(0);
     cardAnim.setValue(0.92);
     setVisible(true);
@@ -199,11 +206,15 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const handleShowRegister = () => {
     setIsRegister(true);
     setRegisterError('');
+    setAcceptedTerms(false);
+    setRegisterTermsError('');
   };
 
   const handleBackToLogin = () => {
     setIsRegister(false);
     setRegisterError('');
+    setAcceptedTerms(false);
+    setRegisterTermsError('');
   };
 
   const handleGerantLogin = async () => {
@@ -280,6 +291,11 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
       setRegisterError(t('authModal.errorInvalid'));
       return;
     }
+    if (!acceptedTerms) {
+      setRegisterTermsError('Vous devez accepter les conditions pour continuer');
+      return;
+    }
+    setRegisterTermsError('');
     setRegisterLoading(true);
     setRegisterError('');
     try {
@@ -613,6 +629,29 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                     />
                   </View>
 
+                  <View style={styles.rgpdBox}>
+                    <Pressable
+                      style={styles.rgpdRow}
+                      onPress={() => setAcceptedTerms((v) => !v)}
+                      hitSlop={8}
+                    >
+                      <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+                        {acceptedTerms && <Text style={styles.checkboxMark}>✓</Text>}
+                      </View>
+                      <Text style={styles.rgpdText}>
+                        J'accepte les{' '}
+                        <Text style={styles.rgpdLink} onPress={() => setLegalModal('terms')}>
+                          Conditions d'utilisation
+                        </Text>{' '}
+                        et la{' '}
+                        <Text style={styles.rgpdLink} onPress={() => setLegalModal('privacy')}>
+                          Politique de confidentialité
+                        </Text>
+                      </Text>
+                    </Pressable>
+                    {!!registerTermsError && <Text style={styles.rgpdError}>{registerTermsError}</Text>}
+                  </View>
+
                   <TouchableOpacity
                     style={[styles.btnPrimary, registerLoading && { opacity: 0.7 }]}
                     onPress={handleRegister}
@@ -773,6 +812,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
         )}
 
         <ForgotPasswordModal visible={forgotPasswordVisible} onClose={() => setForgotPasswordVisible(false)} />
+        <LegalModal type={legalModal} onClose={() => setLegalModal(null)} />
       </View>
     </AuthModalContext.Provider>
   );
@@ -1023,4 +1063,28 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: 'rgba(201,168,76,0.6)',
   },
+  rgpdBox: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 14,
+    marginBottom: 4,
+  },
+  rgpdRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#C9A84C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  checkboxChecked: { backgroundColor: '#C9A84C' },
+  checkboxMark: { color: '#1A1208', fontSize: 13, fontWeight: '700' },
+  rgpdText: { flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 19 },
+  rgpdLink: { color: '#C9A84C', fontWeight: '600', textDecorationLine: 'underline' },
+  rgpdError: { fontSize: 12, color: '#E4574C', marginTop: 8 },
 });
