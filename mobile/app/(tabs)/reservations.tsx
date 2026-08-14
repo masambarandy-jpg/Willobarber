@@ -36,9 +36,9 @@ import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 import ReviewCard from '@/components/client/ReviewCard';
 import { reviewsApi, loyaltyApi } from '@/services/api';
 
-const MOIS_ABBR_FR = ['JANV', 'FÉVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOÛT', 'SEPT', 'OCT', 'NOV', 'DÉC'];
-const MOIS_FR_FULL = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-const JOURS_ABBR_FR = ['DIM.', 'LUN.', 'MAR.', 'MER.', 'JEU.', 'VEN.', 'SAM.'];
+// Réutilisé par le ScrollView de l'onglet "Mes coupes" (tablette/web) pour rendre son
+// inset horizontal local plutôt qu'hérité de tabletContainer — cf. usage plus bas.
+const TABLET_CONTAINER_PADDING_H = 20;
 
 const PRICE_BY_SERVICE_NAME: Record<string, number> = {
   'Signature WilloBarber': 45,
@@ -60,9 +60,9 @@ function formatHmm(timeStr: string): string {
   return timeStr.slice(0, 5).replace(':', 'h');
 }
 
-function formatDateLongFr(dateStr: string): string {
+function formatDateLong(dateStr: string, t: (key: TranslationKey) => string): string {
   const d = parseApiDate(dateStr);
-  return `${d.getDate()} ${MOIS_FR_FULL[d.getMonth()]} ${d.getFullYear()}`;
+  return `${d.getDate()} ${t(`step3.month.${d.getMonth()}` as TranslationKey)} ${d.getFullYear()}`;
 }
 
 const MOCK_LOYALTY = {
@@ -70,11 +70,11 @@ const MOCK_LOYALTY = {
   total_earned: 1480,
 };
 
-const TRANSACTIONS_META: { id: number; date?: string; dateKey?: TranslationKey; reasonKey: TranslationKey; points: number; type: string }[] = [
-  { id: 1, date: '13 juil. 2026', reasonKey: 'reservations.tx.signature', points:   90, type: 'earn'  },
-  { id: 2, date: '03 juin 2026',  reasonKey: 'reservations.tx.rituel',    points:  150, type: 'earn'  },
-  { id: 3, date: '20 mai 2026',   reasonKey: 'reservations.tx.freeCut',   points: -1000, type: 'spend' },
-  { id: 4, date: '05 mai 2026',   reasonKey: 'reservations.tx.rasage',    points:   56, type: 'earn'  },
+const TRANSACTIONS_META: { id: number; day?: string; moisIdx?: number; annee?: string; dateKey?: TranslationKey; reasonKey: TranslationKey; points: number; type: string }[] = [
+  { id: 1, day: '13', moisIdx: 6, annee: '2026', reasonKey: 'reservations.tx.signature', points:   90, type: 'earn'  },
+  { id: 2, day: '03', moisIdx: 5, annee: '2026', reasonKey: 'reservations.tx.rituel',    points:  150, type: 'earn'  },
+  { id: 3, day: '20', moisIdx: 4, annee: '2026', reasonKey: 'reservations.tx.freeCut',   points: -1000, type: 'spend' },
+  { id: 4, day: '05', moisIdx: 4, annee: '2026', reasonKey: 'reservations.tx.rasage',    points:   56, type: 'earn'  },
   { id: 5, dateKey: 'reservations.tx.welcomeLabel', reasonKey: 'reservations.tx.welcomeReason', points: 20, type: 'bonus' },
 ];
 
@@ -85,20 +85,18 @@ const TIERS_META = [
 ];
 
 const HISTORIQUE_META = [
-  { jour: '12', mois: 'AVR',  serviceKey: 'reservations.hist.signature' as TranslationKey, barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '45€', annee: '2026' },
-  { jour: '02', mois: 'MARS', serviceKey: 'reservations.hist.taille' as TranslationKey,     barbier: 'M', barbierNom: 'Malik', couleur: '#7A3B1E', prix: '28€', annee: '2026' },
-  { jour: '18', mois: 'JANV', serviceKey: 'reservations.hist.rituel' as TranslationKey,     barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '75€', annee: '2026' },
-  { jour: '05', mois: 'DÉC',  serviceKey: 'reservations.hist.express' as TranslationKey,    barbier: 'I', barbierNom: 'Idris', couleur: '#1A6B4A', prix: '28€', annee: '2025' },
+  { jour: '12', moisIdx: 3,  serviceKey: 'reservations.hist.signature' as TranslationKey, barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '45€', annee: '2026' },
+  { jour: '02', moisIdx: 2,  serviceKey: 'reservations.hist.taille' as TranslationKey,     barbier: 'M', barbierNom: 'Malik', couleur: '#7A3B1E', prix: '28€', annee: '2026' },
+  { jour: '18', moisIdx: 0,  serviceKey: 'reservations.hist.rituel' as TranslationKey,     barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '75€', annee: '2026' },
+  { jour: '05', moisIdx: 11, serviceKey: 'reservations.hist.express' as TranslationKey,    barbier: 'I', barbierNom: 'Idris', couleur: '#1A6B4A', prix: '28€', annee: '2025' },
 ];
 
 const FAVORIS_META = [
-  { nomKey: 'reservations.hist.signature' as TranslationKey, dur: '45 min', prix: '45€', count: '8×', date: '12 avr.' },
-  { nomKey: 'reservations.hist.taille' as TranslationKey,    dur: '30 min', prix: '28€', count: '5×', date: '2 mars'  },
+  { nomKey: 'reservations.hist.signature' as TranslationKey, dur: '45 min', prix: '45€', count: '8×', day: '12', moisIdx: 3 },
+  { nomKey: 'reservations.hist.taille' as TranslationKey,    dur: '30 min', prix: '28€', count: '5×', day: '2',  moisIdx: 2 },
 ];
 
 const NEXT_RDV = {
-  dateLabel: '23 mai 2026',
-  dateShort: '23 MAI',
   time:      '10:30',
   timeLabel: '10h30',
   barbier:   'Willo',
@@ -182,6 +180,7 @@ interface ReviewModalProps {
 
 function ReviewModal({ target, onClose, onSubmitted }: ReviewModalProps) {
   const isTablet = useIsTablet();
+  const { t } = useLanguage();
   return (
     <Modal visible={!!target} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -200,7 +199,7 @@ function ReviewModal({ target, onClose, onSubmitted }: ReviewModalProps) {
               </ScrollView>
             </View>
             <TouchableOpacity onPress={onClose} style={{ marginTop: 12, alignItems: 'center' }}>
-              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>Fermer</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>{t('common.close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -215,13 +214,14 @@ interface QrCodeModalProps {
 }
 function QrCodeModal({ reservation, onClose }: QrCodeModalProps) {
   const isTablet = useIsTablet();
+  const { t } = useLanguage();
   return (
     <Modal visible={!!reservation} transparent animationType="fade" onRequestClose={onClose}>
       <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
         <View style={[styles.modalBox, isTablet && styles.modalBoxTablet, styles.qrModalBox]}>
           <Text style={[styles.modalTitle, { textAlign: 'center' }]}>{reservation?.service_name}</Text>
           <Text style={[styles.modalSub, { textAlign: 'center' }]}>
-            {reservation ? formatDateLongFr(reservation.date) : ''}
+            {reservation ? formatDateLong(reservation.date, t) : ''}
           </Text>
           {reservation?.qr_code && (
             <Image
@@ -229,7 +229,7 @@ function QrCodeModal({ reservation, onClose }: QrCodeModalProps) {
               style={styles.qrModalImage}
             />
           )}
-          <Text style={styles.qrModalCaption}>Montrez ce code au salon</Text>
+          <Text style={styles.qrModalCaption}>{t('reservations.qrCode.caption')}</Text>
           <View style={{ width: '100%', marginTop: 16 }}>
             <TouchableOpacity
               onPress={onClose}
@@ -242,7 +242,7 @@ function QrCodeModal({ reservation, onClose }: QrCodeModalProps) {
               }}
             >
               <Text style={{ color: '#000', fontSize: 16, fontWeight: 'bold' }}>
-                Fermer
+                {t('common.close')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -359,16 +359,17 @@ export default function ReservationsScreen() {
       diffDays <= 0 ? t('reservations.nextRdvToday')
       : diffDays === 1 ? t('reservations.nextRdvTomorrow')
       : `${t('reservations.nextRdvIn')} ${diffDays} ${t('reservations.nextRdvDaysWord')}`;
+    const moisAbbr = t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey);
     return {
       jour: String(d.getDate()).padStart(2, '0'),
-      mois: MOIS_ABBR_FR[d.getMonth()],
-      jourAbbr: JOURS_ABBR_FR[d.getDay()],
+      mois: moisAbbr,
+      jourAbbr: t(`reservations.dayAbbr.${d.getDay()}` as TranslationKey),
       service: nextReservation.service_name,
       time: nextReservation.time.slice(0, 5),
       timeLabel: formatHmm(nextReservation.time),
       barbier: 'Willo',
-      dateLabel: `${d.getDate()} ${MOIS_FR_FULL[d.getMonth()]} ${d.getFullYear()}`,
-      dateShort: `${d.getDate()} ${MOIS_ABBR_FR[d.getMonth()]}`,
+      dateLabel: `${d.getDate()} ${t(`step3.month.${d.getMonth()}` as TranslationKey)} ${d.getFullYear()}`,
+      dateShort: `${d.getDate()} ${moisAbbr}`,
       daysLabel,
     };
   })() : null;
@@ -381,14 +382,16 @@ export default function ReservationsScreen() {
     time: '10:30',
     timeLabel: '10:30',
     barbier: NEXT_RDV.barbier,
-    dateLabel: NEXT_RDV.dateLabel,
-    dateShort: NEXT_RDV.dateShort,
+    dateLabel: t('reservations.mockRdv.dateLabel'),
+    dateShort: t('reservations.mockRdv.dateShort'),
     daysLabel: `${t('reservations.nextRdvIn')} 4 ${t('reservations.nextRdvDaysWord')}`,
   };
 
   const TRANSACTIONS = TRANSACTIONS_META.map(tx => ({
     ...tx,
-    date: tx.dateKey ? t(tx.dateKey) : tx.date!,
+    date: tx.dateKey
+      ? t(tx.dateKey)
+      : `${tx.day} ${t(`reservations.monthAbbr.${tx.moisIdx}` as TranslationKey)} ${tx.annee}`,
     reason: t(tx.reasonKey),
   }));
 
@@ -399,12 +402,18 @@ export default function ReservationsScreen() {
   }));
 
   const HISTORIQUE = error
-    ? HISTORIQUE_META.map(h => ({ ...h, service: t(h.serviceKey), id: null as number | null, status: null as string | null }))
+    ? HISTORIQUE_META.map(h => ({
+        ...h,
+        mois: t(`reservations.monthAbbr.${h.moisIdx}` as TranslationKey),
+        service: t(h.serviceKey),
+        id: null as number | null,
+        status: null as string | null,
+      }))
     : pastSorted.map(r => {
         const d = parseApiDate(r.date);
         return {
           jour: String(d.getDate()).padStart(2, '0'),
-          mois: MOIS_ABBR_FR[d.getMonth()],
+          mois: t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey),
           service: r.service_name,
           barbier: 'W',
           barbierNom: 'Willo',
@@ -419,6 +428,7 @@ export default function ReservationsScreen() {
   const FAVORIS = FAVORIS_META.map(f => ({
     ...f,
     nom: t(f.nomKey),
+    date: `${f.day} ${t(`reservations.monthAbbr.${f.moisIdx}` as TranslationKey)}`,
   }));
 
   const NEXT_RDV_SERVICE_LABEL = `${t('reservations.mockRdv.servicePrefix')} ${t('reservations.mockRdv.serviceGold')}`;
@@ -461,27 +471,27 @@ export default function ReservationsScreen() {
         style={[styles.mainTabPill, mainTab === 'apercu' && styles.mainTabPillActive]}
         onPress={() => setMainTab('apercu')}
       >
-        <Text style={[styles.mainTabText, mainTab === 'apercu' && styles.mainTabTextActive]}>Aperçu</Text>
+        <Text style={[styles.mainTabText, mainTab === 'apercu' && styles.mainTabTextActive]}>{t('reservations.tabs.apercu')}</Text>
       </Pressable>
       <Pressable
         style={[styles.mainTabPill, mainTab === 'coupes' && styles.mainTabPillActive]}
         onPress={() => setMainTab('coupes')}
       >
-        <Text style={[styles.mainTabText, mainTab === 'coupes' && styles.mainTabTextActive]}>✂️ Mes coupes</Text>
+        <Text style={[styles.mainTabText, mainTab === 'coupes' && styles.mainTabTextActive]}>✂️ {t('reservations.tabs.coupes')}</Text>
       </Pressable>
     </View>
   );
 
   const mesCoupesGallery = (
     <View style={{ marginTop: 8, overflow: 'visible' }}>
-      <Text style={styles.sectionTitle}>Mes coupes</Text>
+      <Text style={styles.sectionTitle}>{t('reservations.tabs.coupes')}</Text>
       <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13.5, marginTop: -6, marginBottom: 16 }}>
-        Les photos et vidéos avant/après partagées par votre coiffeur.
+        {t('reservations.coupes.subtitle')}
       </Text>
       <ClientMediaGrid
         media={myMedia}
         isLoading={myMediaLoading}
-        emptyLabel="Aucune photo ou vidéo pour le moment."
+        emptyLabel={t('reservations.coupes.empty')}
         mutedColor="rgba(255,255,255,0.5)"
       />
     </View>
@@ -497,7 +507,7 @@ export default function ReservationsScreen() {
     if (!cancelTarget) return;
     if (cancelTarget.id == null) {
       console.log('[ANNULATION] cancelTarget.id manquant — cancelTarget:', JSON.stringify(cancelTarget));
-      const msg = 'Réservation invalide (identifiant manquant). Rechargez la page et réessayez.';
+      const msg = t('reservations.cancelInvalidError');
       if (Platform.OS === 'web') window.alert(`${t('common.error')} : ${msg}`);
       else Alert.alert(t('common.error'), msg);
       return;
@@ -594,7 +604,7 @@ export default function ReservationsScreen() {
   const handleCancelNextRdv = () => {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(
-        `${t('reservations.cancelNextAlert.confirmWebPrefix')} ${NEXT_RDV.dateShort} ${t('reservations.cancelNextAlert.confirmWebMid')} ${NEXT_RDV.timeLabel} ${t('reservations.cancelNextAlert.confirmWebWith')} ${NEXT_RDV.barbier} ?`
+        `${t('reservations.cancelNextAlert.confirmWebPrefix')} ${rdv.dateShort} ${t('reservations.cancelNextAlert.confirmWebMid')} ${rdv.timeLabel} ${t('reservations.cancelNextAlert.confirmWebWith')} ${rdv.barbier} ?`
       );
       if (confirmed) {
         window.alert(`${t('reservations.cancelNextAlert.doneTitle')}. ${t('reservations.cancelNextAlert.doneMsg')}`);
@@ -603,7 +613,7 @@ export default function ReservationsScreen() {
     }
     Alert.alert(
       t('reservations.cancelNextAlert.title'),
-      `${t('reservations.cancelNextAlert.confirmWebPrefix')} ${NEXT_RDV.dateShort} ${t('reservations.cancelNextAlert.confirmWebMid')} ${NEXT_RDV.timeLabel} ${t('reservations.cancelNextAlert.confirmWebWith')} ${NEXT_RDV.barbier} ${t('reservations.cancelNextAlert.body')}`,
+      `${t('reservations.cancelNextAlert.confirmWebPrefix')} ${rdv.dateShort} ${t('reservations.cancelNextAlert.confirmWebMid')} ${rdv.timeLabel} ${t('reservations.cancelNextAlert.confirmWebWith')} ${rdv.barbier} ${t('reservations.cancelNextAlert.body')}`,
       [
         { text: t('reservations.cancelNextAlert.cancelBtn'), style: 'cancel' },
         {
@@ -731,7 +741,14 @@ export default function ReservationsScreen() {
           {mainTabsRow}
 
           {mainTab === 'coupes' && (
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            // marginHorizontal négatif + paddingHorizontal égal sur le contenu : rend l'inset
+            // gauche/droit local à ce ScrollView plutôt que hérité de tabletContainer, pour
+            // qu'il ne dépende pas de la propagation du padding parent sur le web.
+            <ScrollView
+              style={{ flex: 1, marginHorizontal: -TABLET_CONTAINER_PADDING_H }}
+              contentContainerStyle={{ paddingHorizontal: TABLET_CONTAINER_PADDING_H, paddingBottom: 40 }}
+              showsVerticalScrollIndicator={false}
+            >
               {mesCoupesGallery}
             </ScrollView>
           )}
@@ -828,7 +845,7 @@ export default function ReservationsScreen() {
                         onPress={() => setQrTarget(nextReservation)}
                         activeOpacity={0.85}
                       >
-                        <Text style={styles.btnOutlineText}>🎫 Mon QR</Text>
+                        <Text style={styles.btnOutlineText}>{t('reservations.myQrBtn')}</Text>
                       </TouchableOpacity>
                     )}
 
@@ -839,7 +856,7 @@ export default function ReservationsScreen() {
                         onPress={() => setReviewModalTarget(pendingReviewTarget)}
                         activeOpacity={0.85}
                       >
-                        <Text style={styles.leaveReviewBtnText}>⭐ Laisser un avis</Text>
+                        <Text style={styles.leaveReviewBtnText}>{t('reservations.leaveReviewBtn')}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -895,7 +912,7 @@ export default function ReservationsScreen() {
                       {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
                     </Text>
                     <View style={styles.favDivider} />
-                    <Text style={styles.favCount}>{fav.count} · dernière {fav.date}</Text>
+                    <Text style={styles.favCount}>{fav.count} · {t('reservations.favLastPrefix')} {fav.date}</Text>
                   </View>
                 ))}
               </View>
@@ -960,7 +977,7 @@ export default function ReservationsScreen() {
                         style={{ padding: 16, alignItems: 'center' }}
                       >
                         <Text style={{ color: '#C9A84C', fontSize: 14 }}>
-                          Voir tout l'historique ({filteredHist.length} RDV)
+                          {t('reservations.viewAllHistoryPrefix')} ({filteredHist.length} {t('reservations.rdvCountWord')})
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -969,7 +986,7 @@ export default function ReservationsScreen() {
                     <View style={styles.histSplitDetail}>
                       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                         <Text style={{ color: '#888', fontSize: 16 }}>
-                          Sélectionnez un rendez-vous pour voir les détails
+                          {t('reservations.selectRdvPlaceholder')}
                         </Text>
                       </View>
                     </View>
@@ -1051,7 +1068,7 @@ export default function ReservationsScreen() {
                   />
                 </View>
                 <Text style={styles.loyaltyBarCaption}>
-                  {ptsRestants} pts avant votre prochaine coupe offerte
+                  {ptsRestants} {t('reservations.loyalty.barCaptionSuffix')}
                 </Text>
 
                 <View style={styles.loyaltyTiersRow}>
@@ -1238,7 +1255,7 @@ export default function ReservationsScreen() {
                   onPress={() => setQrTarget(nextReservation)}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.btnOutlineText}>🎫 Mon QR</Text>
+                  <Text style={styles.btnOutlineText}>{t('reservations.myQrBtn')}</Text>
                 </TouchableOpacity>
               )}
 
@@ -1249,7 +1266,7 @@ export default function ReservationsScreen() {
                   onPress={() => setReviewModalTarget(pendingReviewTarget)}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.leaveReviewBtnText}>⭐ Laisser un avis</Text>
+                  <Text style={styles.leaveReviewBtnText}>{t('reservations.leaveReviewBtn')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1305,7 +1322,7 @@ export default function ReservationsScreen() {
                   {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
                 </Text>
                 <View style={styles.favDivider} />
-                <Text style={styles.favCount}>{fav.count} · dernière {fav.date}</Text>
+                <Text style={styles.favCount}>{fav.count} · {t('reservations.favLastPrefix')} {fav.date}</Text>
               </View>
             ))}
           </View>
@@ -1323,7 +1340,7 @@ export default function ReservationsScreen() {
                   {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
                 </Text>
                 <View style={styles.favDivider} />
-                <Text style={styles.favCount}>{fav.count} · dernière {fav.date}</Text>
+                <Text style={styles.favCount}>{fav.count} · {t('reservations.favLastPrefix')} {fav.date}</Text>
               </View>
             ))}
           </ScrollView>
@@ -1389,7 +1406,7 @@ export default function ReservationsScreen() {
                   onPress={() => setReviewModalTarget({ id: h.id as number, service: h.service })}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.leaveReviewBtnText}>⭐ Laisser un avis</Text>
+                  <Text style={styles.leaveReviewBtnText}>{t('reservations.leaveReviewBtn')}</Text>
                 </TouchableOpacity>
               )}
             </React.Fragment>
@@ -1402,7 +1419,7 @@ export default function ReservationsScreen() {
             style={{ padding: 16, alignItems: 'center' }}
           >
             <Text style={{ color: '#C9A84C', fontSize: 14 }}>
-              Voir tout l'historique ({filteredHist.length} RDV)
+              {t('reservations.viewAllHistoryPrefix')} ({filteredHist.length} {t('reservations.rdvCountWord')})
             </Text>
           </TouchableOpacity>
         )}
@@ -1436,7 +1453,7 @@ export default function ReservationsScreen() {
             />
           </View>
           <Text style={styles.loyaltyBarCaption}>
-            {ptsRestants} pts avant votre prochaine coupe offerte
+            {ptsRestants} {t('reservations.loyalty.barCaptionSuffix')}
           </Text>
 
           <View style={styles.loyaltyTiersRow}>
@@ -1587,7 +1604,7 @@ const styles = StyleSheet.create({
   // ── iPad — layout 2 colonnes ────────────────────────────────────────────────
   tabletContainer: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: TABLET_CONTAINER_PADDING_H,
     paddingTop: 40,
     maxWidth: 1100,
     alignSelf: 'center',
