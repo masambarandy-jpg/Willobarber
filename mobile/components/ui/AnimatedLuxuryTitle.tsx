@@ -28,16 +28,16 @@ function useResponsiveSizes() {
 
   if (width >= 768) {
     // Tablette / iPad
-    return { fontSize: 34, lineHeight: 44, letterSpacing: 0.4, gap: 6 };
+    return { fontSize: 58, lineHeight: 66, letterSpacing: 0.4, gap: 6 };
   }
 
   if (width < 360) {
     // Petits GSM
-    return { fontSize: 21, lineHeight: 28, letterSpacing: 0.15, gap: 2 };
+    return { fontSize: 42, lineHeight: 50, letterSpacing: 0.15, gap: 2 };
   }
 
   // GSM standard / Web
-  return { fontSize: 25, lineHeight: 33, letterSpacing: 0.25, gap: 3 };
+  return { fontSize: 48, lineHeight: 56, letterSpacing: 0.25, gap: 3 };
 }
 
 function useLineEntrance(delay: number) {
@@ -159,13 +159,17 @@ export default function AnimatedLuxuryTitle() {
         <Animated.Text style={[plainTextStyle, line1Entrance]}>{t('home.hero.line1')}</Animated.Text>
       </View>
       <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
-        <Animated.Text style={[goldTextStyle, line2Entrance, line2Shimmer]}>{t('home.hero.line2')}</Animated.Text>
+        <Animated.View style={line2Entrance}>
+          <Animated.Text style={[goldTextStyle, line2Shimmer]}>{t('home.hero.line2')}</Animated.Text>
+        </Animated.View>
       </View>
       <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
         <Animated.Text style={[plainTextStyle, line3Entrance]}>{t('home.hero.line3')}</Animated.Text>
       </View>
       <View style={[styles.mask, { height: lineHeight }]}>
-        <Animated.Text style={[goldTextStyle, line4Entrance, line4Shimmer]}>{t('home.hero.line4')}</Animated.Text>
+        <Animated.View style={line4Entrance}>
+          <Animated.Text style={[goldTextStyle, line4Shimmer]}>{t('home.hero.line4')}</Animated.Text>
+        </Animated.View>
       </View>
     </View>
   );
