@@ -20,9 +20,10 @@ const STAGGER_DELAYS = {
   line4: 1050,
 } as const;
 
-const UNDERLINE_START_OFFSET = 50;
-const UNDERLINE_DURATION = 800;
-const UNDERLINE_EASING = Easing.bezier(0.16, 1, 0.3, 1);
+const UNDERLINE_REVEAL_DURATION = 600;
+const UNDERLINE_REVEAL_EASING = Easing.bezier(0.16, 1, 0.3, 1);
+const UNDERLINE_FADE_DURATION = 400;
+const UNDERLINE_FADE_EASING = Easing.in(Easing.ease);
 const UNDERLINE_COLOR = '#C9A84C';
 
 const SWEEP_GRADIENT_COLORS = ['#C9A059', '#F6E7B8', '#FFF7DF', '#F6E7B8', '#C9A059'] as const;
@@ -84,15 +85,24 @@ function useLineEntrance(delay: number, lineHeight: number) {
 
 function useUnderlineReveal(delay: number) {
   const scaleX = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    const animation = Animated.timing(scaleX, {
-      toValue: 1,
-      duration: UNDERLINE_DURATION,
-      delay: delay + UNDERLINE_START_OFFSET,
-      easing: UNDERLINE_EASING,
-      useNativeDriver: true,
-    });
+    const animation = Animated.sequence([
+      Animated.timing(scaleX, {
+        toValue: 1,
+        duration: UNDERLINE_REVEAL_DURATION,
+        delay,
+        easing: UNDERLINE_REVEAL_EASING,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: UNDERLINE_FADE_DURATION,
+        easing: UNDERLINE_FADE_EASING,
+        useNativeDriver: true,
+      }),
+    ]);
 
     animation.start();
 
@@ -101,6 +111,7 @@ function useUnderlineReveal(delay: number) {
   }, []);
 
   return {
+    opacity,
     transform: [{ scaleX }],
   };
 }
