@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   underline: {
-    height: 3,
+    height: 1.5,
     overflow: 'hidden',
     transformOrigin: 'left',
   },
