@@ -20,9 +20,10 @@ const STAGGER_DELAYS = {
   line4: 1050,
 } as const;
 
-const UNDERLINE_REVEAL_DURATION = 600;
+const UNDERLINE_REVEAL_DURATION = 350;
 const UNDERLINE_REVEAL_EASING = Easing.bezier(0.16, 1, 0.3, 1);
-const UNDERLINE_FADE_DURATION = 400;
+const UNDERLINE_PEAK_OPACITY = 0.4;
+const UNDERLINE_FADE_DURATION = 250;
 const UNDERLINE_FADE_EASING = Easing.in(Easing.ease);
 const UNDERLINE_COLOR = '#C9A84C';
 
@@ -85,7 +86,7 @@ function useLineEntrance(delay: number, lineHeight: number) {
 
 function useUnderlineReveal(delay: number) {
   const scaleX = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(UNDERLINE_PEAK_OPACITY)).current;
 
   useEffect(() => {
     const animation = Animated.sequence([
