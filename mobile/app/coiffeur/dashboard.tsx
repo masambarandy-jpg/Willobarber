@@ -1063,8 +1063,8 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   statCard: {
     width: '47%',
@@ -1072,6 +1072,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     gap: 10,
+    marginBottom: 12,
     borderWidth: 0,
     shadowColor: 'transparent',
     shadowOffset: { width: 0, height: 0 },
