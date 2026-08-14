@@ -120,8 +120,20 @@ const DEFAULT_STATS: LocalStats = {
   pm: Array(7).fill('dispo') as SlotState[],
 };
 
+// Le nom renvoyé par l'API (/api/barbers/) ne correspond pas toujours
+// exactement à la clé 'Willo Diallo' de LOCAL_STATS_BY_NAME (ex: juste
+// 'Willo'), auquel cas le lookup échoue et retombe sur DEFAULT_STATS
+// (0 RDV, note et expérience vides). Ce fallback comble ces champs pour
+// Willo spécifiquement, sans dépendre d'un match exact du nom.
+const WILLO_FALLBACK_AVAILABILITY: Pick<LocalStats, 'am' | 'pm'> = {
+  am: ['ferme', 'dispo', 'dispo', 'dispo', 'dispo', 'dispo', 'dispo'],
+  pm: ['ferme', 'dispo', 'dispo', 'dispo', 'dispo', 'dispo', 'dispo'],
+};
+
 function mapApiBarber(b: ApiBarber): TeamMember {
   const stats = LOCAL_STATS_BY_NAME[b.name] ?? DEFAULT_STATS;
+  const isWillo = (b.name ?? '').toLowerCase().includes('willo');
+
   return {
     id: String(b.id),
     initial: (b.name ?? '').charAt(0).toUpperCase() || '?',
@@ -131,7 +143,11 @@ function mapApiBarber(b: ApiBarber): TeamMember {
     tags: b.specialties ?? [],
     email: b.email ?? '',
     phone: b.phone ?? '',
-    ...stats,
+    rdv: isWillo && !stats.rdv ? 124 : stats.rdv,
+    rating: isWillo && (!stats.rating || stats.rating === '—') ? '5,0' : stats.rating,
+    exp: isWillo && (!stats.exp || stats.exp === '—') ? '30 ans' : stats.exp,
+    am: isWillo && stats === DEFAULT_STATS ? WILLO_FALLBACK_AVAILABILITY.am : stats.am,
+    pm: isWillo && stats === DEFAULT_STATS ? WILLO_FALLBACK_AVAILABILITY.pm : stats.pm,
   };
 }
 
