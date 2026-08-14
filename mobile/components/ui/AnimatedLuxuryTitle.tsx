@@ -1,5 +1,7 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, StyleSheet, Text, TextStyle, View, useWindowDimensions } from 'react-native';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   useFonts,
   CormorantGaramond_600SemiBold,
@@ -9,7 +11,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 const ENTRANCE_EASING = Easing.bezier(0.19, 1, 0.22, 1);
 const ENTRANCE_DURATION = 700;
-const ENTRANCE_TRANSLATE_Y = 40;
+const ENTRANCE_TRANSLATE_Y_RATIO = 1.1; // le texte part entierement sous le masque
 
 const STAGGER_DELAYS = {
   line1: 0,
@@ -18,10 +20,10 @@ const STAGGER_DELAYS = {
   line4: 500,
 } as const;
 
-const GOLD_BASE = '#C9A84C';
-const GOLD_PEAK = '#F6E7B8';
-const SHIMMER_SWEEP_DURATION = 350;
-const SHIMMER_LOOP_INTERVAL = 8000; // cycle complet (sweep aller-retour + pause)
+const SWEEP_GRADIENT_COLORS = ['#C9A059', '#F6E7B8', '#FFF7DF', '#F6E7B8', '#C9A059'] as const;
+const SWEEP_DURATION = 1400;
+const SWEEP_LOOP_INTERVAL = 8000; // cycle complet (balayage + pause)
+const SWEEP_TRANSLATE_RATIO = 1.5; // +150% -> -150%
 
 function useResponsiveSizes() {
   const { width } = useWindowDimensions();
@@ -40,8 +42,8 @@ function useResponsiveSizes() {
   return { fontSize: 48, lineHeight: 56, letterSpacing: 0.25, gap: 3 };
 }
 
-function useLineEntrance(delay: number) {
-  const translateY = useRef(new Animated.Value(ENTRANCE_TRANSLATE_Y)).current;
+function useLineEntrance(delay: number, lineHeight: number) {
+  const translateY = useRef(new Animated.Value(lineHeight * ENTRANCE_TRANSLATE_Y_RATIO)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -74,31 +76,41 @@ function useLineEntrance(delay: number) {
   };
 }
 
-function useGoldShimmer(delay: number) {
-  const progress = useRef(new Animated.Value(0)).current;
+function GoldSweepText({
+  text,
+  style,
+  delay,
+  lineHeight,
+}: {
+  text: string;
+  style: TextStyle;
+  delay: number;
+  lineHeight: number;
+}) {
+  const [width, setWidth] = useState(0);
+  const translateX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!width) {
+      return;
+    }
+
     const animation = Animated.sequence([
       Animated.delay(delay + ENTRANCE_DURATION),
       Animated.loop(
         Animated.sequence([
-          Animated.timing(progress, {
+          Animated.timing(translateX, {
             toValue: 1,
-            duration: SHIMMER_SWEEP_DURATION,
+            duration: SWEEP_DURATION,
             easing: Easing.inOut(Easing.ease),
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
-          Animated.timing(progress, {
+          Animated.timing(translateX, {
             toValue: 0,
-            duration: SHIMMER_SWEEP_DURATION,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: false,
+            duration: 0,
+            useNativeDriver: true,
           }),
-          Animated.timing(progress, {
-            toValue: 0,
-            duration: SHIMMER_LOOP_INTERVAL - SHIMMER_SWEEP_DURATION * 2,
-            useNativeDriver: false,
-          }),
+          Animated.delay(SWEEP_LOOP_INTERVAL - SWEEP_DURATION),
         ])
       ),
     ]);
@@ -107,14 +119,41 @@ function useGoldShimmer(delay: number) {
 
     return () => animation.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [width]);
 
-  return {
-    color: progress.interpolate({
-      inputRange: [0, 1],
-      outputRange: [GOLD_BASE, GOLD_PEAK],
-    }),
-  };
+  const translateXValue = translateX.interpolate({
+    inputRange: [0, 1],
+    outputRange: [width * SWEEP_TRANSLATE_RATIO, width * -SWEEP_TRANSLATE_RATIO],
+  });
+
+  return (
+    <View>
+      <Text
+        style={style}
+        onLayout={(event) => {
+          const measured = event.nativeEvent.layout.width;
+          setWidth((current) => (current !== measured ? measured : current));
+        }}
+      >
+        {text}
+      </Text>
+      {width > 0 && (
+        <MaskedView
+          style={[StyleSheet.absoluteFillObject, { width, height: lineHeight }]}
+          maskElement={<Text style={style}>{text}</Text>}
+        >
+          <Animated.View style={{ flex: 1, transform: [{ translateX: translateXValue }] }}>
+            <LinearGradient
+              colors={SWEEP_GRADIENT_COLORS}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{ width: width * 2.5, height: lineHeight }}
+            />
+          </Animated.View>
+        </MaskedView>
+      )}
+    </View>
+  );
 }
 
 export default function AnimatedLuxuryTitle() {
@@ -126,19 +165,16 @@ export default function AnimatedLuxuryTitle() {
     CormorantGaramond_600SemiBold_Italic,
   });
 
-  const line1Entrance = useLineEntrance(STAGGER_DELAYS.line1);
-  const line2Entrance = useLineEntrance(STAGGER_DELAYS.line2);
-  const line3Entrance = useLineEntrance(STAGGER_DELAYS.line3);
-  const line4Entrance = useLineEntrance(STAGGER_DELAYS.line4);
-
-  const line2Shimmer = useGoldShimmer(STAGGER_DELAYS.line2);
-  const line4Shimmer = useGoldShimmer(STAGGER_DELAYS.line4);
+  const line1Entrance = useLineEntrance(STAGGER_DELAYS.line1, lineHeight);
+  const line2Entrance = useLineEntrance(STAGGER_DELAYS.line2, lineHeight);
+  const line3Entrance = useLineEntrance(STAGGER_DELAYS.line3, lineHeight);
+  const line4Entrance = useLineEntrance(STAGGER_DELAYS.line4, lineHeight);
 
   if (!fontsLoaded) {
     return <View style={[styles.container, { height: lineHeight * 4 + gap * 3 }]} />;
   }
 
-  const plainTextStyle = {
+  const plainTextStyle: TextStyle = {
     fontSize,
     lineHeight,
     letterSpacing,
@@ -146,10 +182,11 @@ export default function AnimatedLuxuryTitle() {
     fontFamily: 'CormorantGaramond_600SemiBold',
   };
 
-  const goldTextStyle = {
+  const goldTextStyle: TextStyle = {
     fontSize,
     lineHeight,
     letterSpacing,
+    color: SWEEP_GRADIENT_COLORS[0],
     fontFamily: 'CormorantGaramond_600SemiBold_Italic',
   };
 
@@ -160,7 +197,12 @@ export default function AnimatedLuxuryTitle() {
       </View>
       <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
         <Animated.View style={line2Entrance}>
-          <Animated.Text style={[goldTextStyle, line2Shimmer]}>{t('home.hero.line2')}</Animated.Text>
+          <GoldSweepText
+            text={t('home.hero.line2')}
+            style={goldTextStyle}
+            delay={STAGGER_DELAYS.line2}
+            lineHeight={lineHeight}
+          />
         </Animated.View>
       </View>
       <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
@@ -168,7 +210,12 @@ export default function AnimatedLuxuryTitle() {
       </View>
       <View style={[styles.mask, { height: lineHeight }]}>
         <Animated.View style={line4Entrance}>
-          <Animated.Text style={[goldTextStyle, line4Shimmer]}>{t('home.hero.line4')}</Animated.Text>
+          <GoldSweepText
+            text={t('home.hero.line4')}
+            style={goldTextStyle}
+            delay={STAGGER_DELAYS.line4}
+            lineHeight={lineHeight}
+          />
         </Animated.View>
       </View>
     </View>
