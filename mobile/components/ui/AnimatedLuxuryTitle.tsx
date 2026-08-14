@@ -1,15 +1,5 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, {
-  Easing,
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, View, useWindowDimensions } from 'react-native';
 import {
   useFonts,
   CormorantGaramond_600SemiBold,
@@ -51,50 +41,80 @@ function useResponsiveSizes() {
 }
 
 function useLineEntrance(delay: number) {
-  const translateY = useSharedValue(ENTRANCE_TRANSLATE_Y);
-  const opacity = useSharedValue(0);
+  const translateY = useRef(new Animated.Value(ENTRANCE_TRANSLATE_Y)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    translateY.value = withDelay(
-      delay,
-      withTiming(0, { duration: ENTRANCE_DURATION, easing: ENTRANCE_EASING })
-    );
+    const animation = Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: ENTRANCE_DURATION,
+        delay,
+        easing: ENTRANCE_EASING,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: ENTRANCE_DURATION,
+        delay,
+        easing: ENTRANCE_EASING,
+        useNativeDriver: true,
+      }),
+    ]);
 
-    opacity.value = withDelay(
-      delay,
-      withTiming(1, { duration: ENTRANCE_DURATION, easing: ENTRANCE_EASING })
-    );
+    animation.start();
+
+    return () => animation.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateY: translateY.value }],
-  }));
+  return {
+    opacity,
+    transform: [{ translateY }],
+  };
 }
 
 function useGoldShimmer(delay: number) {
-  const progress = useSharedValue(0);
+  const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    progress.value = withDelay(
-      delay + ENTRANCE_DURATION,
-      withRepeat(
-        withSequence(
-          withTiming(1, { duration: SHIMMER_SWEEP_DURATION, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0, { duration: SHIMMER_SWEEP_DURATION, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0, { duration: SHIMMER_LOOP_INTERVAL - SHIMMER_SWEEP_DURATION * 2 })
-        ),
-        -1,
-        false
-      )
-    );
+    const animation = Animated.sequence([
+      Animated.delay(delay + ENTRANCE_DURATION),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(progress, {
+            toValue: 1,
+            duration: SHIMMER_SWEEP_DURATION,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(progress, {
+            toValue: 0,
+            duration: SHIMMER_SWEEP_DURATION,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(progress, {
+            toValue: 0,
+            duration: SHIMMER_LOOP_INTERVAL - SHIMMER_SWEEP_DURATION * 2,
+            useNativeDriver: false,
+          }),
+        ])
+      ),
+    ]);
+
+    animation.start();
+
+    return () => animation.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return useAnimatedStyle(() => ({
-    color: interpolateColor(progress.value, [0, 1], [GOLD_BASE, GOLD_PEAK]),
-  }));
+  return {
+    color: progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [GOLD_BASE, GOLD_PEAK],
+    }),
+  };
 }
 
 export default function AnimatedLuxuryTitle() {
