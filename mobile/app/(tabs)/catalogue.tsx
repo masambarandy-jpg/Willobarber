@@ -33,13 +33,13 @@ const API_CATEGORY_MAP: Record<string, string> = {
 
 const PHOTO_BY_NAME: Record<string, string> = {
   'Signature WilloBarber': 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800&q=80',
-  "Taille & rasage à l'ancienne": 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800&q=80',
+  "Taille & rasage à l'ancienne": 'https://images.unsplash.com/photo-1761148438883-e34e0289a214?w=800&q=80',
   'Le Rituel': 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80',
   'Coupe express': 'https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=800&q=80',
-  'Camouflage gris': 'https://images.unsplash.com/photo-1518710843675-2540dd79065c?w=800&q=80',
+  'Camouflage gris': 'https://images.unsplash.com/photo-1783908700793-ea8b35d6d53a?w=800&q=80',
   'Soin du visage': 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=800&q=80',
-  'Coupe enfant −15 ans': 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80',
-  'Coupe enfant +15 ans': 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80',
+  'Coupe enfant −15 ans': 'https://images.unsplash.com/photo-1703792685152-d13e206924d8?w=800&q=80',
+  'Coupe enfant +15 ans': 'https://images.unsplash.com/photo-1521490683712-35a1cb235d1c?w=800&q=80',
 };
 
 // Tant que la migration ajoutant 'category' au Service Django n'est pas déployée sur

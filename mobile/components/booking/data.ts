@@ -72,7 +72,7 @@ export const SERVICES: StaticService[] = [
     desc: 'Serviette chaude, huile pré-rasage, rasoir droit.',
     dur: '30 min',
     price: 28,
-    photo: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800&q=80',
+    photo: 'https://images.unsplash.com/photo-1761148438883-e34e0289a214?w=800&q=80',
   },
   {
     id: 'rituel',
@@ -100,7 +100,7 @@ export const SERVICES: StaticService[] = [
     desc: 'Pigmentation sur-mesure, sans ammoniaque. Discret. Naturel. Efficace.',
     dur: '40 min',
     price: 35,
-    photo: 'https://images.unsplash.com/photo-1518710843675-2540dd79065c?w=800&q=80',
+    photo: 'https://images.unsplash.com/photo-1783908700793-ea8b35d6d53a?w=800&q=80',
   },
   {
     id: 'soin',
@@ -119,7 +119,7 @@ export const SERVICES: StaticService[] = [
     dur: '25 min',
     price: 15,
     counter: true,
-    photo: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80',
+    photo: 'https://images.unsplash.com/photo-1703792685152-d13e206924d8?w=800&q=80',
   },
   {
     id: 'enfant+15',
@@ -129,7 +129,7 @@ export const SERVICES: StaticService[] = [
     dur: '30 min',
     price: 20,
     counter: true,
-    photo: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80',
+    photo: 'https://images.unsplash.com/photo-1521490683712-35a1cb235d1c?w=800&q=80',
   },
 ];
 
