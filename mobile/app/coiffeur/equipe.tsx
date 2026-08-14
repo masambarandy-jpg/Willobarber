@@ -39,13 +39,13 @@ const INITIAL_TEAM: TeamMember[] = [
     role: 'Fondateur & Master Barber',
     status: 'Actif',
     tags: ['Fade', 'Texturé', 'Rasoir'],
-    rdv: 148,
-    rating: '4,9',
+    rdv: 124,
+    rating: '5,0',
     exp: '30 ans',
     email: 'willo@willobarber.fr',
     phone: '06 45 78 29 70',
-    am: ['ferme', 'reserve', 'reserve', 'dispo', 'reserve', 'reserve', 'dispo'],
-    pm: ['ferme', 'dispo', 'ferme', 'reserve', 'dispo', 'ferme', 'reserve'],
+    am: ['reserve', 'reserve', 'dispo', 'dispo', 'reserve', 'reserve', 'ferme'],
+    pm: ['dispo', 'dispo', 'reserve', 'reserve', 'dispo', 'dispo', 'ferme'],
   },
   {
     id: 'malik',
@@ -99,9 +99,9 @@ type LocalStats = Pick<TeamMember, 'rdv' | 'rating' | 'exp' | 'am' | 'pm'>;
 
 const LOCAL_STATS_BY_NAME: Record<string, LocalStats> = {
   'Willo Diallo': {
-    rdv: 148, rating: '4,9', exp: '30 ans',
-    am: ['ferme', 'reserve', 'reserve', 'dispo', 'reserve', 'reserve', 'dispo'],
-    pm: ['ferme', 'dispo', 'ferme', 'reserve', 'dispo', 'ferme', 'reserve'],
+    rdv: 124, rating: '5,0', exp: '30 ans',
+    am: ['reserve', 'reserve', 'dispo', 'dispo', 'reserve', 'reserve', 'ferme'],
+    pm: ['dispo', 'dispo', 'reserve', 'reserve', 'dispo', 'dispo', 'ferme'],
   },
   'Malik Haddad': {
     rdv: 96, rating: '4,9', exp: '12 ans',

@@ -141,7 +141,7 @@ const MOCK_ANALYTICS: AnalyticsData = {
   peakHour: { label: '14h00', count: 8, pct: 80 },
   bestDay: { label: 'Samedi', total: 1240 },
   topBarber: { name: 'Willo', count: 9, revenue: 382 },
-  topClient: { name: 'sophie_lebrun', count: 10 },
+  topClient: { name: 'Sophie Lebrun', count: 10 },
 };
 
 function parseApiDate(dateStr: string): Date {
@@ -151,6 +151,17 @@ function parseApiDate(dateStr: string): Date {
 
 function fmtEuro(n: number): string {
   return `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
+
+// Le backend peut renvoyer un username brut (ex: "sophie_lebrun") en fallback
+// quand first_name/last_name sont vides côté User — on le reformate en nom lisible.
+function formatDisplayName(raw: string): string {
+  if (!raw || !raw.includes('_')) return raw;
+  return raw
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function useDashboardData() {
@@ -240,7 +251,7 @@ function useDashboardData() {
           .map((r) => ({
             id: r.id,
             letter: (r.client_display_name?.charAt(0) ?? 'W').toUpperCase(),
-            name: r.client_display_name,
+            name: formatDisplayName(r.client_display_name),
             service: r.service_name,
             barber: 'Willo',
             time: r.time.slice(0, 5),
@@ -331,7 +342,9 @@ function useDashboardData() {
           countByClient[r.client_display_name] = (countByClient[r.client_display_name] ?? 0) + 1;
         });
         const topClientEntry = Object.entries(countByClient).sort((a, b) => b[1] - a[1])[0];
-        const topClient = topClientEntry ? { name: topClientEntry[0], count: topClientEntry[1] } : null;
+        const topClient = topClientEntry
+          ? { name: formatDisplayName(topClientEntry[0]), count: topClientEntry[1] }
+          : null;
 
         // ── Rendez-vous ce mois (pour le rapport PDF) ──
         const rdvCountMonth = activeReservations.filter((r) => {
@@ -683,7 +696,7 @@ async function genererExcel(data: ExcelData) {
   // ── Onglet Réservations ──
   const reservationsRows = data.reservations.map((r) => ({
     ID: r.id,
-    Client: r.client_display_name,
+    Client: formatDisplayName(r.client_display_name),
     Service: r.service_name,
     Date: r.date,
     Heure: r.time.slice(0, 5),
@@ -1059,6 +1072,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     gap: 10,
+    borderWidth: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   statCardTablet: {
     width: '23%',
