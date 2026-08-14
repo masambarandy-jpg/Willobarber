@@ -10,15 +10,20 @@ import {
 import { useLanguage } from '@/contexts/LanguageContext';
 
 const ENTRANCE_EASING = Easing.bezier(0.19, 1, 0.22, 1);
-const ENTRANCE_DURATION = 1100;
+const ENTRANCE_DURATION = 1400;
 const ENTRANCE_TRANSLATE_Y_RATIO = 1.1; // le texte part entierement sous le masque
 
 const STAGGER_DELAYS = {
   line1: 0,
-  line2: 250,
-  line3: 500,
-  line4: 750,
+  line2: 350,
+  line3: 700,
+  line4: 1050,
 } as const;
+
+const UNDERLINE_START_OFFSET = 50;
+const UNDERLINE_DURATION = 800;
+const UNDERLINE_EASING = Easing.bezier(0.16, 1, 0.3, 1);
+const UNDERLINE_COLOR = '#C9A84C';
 
 const SWEEP_GRADIENT_COLORS = ['#C9A059', '#F6E7B8', '#FFF7DF', '#F6E7B8', '#C9A059'] as const;
 const SWEEP_DURATION = 1400;
@@ -74,6 +79,29 @@ function useLineEntrance(delay: number, lineHeight: number) {
   return {
     opacity,
     transform: [{ translateY }],
+  };
+}
+
+function useUnderlineReveal(delay: number) {
+  const scaleX = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.timing(scaleX, {
+      toValue: 1,
+      duration: UNDERLINE_DURATION,
+      delay: delay + UNDERLINE_START_OFFSET,
+      easing: UNDERLINE_EASING,
+      useNativeDriver: true,
+    });
+
+    animation.start();
+
+    return () => animation.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return {
+    transform: [{ scaleX }],
   };
 }
 
@@ -183,6 +211,11 @@ export default function AnimatedLuxuryTitle() {
   const line3Entrance = useLineEntrance(STAGGER_DELAYS.line3, lineHeight);
   const line4Entrance = useLineEntrance(STAGGER_DELAYS.line4, lineHeight);
 
+  const line1Underline = useUnderlineReveal(STAGGER_DELAYS.line1);
+  const line2Underline = useUnderlineReveal(STAGGER_DELAYS.line2);
+  const line3Underline = useUnderlineReveal(STAGGER_DELAYS.line3);
+  const line4Underline = useUnderlineReveal(STAGGER_DELAYS.line4);
+
   if (!fontsLoaded) {
     return <View style={[styles.container, { height: (lineHeight + 8) * 4 + gap * 3 }]} />;
   }
@@ -205,31 +238,43 @@ export default function AnimatedLuxuryTitle() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.mask, { height: lineHeight + 8, marginBottom: gap }]}>
-        <Animated.Text style={[plainTextStyle, line1Entrance]}>{t('home.hero.line1')}</Animated.Text>
+      <View style={{ marginBottom: gap }}>
+        <View style={[styles.mask, { height: lineHeight + 8 }]}>
+          <Animated.Text style={[plainTextStyle, line1Entrance]}>{t('home.hero.line1')}</Animated.Text>
+        </View>
+        <Animated.View style={[styles.underline, line1Underline]} />
       </View>
-      <View style={[styles.mask, { height: lineHeight + 8, marginBottom: gap }]}>
-        <Animated.View style={line2Entrance}>
-          <GoldSweepText
-            text={t('home.hero.line2')}
-            style={goldTextStyle}
-            delay={STAGGER_DELAYS.line4}
-            lineHeight={lineHeight}
-          />
-        </Animated.View>
+      <View style={{ marginBottom: gap }}>
+        <View style={[styles.mask, { height: lineHeight + 8 }]}>
+          <Animated.View style={line2Entrance}>
+            <GoldSweepText
+              text={t('home.hero.line2')}
+              style={goldTextStyle}
+              delay={STAGGER_DELAYS.line4}
+              lineHeight={lineHeight}
+            />
+          </Animated.View>
+        </View>
+        <Animated.View style={[styles.underline, line2Underline]} />
       </View>
-      <View style={[styles.mask, { height: lineHeight + 8, marginBottom: gap }]}>
-        <Animated.Text style={[plainTextStyle, line3Entrance]}>{t('home.hero.line3')}</Animated.Text>
+      <View style={{ marginBottom: gap }}>
+        <View style={[styles.mask, { height: lineHeight + 8 }]}>
+          <Animated.Text style={[plainTextStyle, line3Entrance]}>{t('home.hero.line3')}</Animated.Text>
+        </View>
+        <Animated.View style={[styles.underline, line3Underline]} />
       </View>
-      <View style={[styles.mask, { height: lineHeight + 8 }]}>
-        <Animated.View style={line4Entrance}>
-          <GoldSweepText
-            text={t('home.hero.line4')}
-            style={goldTextStyle}
-            delay={STAGGER_DELAYS.line4}
-            lineHeight={lineHeight}
-          />
-        </Animated.View>
+      <View>
+        <View style={[styles.mask, { height: lineHeight + 8 }]}>
+          <Animated.View style={line4Entrance}>
+            <GoldSweepText
+              text={t('home.hero.line4')}
+              style={goldTextStyle}
+              delay={STAGGER_DELAYS.line4}
+              lineHeight={lineHeight}
+            />
+          </Animated.View>
+        </View>
+        <Animated.View style={[styles.underline, line4Underline]} />
       </View>
     </View>
   );
@@ -244,6 +289,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     paddingTop: 4,
     paddingBottom: 4,
+  },
+  underline: {
+    height: 1,
+    backgroundColor: UNDERLINE_COLOR,
+    transformOrigin: 'left',
   },
 });
 
