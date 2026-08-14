@@ -10,14 +10,14 @@ import {
 import { useLanguage } from '@/contexts/LanguageContext';
 
 const ENTRANCE_EASING = Easing.bezier(0.19, 1, 0.22, 1);
-const ENTRANCE_DURATION = 700;
+const ENTRANCE_DURATION = 1100;
 const ENTRANCE_TRANSLATE_Y_RATIO = 1.1; // le texte part entierement sous le masque
 
 const STAGGER_DELAYS = {
   line1: 0,
-  line2: 150,
-  line3: 350,
-  line4: 500,
+  line2: 250,
+  line3: 500,
+  line4: 750,
 } as const;
 
 const SWEEP_GRADIENT_COLORS = ['#C9A059', '#F6E7B8', '#FFF7DF', '#F6E7B8', '#C9A059'] as const;
@@ -205,23 +205,23 @@ export default function AnimatedLuxuryTitle() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
+      <View style={[styles.mask, { height: lineHeight + 8, marginBottom: gap }]}>
         <Animated.Text style={[plainTextStyle, line1Entrance]}>{t('home.hero.line1')}</Animated.Text>
       </View>
-      <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
+      <View style={[styles.mask, { height: lineHeight + 8, marginBottom: gap }]}>
         <Animated.View style={line2Entrance}>
           <GoldSweepText
             text={t('home.hero.line2')}
             style={goldTextStyle}
-            delay={STAGGER_DELAYS.line2}
+            delay={STAGGER_DELAYS.line4}
             lineHeight={lineHeight}
           />
         </Animated.View>
       </View>
-      <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
+      <View style={[styles.mask, { height: lineHeight + 8, marginBottom: gap }]}>
         <Animated.Text style={[plainTextStyle, line3Entrance]}>{t('home.hero.line3')}</Animated.Text>
       </View>
-      <View style={[styles.mask, { height: lineHeight }]}>
+      <View style={[styles.mask, { height: lineHeight + 8 }]}>
         <Animated.View style={line4Entrance}>
           <GoldSweepText
             text={t('home.hero.line4')}
@@ -241,6 +241,9 @@ const styles = StyleSheet.create({
   },
   mask: {
     overflow: 'hidden',
+    backgroundColor: 'transparent',
+    paddingTop: 4,
+    paddingBottom: 4,
   },
 });
 
