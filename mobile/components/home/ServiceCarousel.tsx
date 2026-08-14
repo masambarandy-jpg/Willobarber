@@ -60,7 +60,7 @@ export const SERVICES = [
     id: 'camouflage', apiId: 5, cat: 'COLORATION', name: 'Camouflage gris',
     short: 'Pigmentation sur-mesure, sans ammoniaque.',
     dur: '40 min', price: 35, popular: false,
-    photo: 'https://images.unsplash.com/photo-1518710843675-2540dd79065c?w=800&q=80',
+    photo: 'https://images.unsplash.com/photo-1783908700793-ea8b35d6d53a?w=800&q=80',
   },
   {
     id: 'soin', apiId: 6, cat: 'SOIN', name: 'Soin du visage',
@@ -228,24 +228,28 @@ export function ServiceCarousel() {
             </View>
 
             {/* ── Text zone ── */}
-            <View style={styles.cardContent}>
-              <Text style={styles.serviceName} numberOfLines={2}>{svcName(svc.id)}</Text>
-              <Text style={styles.serviceDesc} numberOfLines={2}>{svcShort(svc.id)}</Text>
-              <View style={styles.sep} />
-              <View style={styles.metaRow}>
-                <View style={styles.durationRow}>
-                  <Feather name="clock" size={13} color="#6B6560" />
-                  <Text style={styles.duration}>{svc.dur}</Text>
-                </View>
-                <Text style={styles.price}>{svc.price} €</Text>
+            <View style={tabletStyles.cardContent}>
+              <View>
+                <Text style={styles.serviceName} numberOfLines={2}>{svcName(svc.id)}</Text>
+                <Text style={styles.serviceDesc} numberOfLines={2}>{svcShort(svc.id)}</Text>
               </View>
-              <TouchableOpacity
-                style={styles.selectBtn}
-                activeOpacity={0.85}
-                onPress={() => router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } })}
-              >
-                <Text style={styles.selectBtnText}>{t('common.select')}  →</Text>
-              </TouchableOpacity>
+              <View>
+                <View style={styles.sep} />
+                <View style={styles.metaRow}>
+                  <View style={styles.durationRow}>
+                    <Feather name="clock" size={13} color="#6B6560" />
+                    <Text style={styles.duration}>{svc.dur}</Text>
+                  </View>
+                  <Text style={styles.price}>{svc.price} €</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.selectBtn}
+                  activeOpacity={0.85}
+                  onPress={() => router.push({ pathname: '/(tabs)/book', params: { serviceId: svc.id } })}
+                >
+                  <Text style={styles.selectBtnText}>{t('common.select')}  →</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
           </View>
@@ -508,6 +512,7 @@ const tabletStyles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'stretch',
     justifyContent: 'space-between',
     paddingHorizontal: PADDING_H,
   },
@@ -522,5 +527,16 @@ const tabletStyles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 6,
+  },
+  // Same visual look as styles.cardContent, but flexed so the bottom
+  // block (separator/meta/button) stays pinned to the card's bottom edge
+  // even when sibling cards in the same row are taller (stretched).
+  cardContent: {
+    flex: 1,
+    backgroundColor: '#1A1814',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 16,
+    justifyContent: 'space-between',
   },
 });
