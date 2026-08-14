@@ -12,9 +12,6 @@ import type { Reservation } from '@/types';
 
 export type ClientRoute = 'home' | 'catalogue' | 'book' | 'space' | 'profile';
 
-const JOURS_ABBR_FR = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
-const MOIS_ABBR_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
-
 function parseApiDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
@@ -22,10 +19,10 @@ function parseApiDate(dateStr: string): Date {
 
 // Le backend n'a pas de champ d'affectation barbier sur Reservation — "Willo" en
 // fallback ici reprend la même convention que le planning coiffeur (cf. planning.tsx).
-function formatNextRdvLabel(reservation: Reservation & { time: string }): string {
+function formatNextRdvLabel(reservation: Reservation & { time: string }, t: (key: TranslationKey) => string): string {
   const d = parseApiDate(reservation.date);
-  const jourAbbr = JOURS_ABBR_FR[d.getDay()];
-  const moisAbbr = MOIS_ABBR_FR[d.getMonth()];
+  const jourAbbr = t(`reservations.dayAbbr.${d.getDay()}` as TranslationKey);
+  const moisAbbr = t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey);
   const heure = reservation.time.slice(0, 5);
   return `${jourAbbr} ${d.getDate()} ${moisAbbr} · ${heure} · Willo`;
 }
@@ -188,14 +185,16 @@ export default function ClientIPadLayout({ active, children }: Props) {
             style={styles.promoBlock}
           >
             <Text style={styles.promoKicker}>{t('clientSidebar.nextRdvKicker')}</Text>
-            <Text style={styles.promoText}>{formatNextRdvLabel(nextReservation)}</Text>
+            <Text style={styles.promoText}>{formatNextRdvLabel(nextReservation, t)}</Text>
             <TouchableOpacity
               style={styles.promoBtn}
               onPress={() => {
                 const dateFormatted = nextReservation.date
                   ? (() => {
                       const d = parseApiDate(nextReservation.date);
-                      return `${JOURS_ABBR_FR[d.getDay()]} ${d.getDate()} ${MOIS_ABBR_FR[d.getMonth()]}`;
+                      const jourAbbr = t(`reservations.dayAbbr.${d.getDay()}` as TranslationKey);
+                      const moisAbbr = t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey);
+                      return `${jourAbbr} ${d.getDate()} ${moisAbbr}`;
                     })()
                   : '';
                 const timeFormatted = nextReservation.time?.substring(0, 5) ?? '';
@@ -205,7 +204,7 @@ export default function ClientIPadLayout({ active, children }: Props) {
                 if (Platform.OS === 'web') {
                   window.alert(message);
                 } else {
-                  Alert.alert('Votre prochain RDV', message, [{ text: 'Fermer', style: 'cancel' }]);
+                  Alert.alert(t('clientSidebar.nextRdvKicker'), message, [{ text: t('common.close'), style: 'cancel' }]);
                 }
               }}
               activeOpacity={0.85}
