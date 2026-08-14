@@ -56,10 +56,10 @@ type Produit = {
 };
 
 const PRODUITS_META = [
-  { id: 'cire', popular: true, photo: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80', contenance: '75 ml', prix: 18 },
-  { id: 'huile', popular: false, photo: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80', contenance: '30 ml', prix: 24 },
+  { id: 'cire', popular: true, photo: 'https://images.unsplash.com/photo-1775127741095-86ee33b6b385?w=600&q=80', contenance: '75 ml', prix: 18 },
+  { id: 'huile', popular: false, photo: 'https://images.unsplash.com/photo-1777740732168-8ca9b34c975c?w=600&q=80', contenance: '30 ml', prix: 24 },
   { id: 'serum', popular: true, photo: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80', contenance: '30 ml', prix: 32 },
-  { id: 'pommade', popular: false, photo: 'https://images.unsplash.com/photo-1594035910387-fea081e66b5d?w=600&q=80', contenance: '100 ml', prix: 22 },
+  { id: 'pommade', popular: false, photo: 'https://images.unsplash.com/photo-1775126250972-9321ca2d110b?w=600&q=80', contenance: '100 ml', prix: 22 },
 ];
 
 const PRODUITS_CARD_W = 300;
