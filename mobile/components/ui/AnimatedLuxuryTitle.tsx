@@ -184,7 +184,7 @@ export default function AnimatedLuxuryTitle() {
   const line4Entrance = useLineEntrance(STAGGER_DELAYS.line4, lineHeight);
 
   if (!fontsLoaded) {
-    return <View style={[styles.container, { height: lineHeight * 4 + gap * 3 }]} />;
+    return <View style={[styles.container, { height: (lineHeight + 8) * 4 + gap * 3 }]} />;
   }
 
   const plainTextStyle: TextStyle = {
