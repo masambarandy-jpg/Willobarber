@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
-import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing,
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -9,25 +10,28 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import {
+  useFonts,
+  CormorantGaramond_600SemiBold,
+  CormorantGaramond_600SemiBold_Italic,
+} from '@expo-google-fonts/cormorant-garamond';
+import { useLanguage } from '@/contexts/LanguageContext';
 
-const ENTRANCE_EASING = Easing.bezier(0.16, 1, 0.3, 1);
+const ENTRANCE_EASING = Easing.bezier(0.19, 1, 0.22, 1);
 const ENTRANCE_DURATION = 700;
+const ENTRANCE_TRANSLATE_Y = 40;
 
 const STAGGER_DELAYS = {
-  line1Plain: 0,
-  line1Gold: 150,
-  line2Plain: 350,
-  line2Gold: 500,
+  line1: 0,
+  line2: 150,
+  line3: 350,
+  line4: 500,
 } as const;
 
-const GLOW_MIN_OPACITY = 0.75;
-const GLOW_DURATION = 1800; // demi-cycle -> cycle complet ~3.6s
-
-const SERIF_FONT = Platform.select({
-  ios: 'Georgia',
-  android: 'serif',
-  default: 'Georgia, "Times New Roman", serif',
-});
+const GOLD_BASE = '#C9A84C';
+const GOLD_PEAK = '#F6E7B8';
+const SHIMMER_SWEEP_DURATION = 350;
+const SHIMMER_LOOP_INTERVAL = 8000; // cycle complet (sweep aller-retour + pause)
 
 function useResponsiveSizes() {
   const { width } = useWindowDimensions();
@@ -46,8 +50,8 @@ function useResponsiveSizes() {
   return { fontSize: 25, lineHeight: 33, letterSpacing: 0.25, gap: 3 };
 }
 
-function useSegmentAnimation(delay: number, withGlow: boolean) {
-  const translateY = useSharedValue(18);
+function useLineEntrance(delay: number) {
+  const translateY = useSharedValue(ENTRANCE_TRANSLATE_Y);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
@@ -58,25 +62,7 @@ function useSegmentAnimation(delay: number, withGlow: boolean) {
 
     opacity.value = withDelay(
       delay,
-      withSequence(
-        withTiming(1, { duration: ENTRANCE_DURATION, easing: ENTRANCE_EASING }),
-        withGlow
-          ? withRepeat(
-              withSequence(
-                withTiming(GLOW_MIN_OPACITY, {
-                  duration: GLOW_DURATION,
-                  easing: Easing.inOut(Easing.sin),
-                }),
-                withTiming(1, {
-                  duration: GLOW_DURATION,
-                  easing: Easing.inOut(Easing.sin),
-                })
-              ),
-              -1,
-              false
-            )
-          : withTiming(1, { duration: 0 })
-      )
+      withTiming(1, { duration: ENTRANCE_DURATION, easing: ENTRANCE_EASING })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -87,44 +73,79 @@ function useSegmentAnimation(delay: number, withGlow: boolean) {
   }));
 }
 
+function useGoldShimmer(delay: number) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withDelay(
+      delay + ENTRANCE_DURATION,
+      withRepeat(
+        withSequence(
+          withTiming(1, { duration: SHIMMER_SWEEP_DURATION, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0, { duration: SHIMMER_SWEEP_DURATION, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0, { duration: SHIMMER_LOOP_INTERVAL - SHIMMER_SWEEP_DURATION * 2 })
+        ),
+        -1,
+        false
+      )
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return useAnimatedStyle(() => ({
+    color: interpolateColor(progress.value, [0, 1], [GOLD_BASE, GOLD_PEAK]),
+  }));
+}
+
 export default function AnimatedLuxuryTitle() {
+  const { t } = useLanguage();
   const { fontSize, lineHeight, letterSpacing, gap } = useResponsiveSizes();
 
-  const line1PlainStyle = useSegmentAnimation(STAGGER_DELAYS.line1Plain, false);
-  const line1GoldStyle = useSegmentAnimation(STAGGER_DELAYS.line1Gold, true);
-  const line2PlainStyle = useSegmentAnimation(STAGGER_DELAYS.line2Plain, false);
-  const line2GoldStyle = useSegmentAnimation(STAGGER_DELAYS.line2Gold, true);
+  const [fontsLoaded] = useFonts({
+    CormorantGaramond_600SemiBold,
+    CormorantGaramond_600SemiBold_Italic,
+  });
+
+  const line1Entrance = useLineEntrance(STAGGER_DELAYS.line1);
+  const line2Entrance = useLineEntrance(STAGGER_DELAYS.line2);
+  const line3Entrance = useLineEntrance(STAGGER_DELAYS.line3);
+  const line4Entrance = useLineEntrance(STAGGER_DELAYS.line4);
+
+  const line2Shimmer = useGoldShimmer(STAGGER_DELAYS.line2);
+  const line4Shimmer = useGoldShimmer(STAGGER_DELAYS.line4);
+
+  if (!fontsLoaded) {
+    return <View style={[styles.container, { height: lineHeight * 4 + gap * 3 }]} />;
+  }
 
   const plainTextStyle = {
     fontSize,
     lineHeight,
     letterSpacing,
     color: '#F5F5F0',
-    fontFamily: SERIF_FONT,
+    fontFamily: 'CormorantGaramond_600SemiBold',
   };
 
   const goldTextStyle = {
     fontSize,
     lineHeight,
     letterSpacing,
-    color: '#D4AF37',
-    fontFamily: SERIF_FONT,
-    fontStyle: 'italic' as const,
+    fontFamily: 'CormorantGaramond_600SemiBold_Italic',
   };
 
   return (
     <View style={styles.container}>
-      <View style={[styles.row, { marginBottom: gap }]}>
-        <Animated.Text style={[plainTextStyle, line1PlainStyle]}>
-          L'art de la{' '}
-        </Animated.Text>
-        <Animated.Text style={[goldTextStyle, line1GoldStyle]}>coupe,</Animated.Text>
+      <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
+        <Animated.Text style={[plainTextStyle, line1Entrance]}>{t('home.hero.line1')}</Animated.Text>
       </View>
-      <View style={styles.row}>
-        <Animated.Text style={[plainTextStyle, line2PlainStyle]}>
-          l'esprit du{' '}
-        </Animated.Text>
-        <Animated.Text style={[goldTextStyle, line2GoldStyle]}>détail.</Animated.Text>
+      <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
+        <Animated.Text style={[goldTextStyle, line2Entrance, line2Shimmer]}>{t('home.hero.line2')}</Animated.Text>
+      </View>
+      <View style={[styles.mask, { height: lineHeight, marginBottom: gap }]}>
+        <Animated.Text style={[plainTextStyle, line3Entrance]}>{t('home.hero.line3')}</Animated.Text>
+      </View>
+      <View style={[styles.mask, { height: lineHeight }]}>
+        <Animated.Text style={[goldTextStyle, line4Entrance, line4Shimmer]}>{t('home.hero.line4')}</Animated.Text>
       </View>
     </View>
   );
@@ -134,9 +155,8 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'flex-start',
   },
-  row: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  mask: {
+    overflow: 'hidden',
   },
 });
 
