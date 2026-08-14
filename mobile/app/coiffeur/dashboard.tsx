@@ -1073,12 +1073,6 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
     marginBottom: 12,
-    borderWidth: 0,
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
   },
   statCardTablet: {
     width: '23%',

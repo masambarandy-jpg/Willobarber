@@ -164,7 +164,7 @@ function trierFondateurEnPremier(members: TeamMember[]): TeamMember[] {
 function slotColor(state: SlotState) {
   if (state === 'reserve') return { backgroundColor: CC.gold, borderWidth: 0 };
   if (state === 'ferme') return { backgroundColor: '#e5ddd0', borderWidth: 0 };
-  return { backgroundColor: CC.white, borderWidth: 1, borderColor: CC.inputBorder };
+  return { backgroundColor: 'rgba(201,168,76,0.1)', borderWidth: 1, borderColor: CC.inputBorder };
 }
 
 export default function CoiffeurEquipeScreen() {
@@ -504,7 +504,7 @@ export default function CoiffeurEquipeScreen() {
 
         <View style={styles.legendCard}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendSwatch, { backgroundColor: CC.white, borderWidth: 1, borderColor: CC.inputBorder }]} />
+            <View style={[styles.legendSwatch, { backgroundColor: 'rgba(201,168,76,0.1)', borderWidth: 1, borderColor: CC.inputBorder }]} />
             <Text style={styles.legendText}>Disponible</Text>
           </View>
           <View style={styles.legendItem}>
