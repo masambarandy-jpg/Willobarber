@@ -22,7 +22,8 @@ const STAGGER_DELAYS = {
 
 const SWEEP_GRADIENT_COLORS = ['#C9A059', '#F6E7B8', '#FFF7DF', '#F6E7B8', '#C9A059'] as const;
 const SWEEP_DURATION = 1400;
-const SWEEP_LOOP_INTERVAL = 8000; // cycle complet (balayage + pause)
+const SWEEP_FADE_OUT_DURATION = 300;
+const SWEEP_LOOP_INTERVAL = 8000; // cycle complet (balayage + fondu + pause)
 const SWEEP_TRANSLATE_RATIO = 1.5; // +150% -> -150%
 
 function useResponsiveSizes() {
@@ -89,6 +90,7 @@ function GoldSweepText({
 }) {
   const [width, setWidth] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!width) {
@@ -105,12 +107,23 @@ function GoldSweepText({
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
+          Animated.timing(opacity, {
+            toValue: 0,
+            duration: SWEEP_FADE_OUT_DURATION,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
           Animated.timing(translateX, {
             toValue: 0,
             duration: 0,
             useNativeDriver: true,
           }),
-          Animated.delay(SWEEP_LOOP_INTERVAL - SWEEP_DURATION),
+          Animated.delay(SWEEP_LOOP_INTERVAL - SWEEP_DURATION - SWEEP_FADE_OUT_DURATION),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 0,
+            useNativeDriver: true,
+          }),
         ])
       ),
     ]);
@@ -142,7 +155,7 @@ function GoldSweepText({
           style={[StyleSheet.absoluteFillObject, { width, height: lineHeight }]}
           maskElement={<Text style={style}>{text}</Text>}
         >
-          <Animated.View style={{ flex: 1, transform: [{ translateX: translateXValue }] }}>
+          <Animated.View style={{ flex: 1, opacity, transform: [{ translateX: translateXValue }] }}>
             <LinearGradient
               colors={SWEEP_GRADIENT_COLORS}
               start={{ x: 0, y: 0 }}
