@@ -42,7 +42,7 @@ export const SERVICES = [
     id: 'barbe', apiId: 2, cat: 'BARBE', name: "Taille & rasage à l'ancienne",
     short: 'Serviette chaude, huile pré-rasage, rasoir droit.',
     dur: '30 min', price: 28, popular: false,
-    photo: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800&q=80',
+    photo: 'https://images.unsplash.com/photo-1761148438883-e34e0289a214?w=800&q=80',
   },
   {
     id: 'rituel', apiId: 3, cat: 'PACKAGE', name: 'Le Rituel',
