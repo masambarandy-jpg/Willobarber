@@ -22,10 +22,10 @@ const STAGGER_DELAYS = {
 
 const UNDERLINE_REVEAL_DURATION = 350;
 const UNDERLINE_REVEAL_EASING = Easing.bezier(0.16, 1, 0.3, 1);
-const UNDERLINE_PEAK_OPACITY = 0.4;
+const UNDERLINE_PEAK_OPACITY = 0.6;
 const UNDERLINE_FADE_DURATION = 250;
 const UNDERLINE_FADE_EASING = Easing.in(Easing.ease);
-const UNDERLINE_COLOR = '#C9A84C';
+const UNDERLINE_GRADIENT_COLORS = ['transparent', '#C9A84C', '#F6E7B8', '#C9A84C', 'transparent'] as const;
 
 const SWEEP_GRADIENT_COLORS = ['#C9A059', '#F6E7B8', '#FFF7DF', '#F6E7B8', '#C9A059'] as const;
 const SWEEP_DURATION = 1400;
@@ -254,7 +254,14 @@ export default function AnimatedLuxuryTitle() {
         <View style={[styles.mask, { height: lineHeight + 8 }]}>
           <Animated.Text style={[plainTextStyle, line1Entrance]}>{t('home.hero.line1')}</Animated.Text>
         </View>
-        <Animated.View style={[styles.underline, line1Underline]} />
+        <Animated.View style={[styles.underline, line1Underline]}>
+          <LinearGradient
+            colors={UNDERLINE_GRADIENT_COLORS}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </Animated.View>
       </View>
       <View style={{ marginBottom: gap }}>
         <View style={[styles.mask, { height: lineHeight + 8 }]}>
@@ -267,13 +274,27 @@ export default function AnimatedLuxuryTitle() {
             />
           </Animated.View>
         </View>
-        <Animated.View style={[styles.underline, line2Underline]} />
+        <Animated.View style={[styles.underline, line2Underline]}>
+          <LinearGradient
+            colors={UNDERLINE_GRADIENT_COLORS}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </Animated.View>
       </View>
       <View style={{ marginBottom: gap }}>
         <View style={[styles.mask, { height: lineHeight + 8 }]}>
           <Animated.Text style={[plainTextStyle, line3Entrance]}>{t('home.hero.line3')}</Animated.Text>
         </View>
-        <Animated.View style={[styles.underline, line3Underline]} />
+        <Animated.View style={[styles.underline, line3Underline]}>
+          <LinearGradient
+            colors={UNDERLINE_GRADIENT_COLORS}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </Animated.View>
       </View>
       <View>
         <View style={[styles.mask, { height: lineHeight + 8 }]}>
@@ -286,7 +307,14 @@ export default function AnimatedLuxuryTitle() {
             />
           </Animated.View>
         </View>
-        <Animated.View style={[styles.underline, line4Underline]} />
+        <Animated.View style={[styles.underline, line4Underline]}>
+          <LinearGradient
+            colors={UNDERLINE_GRADIENT_COLORS}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </Animated.View>
       </View>
     </View>
   );
@@ -303,8 +331,8 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   underline: {
-    height: 1,
-    backgroundColor: UNDERLINE_COLOR,
+    height: 3,
+    overflow: 'hidden',
     transformOrigin: 'left',
   },
 });
