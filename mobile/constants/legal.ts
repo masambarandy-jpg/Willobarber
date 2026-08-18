@@ -33,9 +33,9 @@ Dans le cadre de l'utilisation de l'application, WilloBarber collecte : le nom e
 3. Finalités et bases juridiques
 
 Ces données sont traitées pour les finalités suivantes :
-— l'exécution du contrat de prestation de services (gestion des réservations, du compte client et du programme de fidélité), sur la base de l'article 6.1.b du RGPD ;
-— l'envoi de recommandations personnalisées et de communications facultatives, sur la base du consentement de l'utilisateur (article 6.1.a du RGPD), révocable à tout moment ;
-— l'amélioration du service et la prévention des abus (annulations tardives répétées), sur la base de l'intérêt légitime de WilloBarber (article 6.1.f du RGPD).
+l'exécution du contrat de prestation de services (gestion des réservations, du compte client et du programme de fidélité), sur la base de l'article 6.1.b du RGPD ;
+l'envoi de recommandations personnalisées et de communications facultatives, sur la base du consentement de l'utilisateur (article 6.1.a du RGPD), révocable à tout moment ;
+l'amélioration du service et la prévention des abus (annulations tardives répétées), sur la base de l'intérêt légitime de WilloBarber (article 6.1.f du RGPD).
 
 4. Durée de conservation
 
