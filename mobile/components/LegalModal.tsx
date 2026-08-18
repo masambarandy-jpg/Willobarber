@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
   },
   legalTitle: { fontFamily: Fonts.semiBold, fontSize: 22, fontWeight: '600', color: '#FFFFFF', flex: 1, paddingRight: 12 },
   legalClose: { fontSize: 18, color: 'rgba(255,255,255,0.45)', padding: 4 },
-  legalBodyText: { fontSize: 14, lineHeight: 22, color: '#FFFFFF', paddingBottom: 8 },
+  legalBodyText: { fontSize: 14, lineHeight: 22, color: '#FFFFFF', paddingBottom: 8, paddingRight: 16 },
   legalCloseBtn: {
     backgroundColor: '#C9A84C',
     borderRadius: 100,
