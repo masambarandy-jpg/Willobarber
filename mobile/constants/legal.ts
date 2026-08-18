@@ -51,4 +51,4 @@ Pour toute question relative au traitement de vos données ou pour exercer vos d
 
 7. Droit de réclamation
 
-Si vous estimez que le traitement de vos données ne respecte pas la réglementation applicable, vous disposez du droit d'introduire une réclamation auprès de l'Autorité de Protection des Données (APD) belge, Rue de la Presse 35, 1000 Bruxelles — www.autoriteprotectiondonnees.be`;
+Si vous estimez que le traitement de vos données ne respecte pas la réglementation applicable, vous disposez du droit d'introduire une réclamation auprès de l'Autorité de Protection des Données (APD) belge, Rue de la Presse 35, 1000 Bruxelles www.autoriteprotectiondonnees.be`;
