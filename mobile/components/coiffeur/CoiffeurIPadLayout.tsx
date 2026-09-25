@@ -8,6 +8,7 @@ import { useSidebarWidth } from './useIsTablet';
 import { CoiffeurRoute } from './CoiffeurDrawer';
 import SupportModal from './SupportModal';
 import { useCoiffeurProfile } from '@/contexts/CoiffeurProfileContext';
+import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
 import {
   GridIcon,
   CalendarIcon,
@@ -25,20 +26,21 @@ type Props = {
   children: React.ReactNode;
 };
 
-const NAV_ITEMS: { key: CoiffeurRoute; label: string; icon: (color: string) => React.ReactNode; badge?: number }[] = [
+const NAV_ITEMS: { key: CoiffeurRoute; label: string; icon: (color: string) => React.ReactNode }[] = [
   { key: 'dashboard', label: 'Tableau de bord', icon: (c) => <GridIcon color={c ?? '#000000'} /> },
   { key: 'planning', label: 'Planning', icon: (c) => <CalendarIcon color={c ?? '#000000'} /> },
   { key: 'prestations', label: 'Prestations', icon: (c) => <ScissorsIcon color={c ?? '#000000'} /> },
   { key: 'clients', label: 'Clients', icon: (c) => <UsersIcon color={c ?? '#000000'} /> },
   { key: 'equipe', label: 'Équipe', icon: (c) => <PersonIcon color={c} /> },
   { key: 'avis', label: 'Avis clients', icon: (c) => <StarIcon color={c} filled={false} /> },
-  { key: 'notifications', label: 'Notifications', icon: (c) => <BellIcon color={c} />, badge: 5 },
+  { key: 'notifications', label: 'Notifications', icon: (c) => <BellIcon color={c} /> },
   { key: 'parametres', label: 'Paramètres', icon: (c) => <GearIcon color={c} /> },
 ];
 
 export default function CoiffeurIPadLayout({ active, children }: Props) {
   const sidebarWidth = useSidebarWidth();
   const { profile } = useCoiffeurProfile();
+  const { unreadCount } = useCoiffeurNotifications();
   const avatarLetter = (profile.firstName ?? 'W').charAt(0).toUpperCase();
   const [supportVisible, setSupportVisible] = useState(false);
 
@@ -54,7 +56,7 @@ export default function CoiffeurIPadLayout({ active, children }: Props) {
           </View>
 
           <View style={styles.profile}>
-            <Avatar letter={avatarLetter} size={38} />
+            <Avatar letter={avatarLetter} size={38} photoUri={profile.photoUrl || undefined} />
             <View>
               <Text style={styles.profileName}>{profile.firstName} {(profile.lastName ?? '').charAt(0)}.</Text>
               <Text style={styles.profileRole}>{profile.role}</Text>
@@ -64,6 +66,7 @@ export default function CoiffeurIPadLayout({ active, children }: Props) {
           <View style={styles.nav}>
             {NAV_ITEMS.map((item) => {
               const isActive = item.key === active;
+              const badge = item.key === 'notifications' ? unreadCount : 0;
               return (
                 <TouchableOpacity
                   key={item.key}
@@ -72,9 +75,9 @@ export default function CoiffeurIPadLayout({ active, children }: Props) {
                 >
                   <View style={styles.navIcon}>{item.icon(isActive ? CC.black : 'rgba(255,255,255,0.65)')}</View>
                   <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>{item.label}</Text>
-                  {item.badge ? (
+                  {badge > 0 ? (
                     <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{item.badge}</Text>
+                      <Text style={styles.badgeText}>{badge}</Text>
                     </View>
                   ) : null}
                 </TouchableOpacity>

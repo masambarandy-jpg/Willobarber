@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, findNodeHandle, ScrollView, View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, ScrollView, View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
@@ -11,6 +11,10 @@ import { API_BASE_URL } from '@/constants';
 import type { Review } from '@/types';
 
 const TABS = ['Tous', '5★', '4★', '3★ et -'] as const;
+
+// Hauteur moyenne approximative d'une carte d'avis — utilisée pour estimer la
+// position de scroll (cf. useEffect de pré-sélection ci-dessous).
+const ESTIMATED_CARD_HEIGHT = 190;
 
 function avatarLetterFor(name: string): string {
   return (name.trim().charAt(0) || '?').toUpperCase();
@@ -36,7 +40,7 @@ export default function CoiffeurAvisScreen() {
   const [replyError, setReplyError] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
-  const cardRefs = useRef<Record<number, View | null>>({});
+  const textInputRef = useRef<TextInput>(null);
   const scrolledToReviewRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -88,26 +92,24 @@ export default function CoiffeurAvisScreen() {
   // Pré-sélection de l'avis quand on arrive depuis le bouton "Répondre"
   // d'une notification (route /coiffeur/avis?reviewId=X) : ouvre directement
   // le champ de réponse et scrolle jusqu'à l'avis concerné.
+  //
+  // measureLayout() sur la carte plantait sur natif (le node pouvait ne pas
+  // être encore monté côté UIManager) — on scrolle donc vers une position
+  // estimée à partir de l'index de l'avis, ce qui suffit à l'amener à l'écran.
   useEffect(() => {
     if (!reviewId || scrolledToReviewRef.current === reviewId) return;
     const id = Number(reviewId);
-    if (!reviews.some((r) => r.id === id)) return;
+    const index = reviews.findIndex((r) => r.id === id);
+    if (index === -1) return;
 
     scrolledToReviewRef.current = reviewId;
     ouvrirReponse(id);
 
-    // Laisse le temps au champ de réponse (et donc à la carte) de se relayout
-    // avant de mesurer sa position dans le ScrollView.
+    const estimatedY = index * ESTIMATED_CARD_HEIGHT;
     const timer = setTimeout(() => {
-      const card = cardRefs.current[id];
-      const scrollNode = scrollRef.current ? findNodeHandle(scrollRef.current) : null;
-      if (!card || !scrollNode) return;
-      card.measureLayout(
-        scrollNode,
-        (_x, y) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true }),
-        () => {}
-      );
-    }, 250);
+      scrollRef.current?.scrollTo({ y: Math.max(0, estimatedY), animated: true });
+      textInputRef.current?.focus();
+    }, 300);
     return () => clearTimeout(timer);
   }, [reviewId, reviews]);
 
@@ -229,7 +231,7 @@ export default function CoiffeurAvisScreen() {
             <Text style={styles.emptyText}>Aucun avis pour le moment.</Text>
           ) : (
             filtered.map((r) => (
-              <View key={r.id} ref={(el) => { cardRefs.current[r.id] = el; }} style={styles.reviewCard}>
+              <View key={r.id} style={styles.reviewCard}>
                 <View style={styles.reviewTopRow}>
                   <Avatar letter={avatarLetterFor(r.client_name)} size={38} />
                   <View style={styles.reviewIdentity}>
@@ -256,6 +258,7 @@ export default function CoiffeurAvisScreen() {
                 ) : activeReplyId === r.id ? (
                   <View style={styles.replyForm}>
                     <TextInput
+                      ref={textInputRef}
                       style={styles.replyInput}
                       value={replyText}
                       onChangeText={setReplyText}

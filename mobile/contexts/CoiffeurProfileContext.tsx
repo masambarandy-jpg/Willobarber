@@ -7,6 +7,7 @@ export type CoiffeurProfile = {
   email: string;
   phone: string;
   role: string;
+  photoUrl: string;
 };
 
 type CoiffeurProfileContextType = {
@@ -20,6 +21,7 @@ const DEFAULT_PROFILE: CoiffeurProfile = {
   email: 'willo@willobarber.fr',
   phone: '06 45 78 29 70',
   role: 'Gérant',
+  photoUrl: '',
 };
 
 const CoiffeurProfileContext = createContext<CoiffeurProfileContextType>({
@@ -51,6 +53,7 @@ export function CoiffeurProfileProvider({ children }: { children: React.ReactNod
           firstName: data.first_name,
           lastName: data.last_name,
           role: data.role === 'barber' ? 'Gérant' : data.role,
+          photoUrl: data.profile_picture ?? '',
         });
       } catch (e) {
         // Garder les valeurs par défaut en cas d'erreur
