@@ -392,7 +392,7 @@ const fr = {
   // ── Auth modal (login) ───────────────────────────────────────────────────
   'authModal.kicker': '— ESPACE CLIENT',
   'authModal.title': 'Connexion',
-  'authModal.subtitleDefault': 'Accédez à vos rendez-vous, votre historique et vos points fidélité.',
+  'authModal.subtitleDefault': 'Connectez-vous pour accéder à votre profil.',
   'authModal.gmail': 'Gmail',
   'authModal.outlook': 'Outlook',
   'authModal.other': 'Autre',
@@ -981,7 +981,7 @@ const nl: Record<TranslationKey, string> = {
   // ── Auth modal (login) ───────────────────────────────────────────────────
   'authModal.kicker': '— KLANTENZONE',
   'authModal.title': 'Inloggen',
-  'authModal.subtitleDefault': 'Krijg toegang tot uw afspraken, geschiedenis en spaarpunten.',
+  'authModal.subtitleDefault': 'Log in om toegang te krijgen tot uw profiel.',
   'authModal.gmail': 'Gmail',
   'authModal.outlook': 'Outlook',
   'authModal.other': 'Anders',
@@ -1568,7 +1568,7 @@ const en: Record<TranslationKey, string> = {
   // ── Auth modal (login) ───────────────────────────────────────────────────
   'authModal.kicker': '— CLIENT AREA',
   'authModal.title': 'Log in',
-  'authModal.subtitleDefault': 'Access your appointments, history and loyalty points.',
+  'authModal.subtitleDefault': 'Log in to access your profile.',
   'authModal.gmail': 'Gmail',
   'authModal.outlook': 'Outlook',
   'authModal.other': 'Other',
