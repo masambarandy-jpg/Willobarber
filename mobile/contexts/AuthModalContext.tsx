@@ -11,6 +11,7 @@ import {
   Animated,
   Easing,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   Text,
@@ -464,10 +465,23 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
       <View style={{ flex: 1 }}>
         {children}
 
-        {visible && (
+        <Modal
+          visible={visible}
+          transparent
+          animationType="none"
+          statusBarTranslucent
+          hardwareAccelerated
+          onRequestClose={handleClose}
+        >
+          <View style={{
+            flex: 1,
+            backgroundColor: '#000000',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 16,
+          }}>
           <KeyboardAvoidingView
-            style={styles.container}
-            pointerEvents="box-none"
+            style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           >
             {/* Fond flou */}
@@ -809,7 +823,8 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
               )}
             </Animated.View>
           </KeyboardAvoidingView>
-        )}
+          </View>
+        </Modal>
 
         <ForgotPasswordModal visible={forgotPasswordVisible} onClose={() => setForgotPasswordVisible(false)} />
         <LegalModal type={legalModal} onClose={() => setLegalModal(null)} />

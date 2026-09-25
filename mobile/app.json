@@ -4,13 +4,10 @@
     "slug": "willobarber",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/favicon.png",
     "scheme": "willobarber",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0D0D0D",
-    "splash": {
-      "backgroundColor": "#0D0D0D"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.willobarber.mobile",
@@ -24,8 +21,7 @@
       "adaptiveIcon": {
         "backgroundColor": "#0D0D0D"
       },
-      "package": "com.willobarber.mobile",
-      "usesCleartextTraffic": true
+      "package": "com.willobarber.mobile"
     },
     "web": {
       "bundler": "metro",
