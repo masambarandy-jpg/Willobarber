@@ -354,10 +354,11 @@ export function ServiceCarousel() {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { paddingLeft: PADDING_H },
+  wrapper: {},
   slidesRow: {
     flexDirection: 'row',
     gap: GAP,
+    paddingLeft: PADDING_H,
     paddingRight: PADDING_H,
   },
   slide: {

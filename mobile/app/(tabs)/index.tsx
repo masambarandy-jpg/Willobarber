@@ -379,7 +379,8 @@ export default function HomeScreen() {
               {t('home.teamTitle1')} <Text style={styles.sectionTitleGold}>{t('home.teamTitleGold')}</Text>
             </Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+          <View style={{ marginHorizontal: -22 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScrollEdge}>
             {BARBERS.map(b => (
               <View key={b.id} style={styles.barberCard}>
                 <Avatar initial={b.initial} color={b.color} ring={b.ringColor} size={72} />
@@ -396,6 +397,7 @@ export default function HomeScreen() {
               </View>
             ))}
           </ScrollView>
+          </View>
         </View>
 
         {/* ── Reviews section (cream) ── */}
@@ -406,7 +408,8 @@ export default function HomeScreen() {
               {t('home.reviewsRating')}
             </Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+          <View style={{ marginHorizontal: -22 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScrollEdge}>
             {REVIEWS.map((r, i) => (
               <View key={i} style={styles.reviewCard}>
                 <Stars n={r.stars} />
@@ -421,6 +424,7 @@ export default function HomeScreen() {
               </View>
             ))}
           </ScrollView>
+          </View>
         </View>
 
         {/* ── CTA final (dark) ── */}
@@ -613,6 +617,7 @@ const styles = StyleSheet.create({
 
   // Horizontal scroll
   hScroll: { paddingHorizontal: 0, gap: 14, paddingBottom: 4 },
+  hScrollEdge: { paddingHorizontal: 22, gap: 14, paddingBottom: 4 },
 
   // Barber cards
   barberCard: {
