@@ -63,7 +63,7 @@ export const SERVICES: StaticService[] = [
     dur: '45 min',
     price: 45,
     popular: true,
-    photo: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800&q=80',
+    photo: 'https://images.unsplash.com/photo-1517832606299-7ae9b720a186?w=800&q=80',
   },
   {
     id: 'barbe',

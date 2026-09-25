@@ -20,8 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useReservations } from '@/hooks/useReservations';
@@ -278,6 +277,7 @@ export default function ReservationsScreen() {
   // 0 par défaut (nouveau compte) — corrigé vers MOCK_LOYALTY.points une fois
   // l'historique chargé, uniquement s'il n'est pas vide (cf. effet plus bas).
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [barWidth, setBarWidth] = useState(0);
   const barAnim = useRef(new Animated.Value(0)).current;
   const { media: myMedia, isLoading: myMediaLoading } = useClientMedia(user?.id ?? null);
 
@@ -1054,15 +1054,17 @@ export default function ReservationsScreen() {
                 </View>
 
                 <Text style={styles.loyaltyProgressLabel}>{t('reservations.loyalty.progressLabel')}</Text>
-                <View style={styles.loyaltyBarBg}>
+                <View
+                  style={styles.loyaltyBarBg}
+                  onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+                >
                   <Animated.View
                     style={[
                       styles.loyaltyBarFill,
                       {
-                        width: barAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['0%', '100%'],
-                        }),
+                        transform: [
+                          { translateX: Animated.multiply(Animated.subtract(barAnim, 1), barWidth) },
+                        ],
                       },
                     ]}
                   />
@@ -1439,15 +1441,17 @@ export default function ReservationsScreen() {
           </View>
 
           <Text style={styles.loyaltyProgressLabel}>{t('reservations.loyalty.progressLabel')}</Text>
-          <View style={styles.loyaltyBarBg}>
+          <View
+            style={styles.loyaltyBarBg}
+            onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+          >
             <Animated.View
               style={[
                 styles.loyaltyBarFill,
                 {
-                  width: barAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['0%', '100%'],
-                  }),
+                  transform: [
+                    { translateX: Animated.multiply(Animated.subtract(barAnim, 1), barWidth) },
+                  ],
                 },
               ]}
             />
@@ -1920,8 +1924,8 @@ const styles = StyleSheet.create({
   loyaltyPtsSuffix: { fontSize: 13, color: '#fff', textAlign: 'right', marginTop: 2 },
 
   loyaltyProgressLabel: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 8 },
-  loyaltyBarBg:         { height: 8, borderRadius: 4, backgroundColor: '#2A2520', marginBottom: 8 },
-  loyaltyBarFill:       { height: 8, borderRadius: 4, backgroundColor: '#C9A84C' },
+  loyaltyBarBg:         { height: 8, borderRadius: 4, backgroundColor: '#2A2520', marginBottom: 8, overflow: 'hidden' },
+  loyaltyBarFill:       { height: 8, width: '100%', borderRadius: 4, backgroundColor: '#C9A84C' },
   loyaltyBarCaption:    { fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 16 },
 
   loyaltyTiersRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
