@@ -22,6 +22,7 @@ import { ServiceCarousel } from '@/components/home/ServiceCarousel';
 import { HamburgerMenu } from '@/components/HamburgerMenu';
 import { LanguagePicker } from '@/components/ui/LanguagePicker';
 import { useIsTablet } from '@/components/client/useIsTablet';
+import AnimatedLuxuryTitle from '@/components/ui/AnimatedLuxuryTitle';
 import { Fonts } from '@/constants';
 import { boutiqueApi } from '@/services/api';
 import type { TranslationKey } from '@/i18n/translations';
@@ -225,12 +226,7 @@ export default function HomeScreen() {
           <View style={[styles.heroInner, isTablet && styles.heroInnerTablet]}>
             <View style={isTablet ? styles.heroColLeft : undefined}>
               <Text style={styles.heroKicker}>{t('home.heroKicker')}</Text>
-              <Text style={[styles.heroTitle, isTablet && styles.heroTitleTablet]}>
-                {t('home.heroTitleLine1')}{'\n'}
-                <Text style={styles.heroTitleGold}>{t('home.heroTitleGold1')}{'\n'}</Text>
-                {t('home.heroTitleLine2')}{'\n'}
-                <Text style={styles.heroTitleGold}>{t('home.heroTitleGold2')}</Text>
-              </Text>
+              <AnimatedLuxuryTitle />
               <Text style={styles.heroSub}>
                 {t('home.heroSub')}
               </Text>

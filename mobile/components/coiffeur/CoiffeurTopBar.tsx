@@ -7,6 +7,7 @@ import SupportModal from './SupportModal';
 import { CC, SERIF } from './theme';
 import { useIsTablet } from './useIsTablet';
 import { useCoiffeurProfile } from '@/contexts/CoiffeurProfileContext';
+import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
 
 type Props = {
   onMenuPress: () => void;
@@ -15,6 +16,7 @@ type Props = {
 export default function CoiffeurTopBar({ onMenuPress }: Props) {
   const isTablet = useIsTablet();
   const { profile } = useCoiffeurProfile();
+  const { unreadCount } = useCoiffeurNotifications();
   const avatarLetter = (profile.firstName ?? '').charAt(0).toUpperCase() || 'W';
   const { width: windowWidth } = useWindowDimensions();
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
@@ -80,11 +82,11 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
           style={styles.bellWrap}
         >
           <BellIcon />
-          <View style={styles.dot} />
+          {unreadCount > 0 && <View style={styles.dot} />}
         </TouchableOpacity>
         <View ref={avatarRef} collapsable={false}>
           <TouchableOpacity onPress={toggleProfileMenu} hitSlop={6}>
-            <Avatar letter={avatarLetter} size={36} />
+            <Avatar letter={avatarLetter} size={36} photoUri={profile.photoUrl || undefined} />
           </TouchableOpacity>
         </View>
       </View>
@@ -98,7 +100,7 @@ export default function CoiffeurTopBar({ onMenuPress }: Props) {
         <Pressable style={styles.menuBackdrop} onPress={() => setProfileMenuVisible(false)} />
         <View style={[styles.profileMenu, { top: menuPos.top, right: menuPos.right }]}>
           <View style={styles.profileMenuHeader}>
-            <Avatar letter={avatarLetter} size={36} />
+            <Avatar letter={avatarLetter} size={36} photoUri={profile.photoUrl || undefined} />
             <View>
               <Text style={styles.profileMenuName}>{profile.firstName} {profile.lastName}</Text>
               <Text style={styles.profileMenuRole}>{profile.role}</Text>

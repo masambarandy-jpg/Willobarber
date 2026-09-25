@@ -132,6 +132,7 @@ const WILLO_FALLBACK_AVAILABILITY: Pick<LocalStats, 'am' | 'pm'> = {
 };
 
 function mapApiBarber(b: ApiBarber): TeamMember {
+  console.log('ÉQUIPE — nom barbier reçu de l\'API:', b.name);
   const stats = LOCAL_STATS_BY_NAME[b.name] ?? DEFAULT_STATS;
   const isWillo = (b.name ?? '').toLowerCase().includes('willo');
 

@@ -4,6 +4,8 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import Slider from '@react-native-community/slider';
+import { formatDistanceToNow } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { CameraIcon, LockIcon, LogOutIcon, TrashIcon, ArrowRightIcon } from '@/components/coiffeur/Icons';
@@ -376,40 +378,111 @@ function EtablissementTab() {
   );
 }
 
-type NotifSetting = { label: string; email: boolean; sms: boolean; push: boolean };
+type NotifTypeKey = 'new_rdv' | 'cancellation' | 'new_review' | 'daily_reminder' | 'weekly_report';
+type NotifChannel = 'email' | 'sms' | 'push';
+type NotifSetting = { key: NotifTypeKey; label: string; email: boolean; sms: boolean; push: boolean };
 
-const DEFAULT_NOTIF_SETTINGS: NotifSetting[] = [
-  { label: 'Nouveau RDV', email: true, sms: true, push: true },
-  { label: 'Annulation', email: true, sms: true, push: false },
-  { label: 'Nouvel avis', email: true, sms: false, push: true },
-  { label: 'Rappel quotidien', email: false, sms: true, push: true },
-  { label: 'Rapport hebdo', email: true, sms: false, push: false },
+const NOTIF_TYPES: { key: NotifTypeKey; label: string }[] = [
+  { key: 'new_rdv', label: 'Nouveau RDV' },
+  { key: 'cancellation', label: 'Annulation' },
+  { key: 'new_review', label: 'Nouvel avis' },
+  { key: 'daily_reminder', label: 'Rappel quotidien' },
+  { key: 'weekly_report', label: 'Rapport hebdo' },
 ];
 
-function NotificationsTab() {
-  const [settings, setSettings] = useState(DEFAULT_NOTIF_SETTINGS);
+function mapNotifApiToSettings(data: Record<string, boolean>): NotifSetting[] {
+  return NOTIF_TYPES.map(({ key, label }) => ({
+    key,
+    label,
+    email: !!data[`${key}_email`],
+    sms: !!data[`${key}_sms`],
+    push: !!data[`${key}_push`],
+  }));
+}
 
-  const toggle = (label: string, key: 'email' | 'sms' | 'push') => {
-    setSettings((prev) => prev.map((s) => (s.label === label ? { ...s, [key]: !s[key] } : s)));
+function NotificationsTab() {
+  const [settings, setSettings] = useState<NotifSetting[]>(
+    NOTIF_TYPES.map(({ key, label }) => ({ key, label, email: false, sms: false, push: false }))
+  );
+  const [loadingNotifs, setLoadingNotifs] = useState(true);
+  const [notifError, setNotifError] = useState('');
+
+  const fetchNotifSettings = async () => {
+    setLoadingNotifs(true);
+    setNotifError('');
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/settings/notifications/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`fetch-failed-${res.status}`);
+      const data = await res.json();
+      setSettings(mapNotifApiToSettings(data));
+    } catch (error) {
+      console.log('ERREUR NOTIFICATIONS — GET /api/settings/notifications/:', error);
+      setNotifError('Impossible de charger les préférences de notifications.');
+    } finally {
+      setLoadingNotifs(false);
+    }
   };
+
+  useEffect(() => {
+    fetchNotifSettings();
+  }, []);
+
+  const toggle = async (key: NotifTypeKey, channel: NotifChannel) => {
+    const previous = settings;
+    const next = settings.map((s) => (s.key === key ? { ...s, [channel]: !s[channel] } : s));
+    setSettings(next);
+    setNotifError('');
+    const updatedValue = next.find((s) => s.key === key)![channel];
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/settings/notifications/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ [`${key}_${channel}`]: updatedValue }),
+      });
+      if (!res.ok) throw new Error(`patch-failed-${res.status}`);
+    } catch (error) {
+      console.log('ERREUR NOTIFICATIONS — PATCH /api/settings/notifications/:', error);
+      setSettings(previous);
+      setNotifError("Impossible d'enregistrer ce changement. Réessayez.");
+    }
+  };
+
+  if (loadingNotifs) {
+    return (
+      <View style={[styles.card, styles.profilLoadingCard]}>
+        <ActivityIndicator color={CC.gold} size="large" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.card}>
+      {!!notifError && (
+        <View style={styles.profilErrorBox}>
+          <Text style={styles.profilErrorText}>{notifError}</Text>
+        </View>
+      )}
       {settings.map((s, i) => (
-        <View key={s.label} style={[styles.notifBlock, i === settings.length - 1 && styles.notifBlockLast]}>
+        <View key={s.key} style={[styles.notifBlock, i === settings.length - 1 && styles.notifBlockLast]}>
           <Text style={styles.notifLabel}>{s.label}</Text>
           <View style={styles.notifTogglesRow}>
             <View style={styles.notifToggleItem}>
               <Text style={styles.notifToggleLabel}>Email</Text>
-              <Toggle value={s.email} onChange={() => toggle(s.label, 'email')} />
+              <Toggle value={s.email} onChange={() => toggle(s.key, 'email')} />
             </View>
             <View style={styles.notifToggleItem}>
               <Text style={styles.notifToggleLabel}>SMS</Text>
-              <Toggle value={s.sms} onChange={() => toggle(s.label, 'sms')} />
+              <Toggle value={s.sms} onChange={() => toggle(s.key, 'sms')} />
             </View>
             <View style={styles.notifToggleItem}>
               <Text style={styles.notifToggleLabel}>Push</Text>
-              <Toggle value={s.push} onChange={() => toggle(s.label, 'push')} />
+              <Toggle value={s.push} onChange={() => toggle(s.key, 'push')} />
             </View>
           </View>
         </View>
@@ -418,12 +491,27 @@ function NotificationsTab() {
   );
 }
 
-type Carte = { id: string; brand: string; prefix: string; num: string; actif: boolean };
+type Carte = { id: number; brand: string; prefix: string; num: string; actif: boolean };
 
-const DEFAULT_CARTES: Carte[] = [
-  { id: '1', brand: 'Visa', prefix: 'Vi', num: '4582', actif: true },
-  { id: '2', brand: 'Mastercard', prefix: 'Ma', num: '1190', actif: false },
-];
+type ApiPaymentCard = {
+  id: number;
+  brand: string;
+  last4: string;
+  exp_month: number;
+  exp_year: number;
+  is_primary: boolean;
+};
+
+const prefixForBrand = (brand: string) => {
+  if (brand === 'Visa') return 'Vi';
+  if (brand === 'Mastercard') return 'Ma';
+  if (brand === 'Amex') return 'Am';
+  return '??';
+};
+
+function mapApiCard(c: ApiPaymentCard): Carte {
+  return { id: c.id, brand: c.brand, prefix: prefixForBrand(c.brand), num: c.last4, actif: c.is_primary };
+}
 
 const detecterBrand = (num: string) => {
   if (num.startsWith('4')) return { brand: 'Visa', prefix: 'Vi' };
@@ -444,47 +532,177 @@ const formatExpiration = (text: string) => {
 
 function PaiementTab() {
   const [commission, setCommission] = useState(4);
-  const [cartes, setCartes] = useState<Carte[]>(DEFAULT_CARTES);
+  const [savedCommission, setSavedCommission] = useState(4);
+  const [cartes, setCartes] = useState<Carte[]>([]);
+  const [loadingPaiement, setLoadingPaiement] = useState(true);
+  const [paiementError, setPaiementError] = useState('');
+  const [commissionError, setCommissionError] = useState('');
 
   const [ajouterCarteVisible, setAjouterCarteVisible] = useState(false);
-  const [supprimerCarteId, setSupprimerCarteId] = useState<string | null>(null);
+  const [ajoutCarteError, setAjoutCarteError] = useState('');
+  const [supprimerCarteId, setSupprimerCarteId] = useState<number | null>(null);
 
   const [titulaire, setTitulaire] = useState('');
   const [numeroCarte, setNumeroCarte] = useState('');
   const [expiration, setExpiration] = useState('');
   const [cvv, setCvv] = useState('');
 
-  const definirPrincipale = (id: string) => {
+  const fetchPaiement = async () => {
+    setLoadingPaiement(true);
+    setPaiementError('');
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+
+      const [cardsRes, commissionRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/payment/cards/`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/api/settings/commission/`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (!cardsRes.ok) throw new Error(`cards-fetch-failed-${cardsRes.status}`);
+      if (!commissionRes.ok) throw new Error(`commission-fetch-failed-${commissionRes.status}`);
+
+      const cardsData: ApiPaymentCard[] = await cardsRes.json();
+      const commissionData = await commissionRes.json();
+      setCartes(cardsData.map(mapApiCard));
+      setCommission(commissionData.commission_rate ?? 4);
+      setSavedCommission(commissionData.commission_rate ?? 4);
+    } catch (error) {
+      console.log('ERREUR PAIEMENT — chargement:', error);
+      setPaiementError('Impossible de charger les informations de paiement.');
+    } finally {
+      setLoadingPaiement(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPaiement();
+  }, []);
+
+  const definirPrincipale = async (id: number) => {
+    const previous = cartes;
     setCartes((prev) => prev.map((c) => ({ ...c, actif: c.id === id })));
+    setPaiementError('');
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/payment/cards/${id}/set-primary/`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`set-primary-failed-${res.status}`);
+    } catch (error) {
+      console.log('ERREUR PAIEMENT — set-primary:', error);
+      setCartes(previous);
+      setPaiementError("Impossible de définir cette carte comme principale. Réessayez.");
+    }
   };
 
   const fermerAjoutCarte = () => {
     setAjouterCarteVisible(false);
+    setAjoutCarteError('');
     setTitulaire('');
     setNumeroCarte('');
     setExpiration('');
     setCvv('');
   };
 
-  const ajouterCarte = () => {
+  const ajouterCarte = async () => {
     const digits = numeroCarte.replace(/\D/g, '');
-    if (!titulaire || digits.length < 4) return;
-    const { brand, prefix } = detecterBrand(digits);
-    setCartes((prev) => [...prev, { id: Date.now().toString(), brand, prefix, num: digits.slice(-4), actif: false }]);
-    fermerAjoutCarte();
+    const [mm, aa] = expiration.split('/');
+    const expMonth = parseInt(mm, 10);
+    const expYear = aa?.length === 2 ? 2000 + parseInt(aa, 10) : NaN;
+
+    if (!titulaire || digits.length < 4) {
+      setAjoutCarteError('Renseignez le titulaire et le numéro de carte.');
+      return;
+    }
+    if (!expMonth || expMonth < 1 || expMonth > 12 || !expYear) {
+      setAjoutCarteError("Date d'expiration invalide (MM/AA).");
+      return;
+    }
+
+    setAjoutCarteError('');
+    const { brand } = detecterBrand(digits);
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/payment/cards/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        // Seuls la marque, les 4 derniers chiffres et l'expiration sont envoyés —
+        // le numéro complet et le CVV ne quittent jamais l'appareil.
+        body: JSON.stringify({ brand, last4: digits.slice(-4), exp_month: expMonth, exp_year: expYear }),
+      });
+      if (!res.ok) throw new Error(`add-card-failed-${res.status}`);
+      const data: ApiPaymentCard = await res.json();
+      setCartes((prev) => [...prev, mapApiCard(data)].map((c) => (data.is_primary ? { ...c, actif: c.id === data.id } : c)));
+      fermerAjoutCarte();
+    } catch (error) {
+      console.log('ERREUR PAIEMENT — ajout carte:', error);
+      setAjoutCarteError("Impossible d'ajouter cette carte. Réessayez.");
+    }
   };
 
   const carteASupprimer = cartes.find((c) => c.id === supprimerCarteId);
 
-  const confirmerSuppressionCarte = () => {
-    setCartes((prev) => prev.filter((c) => c.id !== supprimerCarteId));
+  const confirmerSuppressionCarte = async () => {
+    const id = supprimerCarteId;
+    if (id == null) return;
     setSupprimerCarteId(null);
+    const previous = cartes;
+    setCartes((prev) => prev.filter((c) => c.id !== id));
+    setPaiementError('');
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/payment/cards/${id}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`delete-card-failed-${res.status}`);
+    } catch (error) {
+      console.log('ERREUR PAIEMENT — suppression carte:', error);
+      setCartes(previous);
+      setPaiementError('Impossible de supprimer cette carte. Réessayez.');
+    }
+  };
+
+  const saveCommission = async (value: number) => {
+    setCommissionError('');
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/settings/commission/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ commission_rate: value }),
+      });
+      if (!res.ok) throw new Error(`commission-save-failed-${res.status}`);
+      setSavedCommission(value);
+    } catch (error) {
+      console.log('ERREUR PAIEMENT — commission:', error);
+      setCommission(savedCommission);
+      setCommissionError('Impossible d\'enregistrer la commission. Réessayez.');
+    }
   };
 
   const brandApercu = detecterBrand(numeroCarte.replace(/\D/g, ''));
 
+  if (loadingPaiement) {
+    return (
+      <View style={[styles.card, styles.profilLoadingCard]}>
+        <ActivityIndicator color={CC.gold} size="large" />
+      </View>
+    );
+  }
+
   return (
     <>
+      {!!paiementError && (
+        <View style={styles.profilErrorBox}>
+          <Text style={styles.profilErrorText}>{paiementError}</Text>
+        </View>
+      )}
       {cartes.map((carte) => (
         <View key={carte.id} style={styles.cardCompact}>
           <View style={styles.cardRow}>
@@ -530,6 +748,7 @@ function PaiementTab() {
           step={0.5}
           value={commission}
           onValueChange={setCommission}
+          onSlidingComplete={saveCommission}
           minimumTrackTintColor={CC.gold}
           maximumTrackTintColor={CC.trackBg}
           thumbTintColor={CC.gold}
@@ -539,6 +758,7 @@ function PaiementTab() {
           <Text style={styles.sliderLabel}>0%</Text>
           <Text style={styles.sliderLabel}>10%</Text>
         </View>
+        {!!commissionError && <Text style={styles.mdpErreurText}>{commissionError}</Text>}
       </View>
 
       <Modal visible={ajouterCarteVisible} transparent animationType="slide" onRequestClose={fermerAjoutCarte}>
@@ -586,6 +806,7 @@ function PaiementTab() {
                   half
                 />
               </View>
+              {!!ajoutCarteError && <Text style={styles.mdpErreurText}>{ajoutCarteError}</Text>}
             </ScrollView>
 
             <View style={styles.modalActionsRow}>
@@ -625,25 +846,60 @@ function PaiementTab() {
   );
 }
 
-type Session = { id: string; device: string; when: string; current: boolean };
-
-const DEFAULT_SESSIONS: Session[] = [
-  { id: '1', device: 'MacBook Pro · Bruxelles', when: 'Maintenant', current: true },
-  { id: '2', device: 'iPhone 15 · Bruxelles', when: 'il y a 2 h', current: false },
-];
+type Session = { id: number; device: string; when: string; current: boolean };
+type ApiSession = { id: number; device: string; created_at: string; current: boolean };
 
 function SecuriteTab() {
   const [mdpActuel, setMdpActuel] = useState('');
   const [nouveauMdp, setNouveauMdp] = useState('');
   const [mdpMisAJour, setMdpMisAJour] = useState(false);
   const [mdpErreur, setMdpErreur] = useState('');
-  const [twoFactor, setTwoFactor] = useState(true);
+  const [savingMdp, setSavingMdp] = useState(false);
 
-  const [sessions, setSessions] = useState<Session[]>(DEFAULT_SESSIONS);
-  const [sessionASupprimer, setSessionASupprimer] = useState<string | null>(null);
+  const [twoFactor, setTwoFactor] = useState(false);
+  const [loadingSecurite, setLoadingSecurite] = useState(true);
+  const [securiteError, setSecuriteError] = useState('');
+
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionASupprimer, setSessionASupprimer] = useState<number | null>(null);
   const [deconnexionVisible, setDeconnexionVisible] = useState(false);
 
-  const mettreAJourMdp = () => {
+  const fetchSecurite = async () => {
+    setLoadingSecurite(true);
+    setSecuriteError('');
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+
+      const [securityRes, sessionsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/settings/security/`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/api/auth/sessions/`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (!securityRes.ok) throw new Error(`security-fetch-failed-${securityRes.status}`);
+      if (!sessionsRes.ok) throw new Error(`sessions-fetch-failed-${sessionsRes.status}`);
+
+      const securityData = await securityRes.json();
+      const sessionsData: ApiSession[] = await sessionsRes.json();
+      setTwoFactor(!!securityData.two_factor_enabled);
+      setSessions(sessionsData.map((s) => ({
+        id: s.id,
+        device: s.device || 'Appareil inconnu',
+        when: formatDistanceToNow(new Date(s.created_at), { locale: fr, addSuffix: true }),
+        current: s.current,
+      })));
+    } catch (error) {
+      console.log('ERREUR SÉCURITÉ — chargement:', error);
+      setSecuriteError('Impossible de charger les informations de sécurité.');
+    } finally {
+      setLoadingSecurite(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSecurite();
+  }, []);
+
+  const mettreAJourMdp = async () => {
     if (!mdpActuel.trim()) {
       setMdpErreur('Veuillez entrer votre mot de passe actuel.');
       return;
@@ -653,32 +909,129 @@ function SecuriteTab() {
       return;
     }
     setMdpErreur('');
-    setMdpMisAJour(true);
-    setMdpActuel('');
-    setNouveauMdp('');
-    setTimeout(() => setMdpMisAJour(false), 3000);
+    setSavingMdp(true);
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/auth/change-password/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ old_password: mdpActuel, new_password: nouveauMdp }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMdpErreur(data.detail || 'Impossible de mettre à jour le mot de passe.');
+        return;
+      }
+      setMdpMisAJour(true);
+      setMdpActuel('');
+      setNouveauMdp('');
+      setTimeout(() => setMdpMisAJour(false), 3000);
+    } catch (error) {
+      console.log('ERREUR SÉCURITÉ — changement mot de passe:', error);
+      setMdpErreur('Impossible de mettre à jour le mot de passe. Réessayez.');
+    } finally {
+      setSavingMdp(false);
+    }
   };
 
-  const deconnecterSession = (id: string) => {
-    setSessions((prev) => prev.filter((s) => s.id !== id));
+  const toggleTwoFactor = async (value: boolean) => {
+    const previous = twoFactor;
+    setTwoFactor(value);
+    setSecuriteError('');
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/settings/security/2fa/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ enabled: value }),
+      });
+      if (!res.ok) throw new Error(`2fa-toggle-failed-${res.status}`);
+    } catch (error) {
+      console.log('ERREUR SÉCURITÉ — 2FA:', error);
+      setTwoFactor(previous);
+      setSecuriteError('Impossible de modifier la double authentification. Réessayez.');
+    }
+  };
+
+  const deconnecterSession = async (id: number) => {
     setSessionASupprimer(null);
+    const previous = sessions;
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    setSecuriteError('');
+    try {
+      const token = await AsyncStorage.getItem('coiffeur_token');
+      if (!token) throw new Error('no-token');
+      const res = await fetch(`${API_BASE_URL}/api/auth/sessions/${id}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`session-delete-failed-${res.status}`);
+    } catch (error) {
+      console.log('ERREUR SÉCURITÉ — déconnexion session:', error);
+      setSessions(previous);
+      setSecuriteError('Impossible de déconnecter cet appareil. Réessayez.');
+    }
+  };
+
+  const seDeconnecter = async () => {
+    setDeconnexionVisible(false);
+    try {
+      const [token, refresh] = await Promise.all([
+        AsyncStorage.getItem('coiffeur_token'),
+        AsyncStorage.getItem('coiffeur_refresh'),
+      ]);
+      if (token && refresh) {
+        await fetch(`${API_BASE_URL}/api/auth/logout/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ refresh }),
+        });
+      }
+    } catch (error) {
+      console.log('ERREUR SÉCURITÉ — logout:', error);
+    } finally {
+      await AsyncStorage.removeItem('coiffeur_token');
+      await AsyncStorage.removeItem('coiffeur_refresh');
+      router.replace('/coiffeur');
+    }
   };
 
   const sessionCible = sessions.find((s) => s.id === sessionASupprimer);
 
+  if (loadingSecurite) {
+    return (
+      <View style={[styles.card, styles.profilLoadingCard]}>
+        <ActivityIndicator color={CC.gold} size="large" />
+      </View>
+    );
+  }
+
   return (
     <>
+      {!!securiteError && (
+        <View style={styles.profilErrorBox}>
+          <Text style={styles.profilErrorText}>{securiteError}</Text>
+        </View>
+      )}
+
       <View style={styles.card}>
         <Field label="MOT DE PASSE ACTUEL" value={mdpActuel} onChangeText={setMdpActuel} secureTextEntry />
         <Field label="NOUVEAU MOT DE PASSE" value={nouveauMdp} onChangeText={setNouveauMdp} secureTextEntry />
         {!!mdpErreur && <Text style={styles.mdpErreurText}>{mdpErreur}</Text>}
         <TouchableOpacity
           onPress={mettreAJourMdp}
-          style={[styles.saveBtn, mdpMisAJour && styles.saveBtnDone]}
+          disabled={savingMdp}
+          style={[styles.saveBtn, mdpMisAJour && styles.saveBtnDone, savingMdp && { opacity: 0.7 }]}
         >
-          <Text style={[styles.saveBtnText, mdpMisAJour && styles.saveBtnTextDone]}>
-            {mdpMisAJour ? '✓ Mot de passe mis à jour !' : 'Mettre à jour'}
-          </Text>
+          {savingMdp ? (
+            <ActivityIndicator size="small" color={CC.white} />
+          ) : (
+            <Text style={[styles.saveBtnText, mdpMisAJour && styles.saveBtnTextDone]}>
+              {mdpMisAJour ? '✓ Mot de passe mis à jour !' : 'Mettre à jour'}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -690,11 +1043,14 @@ function SecuriteTab() {
           <Text style={styles.twoFactorTitle}>Double authentification</Text>
           <Text style={styles.twoFactorSub}>Sécurité renforcée par SMS</Text>
         </View>
-        <Toggle value={twoFactor} onChange={setTwoFactor} />
+        <Toggle value={twoFactor} onChange={toggleTwoFactor} />
       </View>
 
       <View style={styles.card}>
         <Text style={styles.sessionsLabel}>SESSIONS ACTIVES</Text>
+        {sessions.length === 0 && (
+          <Text style={{ fontSize: 13, color: CC.textSecondary }}>Aucune session active.</Text>
+        )}
         {sessions.map((session, i) => (
           <View key={session.id}>
             {i > 0 && <View style={styles.sessionDivider} />}
@@ -736,7 +1092,7 @@ function SecuriteTab() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.deleteConfirmBtn}
-                onPress={() => sessionASupprimer && deconnecterSession(sessionASupprimer)}
+                onPress={() => sessionASupprimer != null && deconnecterSession(sessionASupprimer)}
               >
                 <Text style={styles.deleteConfirmBtnText}>Déconnecter</Text>
               </TouchableOpacity>
@@ -757,13 +1113,7 @@ function SecuriteTab() {
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setDeconnexionVisible(false)}>
                 <Text style={styles.cancelBtnText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.deleteConfirmBtn}
-                onPress={() => {
-                  setDeconnexionVisible(false);
-                  router.replace('/coiffeur');
-                }}
-              >
+              <TouchableOpacity style={styles.deleteConfirmBtn} onPress={seDeconnecter}>
                 <Text style={styles.deleteConfirmBtnText}>Se déconnecter</Text>
               </TouchableOpacity>
             </View>

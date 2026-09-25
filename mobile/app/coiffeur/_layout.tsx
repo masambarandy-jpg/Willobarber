@@ -5,6 +5,7 @@ import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 import CoiffeurIPadLayout from '@/components/coiffeur/CoiffeurIPadLayout';
 import { CoiffeurRoute } from '@/components/coiffeur/CoiffeurDrawer';
 import { CoiffeurProfileProvider } from '@/contexts/CoiffeurProfileContext';
+import { CoiffeurNotificationsProvider } from '@/contexts/CoiffeurNotificationsContext';
 
 const NAV_ROUTES: CoiffeurRoute[] = [
   'dashboard',
@@ -57,12 +58,18 @@ export default function CoiffeurLayout() {
   );
 
   if (!isTablet || !active) {
-    return <CoiffeurProfileProvider>{stack}</CoiffeurProfileProvider>;
+    return (
+      <CoiffeurProfileProvider>
+        <CoiffeurNotificationsProvider>{stack}</CoiffeurNotificationsProvider>
+      </CoiffeurProfileProvider>
+    );
   }
 
   return (
     <CoiffeurProfileProvider>
-      <CoiffeurIPadLayout active={active}>{stack}</CoiffeurIPadLayout>
+      <CoiffeurNotificationsProvider>
+        <CoiffeurIPadLayout active={active}>{stack}</CoiffeurIPadLayout>
+      </CoiffeurNotificationsProvider>
     </CoiffeurProfileProvider>
   );
 }
