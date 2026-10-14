@@ -22,6 +22,7 @@ class User(AbstractUser):
     # initiée par le client lui-même via /auth/delete-account/.
     deletion_reason = models.CharField(max_length=20, blank=True, default='')
     two_factor_enabled = models.BooleanField(default=False)
+    loyalty_points = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.username} ({self.role})"

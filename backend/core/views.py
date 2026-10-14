@@ -462,7 +462,16 @@ class ReservationViewSet(viewsets.ModelViewSet):
             # Un client ne peut faire évoluer le statut que vers "annulé par le client".
             if 'status' in requested_fields and self.request.data.get('status') != 'cancelled_client':
                 raise PermissionDenied("Vous ne pouvez qu'annuler votre réservation.")
-        serializer.save()
+        previous_status = serializer.instance.status
+        reservation = serializer.save()
+
+        # Retirer les points gagnés à la création pour éviter le farming
+        # (annulation par le client ou par le salon, une seule fois).
+        if previous_status in ('pending', 'confirmed') and reservation.status in ('cancelled', 'cancelled_client'):
+            points_to_refund = int(round(reservation.service.price * 2))
+            client = reservation.user
+            client.loyalty_points = max(0, (client.loyalty_points or 0) - points_to_refund)
+            client.save(update_fields=['loyalty_points'])
 
     def create(self, request, *args, **kwargs):
         date = request.data.get('date')
@@ -505,6 +514,12 @@ class ReservationViewSet(viewsets.ModelViewSet):
         print(f"[RESERVATION] user: {self.request.user}")
         reservation = serializer.save(user=self.request.user)
         print(f"[RESERVATION] sauvegardée: id={reservation.id}")
+
+        # Attribution automatique des points fidélité : 2 pts par euro du service
+        points_earned = int(round(reservation.service.price * 2))
+        user = self.request.user
+        user.loyalty_points = (user.loyalty_points or 0) + points_earned
+        user.save(update_fields=['loyalty_points'])
 
         try:
             print(f"[EMAIL] Envoi à {self.request.user.email} pour réservation {reservation.id}")
@@ -1736,3 +1751,19 @@ def qr_code(request):
     img.save(buffer, format="PNG")
     buffer.seek(0)
     return HttpResponse(buffer, content_type="image/png")
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redeem_loyalty(request):
+    """Déduit 1000 pts du client et confirme le rachat d'une coupe gratuite."""
+    user = request.user
+    REDEEM_COST = 1000
+    if (user.loyalty_points or 0) < REDEEM_COST:
+        return Response(
+            {'error': f'Solde insuffisant. {REDEEM_COST - (user.loyalty_points or 0)} pts manquants.'},
+            status=400
+        )
+    user.loyalty_points -= REDEEM_COST
+    user.save(update_fields=['loyalty_points'])
+    return Response({'loyalty_points': user.loyalty_points, 'redeemed': REDEEM_COST})
