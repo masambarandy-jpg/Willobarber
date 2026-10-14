@@ -26,6 +26,7 @@ urlpatterns = [
     path('reservations/<int:pk>/cancel/', views.cancel_reservation, name='cancel-reservation'),
     path('reservations/<int:pk>/cancel-by-barber/', views.cancel_reservation_by_barber, name='cancel-by-barber'),
     path('reservations/walk-in/', views.add_walk_in, name='walk-in'),
+    path('loyalty/redeem/', views.redeem_loyalty, name='redeem-loyalty'),
     path('recommendations/', views.recommendations, name='recommendations'),
     path('settings/', views.salon_settings_view, name='salon-settings'),
     path('', include(router.urls)),

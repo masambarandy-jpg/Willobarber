@@ -282,7 +282,7 @@ export const reviewsApi = {
 // ─── Loyalty API ───────────────────────────────────────────────────────────────
 
 export const loyaltyApi = {
-  redeem: () => http.post('/loyalty/redeem/').then((r) => r.data),
+  redeem: () => http.post<{ loyalty_points: number; redeemed: number }>('/loyalty/redeem/').then((r) => r.data),
 };
 
 // ─── Salon settings API ───────────────────────────────────────────────────────

@@ -199,7 +199,7 @@ export default function BookScreen() {
   const isRescheduleMode = reschedule === 'true';
   const reservationIdNum = reservationId ? Number(reservationId) : null;
   const hasBookingParams = Boolean(serviceId || isQuickbook || isFastbook || isRescheduleMode);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
   const { t } = useLanguage();
   const CTA_LABELS: Record<number, string> = {
@@ -277,6 +277,22 @@ export default function BookScreen() {
       setServiceIdMap(map);
     }).catch(() => {}); // silencieux si pas connecté
   }, []);
+
+  // En SDK 57, les tabs restent montées : l'useState initializer ne
+  // re-tourne pas quand on revient sur Book avec de nouveaux params
+  // fastbook. Cet effet synchronise step + booking à chaque mise à jour
+  // des params fastbook (clic "Même coupe" / "Adapter" depuis Mon espace).
+  useEffect(() => {
+    if (!isFastbook) return;
+    const service = SERVICES.find(s => s.name === prestation) ?? null;
+    const barber  = BARBERS.find(b => b.name === barbierParam) ?? null;
+    setBooking(prev => ({ ...prev, service, barber }));
+    setStep(barber ? 3 : 2);
+    hasSeenConfirmation.current = false;
+    setConfirmed(false);
+    confirmedRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFastbook, prestation, barbierParam]);
 
   // Mode reprogrammation : le serviceId reçu en param est l'ID Django réel du
   // service (venu de la réservation), pas le slug statique — on le résout dès
@@ -399,6 +415,9 @@ export default function BookScreen() {
         });
         setCreatedReservationId(created.id);
         console.log('[BOOKING] Nouvelle réservation créée, id:', created.id);
+        // Recharge le user pour que les nouveaux points fidélité
+        // apparaissent immédiatement sur l'onglet "Mon espace"
+        refreshUser().catch(() => {});
       } catch (e: any) {
         console.error('[RESERVATION] Erreur création après paiement Stripe:', e);
 
