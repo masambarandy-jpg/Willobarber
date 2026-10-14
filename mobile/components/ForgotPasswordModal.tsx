@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     color: '#fff',
     padding: 0,
-    ...(Platform.OS === 'web' ? ({ outline: 'none' } as any) : {}),
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   btnPrimary: {
     backgroundColor: '#C9A84C',
