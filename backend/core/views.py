@@ -929,7 +929,8 @@ def generate_invoice(request, pk):
     invoice_number = f"WB-2026-{random.randint(10000, 99999)}"
     today = format_date_fr_short(datetime.now().date())
 
-    total_ttc = float(service.price)
+    quantity = getattr(reservation, 'child_count', 1) or 1
+    total_ttc = float(service.price) * quantity
     acompte = float(reservation.amount_paid) if reservation.amount_paid is not None else ACOMPTE_FIXE
     is_fully_paid = acompte >= total_ttc
     sous_total_ht = total_ttc / 1.21
@@ -982,9 +983,11 @@ def generate_invoice(request, pk):
     elements.append(Spacer(1, 10*mm))
 
     # Tableau prestations
+    unit_price_ttc = float(service.price)
+    unit_price_ht = unit_price_ttc / 1.21
     data = [
         ['DESCRIPTION', 'QTÉ', 'P.U. HT', 'TVA', 'TOTAL TTC'],
-        [service.name, '1', fmt_eur(sous_total_ht), '21%', fmt_eur(total_ttc)],
+        [service.name, str(quantity), fmt_eur(unit_price_ht), '21%', fmt_eur(total_ttc)],
     ]
     t = Table(data, colWidths=[80*mm, 20*mm, 30*mm, 20*mm, 30*mm])
     t.setStyle(TableStyle([
@@ -1196,7 +1199,8 @@ def build_final_invoice_pdf(reservation):
     invoice_number = f"WB-FINAL-{reservation.id}"
     today = format_date_fr_short(datetime.now().date())
 
-    total_ttc = float(service.price)
+    quantity = getattr(reservation, 'child_count', 1) or 1
+    total_ttc = float(service.price) * quantity
     acompte = ACOMPTE_FIXE
     solde = float(reservation.amount_paid) if reservation.amount_paid is not None else max(total_ttc - acompte, 0)
     methode_label = reservation.get_payment_method_display() or '—'

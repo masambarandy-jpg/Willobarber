@@ -31,11 +31,13 @@ import {
   fmtPrice,
   formatDateShortFr,
   formatSlot,
+  getServiceDurationMinutes,
   type AmountChoice,
   type BookingState,
   type CardForm,
   type PaymentMethod,
   SERVICES,
+  SLOT_GROUPS,
   type StaticBarber,
   type StaticService,
 } from '@/components/booking/data';
@@ -54,12 +56,35 @@ function RecapSidebar({
   amountChoice: AmountChoice;
 }) {
   const { t } = useLanguage();
-  const { service, barber, date, time } = booking;
+  const { service, barber, date, time, childCount } = booking;
+  const isCounter = !!service?.counter;
+  const count = isCounter ? Math.max(1, childCount) : 1;
   const rows: { label: string; value: string }[] = [];
-  if (service) rows.push({ label: t('book.recap.service'), value: t(`services.svc.${service.id}.name` as TranslationKey) });
+  if (service) {
+    const serviceName = t(`services.svc.${service.id}.name` as TranslationKey);
+    const value = count > 1 ? `${serviceName} × ${count}` : serviceName;
+    rows.push({ label: t('book.recap.service'), value });
+  }
   if (barber) rows.push({ label: t('book.recap.barber'), value: barber.name });
   if (date) rows.push({ label: t('book.recap.date'), value: formatDateShortFr(date) });
-  if (time) rows.push({ label: t('book.recap.time'), value: formatSlot(time) });
+  if (time) {
+    let value = formatSlot(time);
+    if (count > 1 && service) {
+      // Calcule l'heure de fin pour montrer la plage totale au client :
+      // chaque enfant occupe un créneau consécutif de la grille (cf. création
+      // des réservations dans handleNext), la fin = dernier créneau + durée.
+      const allSlots = SLOT_GROUPS.flatMap((g) => g.slots);
+      const lastSlot = allSlots[allSlots.indexOf(time) + count - 1] ?? time;
+      const durationMin = getServiceDurationMinutes(service.dur);
+      const [h, m] = lastSlot.split(':').map(Number);
+      const endTotalMin = h * 60 + m + durationMin;
+      const endH = Math.floor(endTotalMin / 60);
+      const endM = endTotalMin % 60;
+      const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+      value = `${formatSlot(time)} → ${formatSlot(endTime)}`;
+    }
+    rows.push({ label: t('book.recap.time'), value });
+  }
 
   const amountDue = step === 4
     ? (amountChoice === 'full' ? (service?.price ?? 0) : ACOMPTE_FIXE)
@@ -272,7 +297,20 @@ export default function BookScreen() {
         if (name.includes('express')) map['express'] = s.id;
         if (name.includes('camouflage')) map['camouflage'] = s.id;
         if (name.includes('soin')) map['soin'] = s.id;
-        if (name.includes('enfant')) map['enfant'] = s.id;
+        // Les 2 services enfants doivent avoir des clés distinctes qui
+        // correspondent aux ids statiques définis dans data.ts :
+        // 'enfant-15' et 'enfant+15'. Détection par la présence du signe
+        // dans le nom ("Coupe enfant −15 ans" / "Coupe enfant +15 ans").
+        if (name.includes('enfant')) {
+          if (name.includes('−15') || name.includes('-15') || name.includes('moins')) {
+            map['enfant-15'] = s.id;
+          } else if (name.includes('+15') || name.includes('plus')) {
+            map['enfant+15'] = s.id;
+          } else {
+            // Fallback : ancienne clé générique pour compatibilité
+            map['enfant'] = s.id;
+          }
+        }
       });
       setServiceIdMap(map);
     }).catch(() => {}); // silencieux si pas connecté
@@ -404,17 +442,41 @@ export default function BookScreen() {
         const d = booking.date;
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const servicePrice = booking.service?.price ?? 0;
-        const amountPaid = amountChoice === 'full' ? servicePrice : ACOMPTE_FIXE;
-        const created = await reservationsApi.create({
-          service: serviceIdMap[booking.service?.id ?? ''] || 1,
-          date: dateStr,
-          time: booking.time,
-          notes: `Barbier: ${booking.barber?.name || 'Willo'}`,
-          payment_intent_id: paymentIntentId,
-          amount_paid: amountPaid,
-        });
-        setCreatedReservationId(created.id);
-        console.log('[BOOKING] Nouvelle réservation créée, id:', created.id);
+
+        // Pour les services "counter" (enfants multiples), on crée N réservations
+        // séparées avec créneaux consécutifs pour éviter les double-bookings.
+        const isCounter = !!booking.service?.counter;
+        const count = isCounter ? Math.max(1, booking.childCount) : 1;
+        const totalPrice = servicePrice * count;
+        const amountPaid = amountChoice === 'full' ? totalPrice : ACOMPTE_FIXE;
+
+        // Créneaux consécutifs de la grille (mêmes que ceux vérifiés par
+        // Step3Date.slotAvailable) : le backend ne détecte un conflit que sur
+        // un date+heure identique, donc il faut bloquer les vrais créneaux.
+        const allSlots = SLOT_GROUPS.flatMap((g) => g.slots);
+        const startIdx = allSlots.indexOf(booking.time);
+        const slotTimes = Array.from({ length: count }, (_, i) =>
+          startIdx === -1 ? booking.time! : allSlots[startIdx + i],
+        );
+
+        // Crée une réservation par enfant (ou une seule si service normal).
+        // Le paiement est associé à la 1ère réservation uniquement.
+        const createdReservations = [];
+        for (let i = 0; i < count; i++) {
+          const noteSuffix = isCounter && count > 1 ? ` (Enfant ${i + 1}/${count})` : '';
+          const created = await reservationsApi.create({
+            service: serviceIdMap[booking.service?.id ?? ''] ?? undefined as any,
+            date: dateStr,
+            time: slotTimes[i],
+            notes: `Barbier: ${booking.barber?.name || 'Willo'}${noteSuffix}`,
+            payment_intent_id: i === 0 ? paymentIntentId : undefined,
+            amount_paid: i === 0 ? amountPaid : 0,
+            child_count: i === 0 ? count : 1,
+          });
+          createdReservations.push(created);
+        }
+        setCreatedReservationId(createdReservations[0].id);
+        console.log('[BOOKING]', count, 'réservation(s) créée(s), 1ère id:', createdReservations[0].id);
         // Recharge le user pour que les nouveaux points fidélité
         // apparaissent immédiatement sur l'onglet "Mon espace"
         refreshUser().catch(() => {});
