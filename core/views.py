@@ -398,6 +398,12 @@ class ReservationViewSet(viewsets.ModelViewSet):
             deposit_amount=settings_obj.same_day_surcharge if settings_obj else Decimal('10')
         )
 
+        # Attribution automatique des points fidélité : 2 pts par euro du service
+        points_earned = int(round(service.price * 2))
+        user = self.request.user
+        user.loyalty_points = (user.loyalty_points or 0) + points_earned
+        user.save(update_fields=['loyalty_points'])
+
         SlotLock.objects.filter(
             barber=serializer.validated_data['barber'],
             date=serializer.validated_data['date'],
@@ -428,6 +434,13 @@ def cancel_reservation(request, pk):
     )
     is_late = timezone.now() > reservation_dt - timedelta(hours=free_hours)
 
+    # Retirer les points gagnés à la création pour éviter le farming
+    service = reservation.service
+    points_to_refund = int(round(service.price * 2))
+    client = request.user  # même utilisateur que reservation.client (filtré plus haut)
+    client.loyalty_points = max(0, (client.loyalty_points or 0) - points_to_refund)
+    client.save(update_fields=['loyalty_points'])
+
     reservation.status = 'cancelled_client'
     reservation.cancellation_reason = request.data.get('reason', '')
     reservation.cancelled_by = request.user
@@ -445,12 +458,37 @@ def cancel_reservation(request, pk):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redeem_loyalty(request):
+    """Déduit 1000 pts du client et confirme le rachat d'une coupe gratuite."""
+    user = request.user
+    REDEEM_COST = 1000
+    if (user.loyalty_points or 0) < REDEEM_COST:
+        return Response(
+            {'error': f'Solde insuffisant. {REDEEM_COST - (user.loyalty_points or 0)} pts manquants.'},
+            status=400
+        )
+    user.loyalty_points -= REDEEM_COST
+    user.save(update_fields=['loyalty_points'])
+    return Response({'loyalty_points': user.loyalty_points, 'redeemed': REDEEM_COST})
+
+
+@api_view(['POST'])
 @permission_classes([IsAdminUser])
 def cancel_reservation_by_barber(request, pk):
     try:
         reservation = Reservation.objects.get(pk=pk, is_deleted=False)
     except Reservation.DoesNotExist:
         return Response({'error': 'Réservation introuvable.'}, status=404)
+
+    # Retirer les points gagnés à la création pour éviter le farming
+    # (pas de points sur les walk-ins, ni si la réservation est déjà annulée/terminée)
+    if not reservation.is_walk_in and reservation.status not in ['completed', 'cancelled_client', 'cancelled_barber']:
+        service = reservation.service
+        points_to_refund = int(round(service.price * 2))
+        client = reservation.client
+        client.loyalty_points = max(0, (client.loyalty_points or 0) - points_to_refund)
+        client.save(update_fields=['loyalty_points'])
 
     reservation.status = 'cancelled_barber'
     reservation.cancellation_reason = request.data.get('reason', 'Annulation à la demande')

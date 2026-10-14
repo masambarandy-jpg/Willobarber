@@ -30,7 +30,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = await authApi.me();
       setState({ user, isAuthenticated: true, isLoading: false });
     } catch {
-      setState({ user: null, isAuthenticated: false, isLoading: false });
+      // Ne pas déconnecter sur un simple refresh raté — on garde le user actuel.
+      // isLoading repasse à false pour ne pas bloquer le chargement initial.
+      setState((prev) => ({ ...prev, isLoading: false }));
     }
   }, []);
 

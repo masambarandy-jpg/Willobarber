@@ -65,8 +65,8 @@ function formatDateLong(dateStr: string, t: (key: TranslationKey) => string): st
 }
 
 const MOCK_LOYALTY = {
-  points: 980,
-  total_earned: 1480,
+  points: 0,
+  total_earned: 0,
 };
 
 const TRANSACTIONS_META: { id: number; day?: string; moisIdx?: number; annee?: string; dateKey?: TranslationKey; reasonKey: TranslationKey; points: number; type: string }[] = [
@@ -103,14 +103,14 @@ const NEXT_RDV = {
 };
 
 function getNextTarget(pts: number): number {
-  if (pts < 200) return 200;
-  if (pts < 500) return 500;
-  return Math.ceil((pts + 1) / 500) * 500;
+  if (pts < 1000) return 1000;
+  return Math.ceil((pts + 1) / 1000) * 1000;
 }
 
 function getBarProgress(pts: number): number {
   if (pts <= 0) return 0;
-  return (pts % 500) / 500 || 1;
+  const cycle = pts % 1000;
+  return cycle === 0 ? 1 : cycle / 1000;
 }
 
 function GoldItalic({ children }: { children: React.ReactNode }) {
@@ -254,7 +254,7 @@ function QrCodeModal({ reservation, onClose }: QrCodeModalProps) {
 export default function ReservationsScreen() {
   const router = useRouter();
   const isTablet = useIsTablet();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
   const { isLoading, refetch, cancel, upcoming, past, reservations, error } = useReservations();
   const { t } = useLanguage();
@@ -274,9 +274,8 @@ export default function ReservationsScreen() {
   const [qrTarget, setQrTarget] = useState<(Reservation & { time: string }) | null>(null);
   const [reviewModalTarget, setReviewModalTarget] = useState<{ id: number; service: string } | null>(null);
   const [mainTab, setMainTab] = useState<'apercu' | 'coupes'>('apercu');
-  // 0 par défaut (nouveau compte) — corrigé vers MOCK_LOYALTY.points une fois
-  // l'historique chargé, uniquement s'il n'est pas vide (cf. effet plus bas).
-  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  // Solde réel du client (backend /auth/me/), resynchronisé quand user change.
+  const [loyaltyPoints, setLoyaltyPoints] = useState(user?.loyalty_points ?? 0);
   const [barWidth, setBarWidth] = useState(0);
   const barAnim = useRef(new Animated.Value(0)).current;
   const { media: myMedia, isLoading: myMediaLoading } = useClientMedia(user?.id ?? null);
@@ -302,15 +301,16 @@ export default function ReservationsScreen() {
   const pastList = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
   const hasHistory = pastList.length > 0;
 
-  // Initialise le solde de points une seule fois, après le premier chargement
-  // des réservations : 0 pour un compte sans historique, sinon le solde du
-  // compte de démo (MOCK_LOYALTY). Ne se redéclenche pas après (ex: refetch
-  // suite à un rachat de points), sans quoi le rachat serait annulé.
+  // Initialise le solde de points une fois le premier chargement terminé.
   useEffect(() => {
     if (!hasLoadedOnce) return;
-    setLoyaltyPoints(pastList.length === 0 ? 0 : MOCK_LOYALTY.points);
+    setLoyaltyPoints(user?.loyalty_points ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasLoadedOnce]);
+
+  useEffect(() => {
+    setLoyaltyPoints(user?.loyalty_points ?? 0);
+  }, [user?.loyalty_points]);
 
   const nextReservation = upcomingList
     .filter((r) => `${r.date}T${r.time}` >= nowKey)
@@ -630,13 +630,21 @@ export default function ReservationsScreen() {
   const handleRedeemLoyalty = () => {
     const doRedeem = async () => {
       try {
-        await loyaltyApi.redeem();
-      } catch {
-        // API pas encore disponible côté serveur : on applique quand même le rachat en local.
+        const result = await loyaltyApi.redeem();
+        setLoyaltyPoints(result.loyalty_points);
+        // Garde user.loyalty_points (contexte auth) aligné sur le nouveau solde.
+        refreshUser();
+      } catch (e: any) {
+        if (e?.response?.status === 400) {
+          // Solde insuffisant côté backend
+          const msg = e.response.data?.error ?? 'Solde insuffisant.';
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert('Rachat impossible', msg);
+          return;
+        }
+        // Pas de connexion backend : fallback local pour la démo
+        setLoyaltyPoints((prev) => Math.max(0, prev - 1000));
       }
-      // Nouveau solde = pointsActuels - 500, la barre de progression et les
-      // paliers se recalculent automatiquement (dérivés de loyaltyPoints).
-      setLoyaltyPoints((prev) => Math.max(0, prev - 500));
       if (Platform.OS === 'web') {
         window.alert(t('reservations.loyalty.redeemSuccess'));
       } else {
@@ -1106,7 +1114,7 @@ export default function ReservationsScreen() {
                   })}
                 </View>
 
-                {loyaltyPoints >= 500 ? (
+                {loyaltyPoints >= 1000 ? (
                   <>
                     <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85} onPress={handleRedeemLoyalty}>
                       <Text style={styles.loyaltyCtaText}>{t('reservations.loyalty.ctaText')}</Text>
@@ -1115,7 +1123,7 @@ export default function ReservationsScreen() {
                   </>
                 ) : (
                   <Text style={styles.loyaltyCtaDisabled}>
-                    500 {t('reservations.loyalty.pointsRequired')} ({500 - loyaltyPoints} {t('reservations.loyalty.ctaDisabledSuffix')}
+                    1000 {t('reservations.loyalty.pointsRequired')} ({1000 - loyaltyPoints} {t('reservations.loyalty.ctaDisabledSuffix')}
                   </Text>
                 )}
               </View>
@@ -1493,7 +1501,7 @@ export default function ReservationsScreen() {
             })}
           </View>
 
-          {loyaltyPoints >= 500 ? (
+          {loyaltyPoints >= 1000 ? (
             <>
               <TouchableOpacity style={styles.loyaltyCta} activeOpacity={0.85} onPress={handleRedeemLoyalty}>
                 <Text style={styles.loyaltyCtaText}>{t('reservations.loyalty.ctaText')}</Text>
@@ -1502,7 +1510,7 @@ export default function ReservationsScreen() {
             </>
           ) : (
             <Text style={styles.loyaltyCtaDisabled}>
-              500 {t('reservations.loyalty.pointsRequired')} ({500 - loyaltyPoints} {t('reservations.loyalty.ctaDisabledSuffix')}
+              1000 {t('reservations.loyalty.pointsRequired')} ({1000 - loyaltyPoints} {t('reservations.loyalty.ctaDisabledSuffix')}
             </Text>
           )}
         </View>
