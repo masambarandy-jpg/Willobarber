@@ -301,16 +301,12 @@ export default function ReservationsScreen() {
   const pastList = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
   const hasHistory = pastList.length > 0;
 
-  // Initialise le solde de points une fois le premier chargement terminé.
+  // Sync loyaltyPoints avec le user du contexte auth. Utilise [user] comme
+  // dep (pas [user?.loyalty_points]) pour que l'effet re-tourne à chaque
+  // fois que le contexte émet un nouvel objet user (login, refreshUser, etc.)
   useEffect(() => {
-    if (!hasLoadedOnce) return;
-    setLoyaltyPoints(user?.loyalty_points ?? 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasLoadedOnce]);
-
-  useEffect(() => {
-    setLoyaltyPoints(user?.loyalty_points ?? 0);
-  }, [user?.loyalty_points]);
+    if (user) setLoyaltyPoints(user.loyalty_points ?? 0);
+  }, [user]);
 
   const nextReservation = upcomingList
     .filter((r) => `${r.date}T${r.time}` >= nowKey)
