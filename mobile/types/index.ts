@@ -132,6 +132,7 @@ export interface CreateReservationPayload {
   notes?: string;
   payment_intent_id?: string;
   amount_paid?: number;
+  child_count?: number;
 }
 
 // ─── Review ──────────────────────────────────────────────────────────────────

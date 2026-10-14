@@ -238,12 +238,18 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
   const [cardDetails, setCardDetails] = useState<CardInputDetails>();
   const cardFieldRef = useRef<StripeCardFieldHandle>(null);
 
-  const price   = service ? service.price : 0;
+  // Pour les services "counter" (enfants multiples), le prix total doit
+  // être multiplié par le nombre d'enfants.
+  const isCounter = !!service?.counter;
+  const count = isCounter ? Math.max(1, booking.childCount) : 1;
+  const unitPrice = service ? service.price : 0;
+  const price   = unitPrice * count;
   const deposit = ACOMPTE_FIXE;
   const isFull  = amountChoice === 'full';
   const payNow  = isFull ? price : deposit;
   const solde   = isFull ? 0 : price - deposit;
-  const serviceName = service ? t(`services.svc.${service.id}.name` as TranslationKey) : '—';
+  const baseServiceName = service ? t(`services.svc.${service.id}.name` as TranslationKey) : '—';
+  const serviceName = count > 1 ? `${baseServiceName} × ${count}` : baseServiceName;
 
   const set = (key: keyof CardForm) => (v: string) =>
     onCardFormChange({ ...cardForm, [key]: v });

@@ -84,8 +84,11 @@ export function BookingConfirmation({ booking, reservationId, amountChoice, onGo
     console.log('[CONFIRMATION] reservationId reçu:', reservationId);
   }, [reservationId]);
 
+  const isCounter = !!service?.counter;
+  const count = isCounter ? Math.max(1, booking.childCount) : 1;
+  const unitPrice = service ? service.price : 0;
   const isFullyPaid = amountChoice === 'full';
-  const price   = service ? service.price : 0;
+  const price   = unitPrice * count;
   const deposit = isFullyPaid ? price : ACOMPTE_FIXE;
   const solde   = isFullyPaid ? 0 : price - deposit;
   const paidLabel = isFullyPaid ? t('bookingConfirm.fullyPaid') : t('bookingConfirm.depositPaid');
@@ -288,7 +291,10 @@ export function BookingConfirmation({ booking, reservationId, amountChoice, onGo
             <Text style={styles.cardTitle}>{t('bookingConfirm.paymentRecapTitle')}</Text>
           </View>
 
-          <RecapLine label={serviceName ?? '—'} value={fmtPrice(price)} />
+          <RecapLine
+            label={count > 1 ? `${serviceName ?? '—'} × ${count}` : (serviceName ?? '—')}
+            value={fmtPrice(price)}
+          />
           <RecapLine label={paidLabel} value={`-${fmtPrice(deposit)}`} negative />
 
           <View style={styles.recapSep} />
@@ -332,7 +338,7 @@ export function BookingConfirmation({ booking, reservationId, amountChoice, onGo
 
         {/* ── Points gagnés ─────────────────────────────────────────────── */}
         {service && (() => {
-          const earned     = Math.round(service.price * 2);
+          const earned     = Math.round(service.price * 2) * count;
           // user.loyalty_points est déjà le NOUVEAU total après refreshUser()
           // appelé dans book.tsx après la création de la réservation.
           // Si refreshUser n'a pas encore répondu, on retombe sur earned seul.

@@ -286,8 +286,31 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
   const closedPeriod = selectedDate ? findClosedPeriod(selectedDate, closedPeriods) : null;
 
   const slotAvailable = (slot: string) => {
-    if (service && !isSlotAvailable(slot, service.dur)) return false;
-    return !bookedTimes.has(slot);
+    if (!service) return !bookedTimes.has(slot);
+    if (!isSlotAvailable(slot, service.dur)) return false;
+
+    // Pour les services "counter" (enfants multiples), on doit s'assurer
+    // que N créneaux consécutifs sont libres pour éviter que le coiffeur
+    // déborde sur le créneau d'un autre client.
+    const count = service.counter ? Math.max(1, booking.childCount) : 1;
+    if (count === 1) {
+      return !bookedTimes.has(slot);
+    }
+
+    // Trouve l'index du créneau dans ALL_SLOTS puis vérifie les N suivants
+    const startIdx = ALL_SLOTS.indexOf(slot);
+    if (startIdx === -1) return !bookedTimes.has(slot);
+
+    for (let i = 0; i < count; i++) {
+      const candidate = ALL_SLOTS[startIdx + i];
+      // Si on dépasse la grille (fin de journée), impossible
+      if (!candidate) return false;
+      // Si on dépasse l'horaire de fermeture, impossible
+      if (!isSlotAvailable(candidate, service.dur)) return false;
+      // Si le créneau est déjà pris, impossible
+      if (bookedTimes.has(candidate)) return false;
+    }
+    return true;
   };
 
   const dayFull = Boolean(
