@@ -332,11 +332,13 @@ export function BookingConfirmation({ booking, reservationId, amountChoice, onGo
 
         {/* ── Points gagnés ─────────────────────────────────────────────── */}
         {service && (() => {
-          const earned      = service.price * 10;
-          const mockCurrent = 980;
-          const newTotal    = mockCurrent + earned;
-          const nextReward  = 1000;
-          const remaining   = Math.max(nextReward - newTotal, 0);
+          const earned     = Math.round(service.price * 2);
+          // user.loyalty_points est déjà le NOUVEAU total après refreshUser()
+          // appelé dans book.tsx après la création de la réservation.
+          // Si refreshUser n'a pas encore répondu, on retombe sur earned seul.
+          const newTotal   = user?.loyalty_points ?? earned;
+          const nextReward = 1000;
+          const remaining  = newTotal >= nextReward ? 0 : nextReward - newTotal;
           return (
             <View style={styles.pointsCard}>
               <View style={styles.pointsCardHeader}>
