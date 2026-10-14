@@ -1060,7 +1060,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web'
       ? ({
           backgroundColor: 'transparent',
-          outline: 'none',
+          outlineStyle: 'none',
           WebkitAppearance: 'none',
         } as any)
       : {}),

@@ -4,7 +4,6 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { format, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { File, Paths } from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
 import type { ClientMedia } from '@/services/api';
 
 function formatMediaDate(createdAt: string): string {
@@ -24,6 +23,7 @@ async function downloadMedia(item: ClientMedia, showToast: (message: string) => 
   }
 
   try {
+    const MediaLibrary = require('expo-media-library');
     const { status } = await MediaLibrary.requestPermissionsAsync();
     if (status !== 'granted') {
       showToast("Accès à la galerie refusé.");
