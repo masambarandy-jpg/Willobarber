@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Platform,
   ScrollView,
@@ -15,6 +15,8 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { StripeCardField } from './StripeCardField';
 import type { CardInputDetails, StripeCardFieldHandle } from './StripeCardField.types';
 import type { TranslationKey } from '@/i18n/translations';
+import { paymentMethodsApi } from '@/services/api';
+import type { SavedPaymentMethod } from '@/types';
 import {
   ACOMPTE_FIXE,
   fmtPrice,
@@ -218,6 +220,26 @@ const fStyles = StyleSheet.create({
   },
 });
 
+const BRAND_LABELS: Record<string, string> = {
+  visa: 'Visa',
+  mastercard: 'Mastercard',
+  amex: 'American Express',
+};
+
+export function formatSavedCard(card: SavedPaymentMethod, expLabel: string): string {
+  const brand = BRAND_LABELS[card.brand] ?? card.brand.charAt(0).toUpperCase() + card.brand.slice(1);
+  const exp = `${String(card.exp_month).padStart(2, '0')}/${String(card.exp_year).slice(-2)}`;
+  return `${brand} •••• ${card.last4} (${expLabel} ${exp})`;
+}
+
+function Radio({ on }: { on: boolean }) {
+  return (
+    <View style={[styles.radio, on && styles.radioOn]}>
+      {on && <View style={styles.radioDot} />}
+    </View>
+  );
+}
+
 export interface Step4PaymentHandle {
   pay: () => Promise<string>;
 }
@@ -237,6 +259,25 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
   const { t } = useLanguage();
   const [cardDetails, setCardDetails] = useState<CardInputDetails>();
   const cardFieldRef = useRef<StripeCardFieldHandle>(null);
+  // Cartes mémorisées chez Stripe : la plus récente est présélectionnée.
+  // null = nouvelle carte (formulaire). Un client sans carte enregistrée (ou si
+  // l'appel échoue) voit le formulaire exactement comme avant.
+  const [savedCards, setSavedCards] = useState<SavedPaymentMethod[]>([]);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    paymentMethodsApi.list()
+      .then((cards) => {
+        if (cancelled || !cards.length) return;
+        setSavedCards(cards);
+        setSelectedCardId(cards[0].id);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Pour les services "counter" (enfants multiples), le prix total doit
   // être multiplié par le nombre d'enfants.
@@ -256,6 +297,9 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
 
   useImperativeHandle(ref, () => ({
     pay: async () => {
+      if (selectedCardId && cardFieldRef.current) {
+        return cardFieldRef.current.pay(payNow, cardForm, selectedCardId);
+      }
       if (!cardDetails?.complete || !cardFieldRef.current) {
         throw new Error(t('step4.cardIncomplete'));
       }
@@ -422,18 +466,50 @@ export const Step4Payment = forwardRef<Step4PaymentHandle, Props>(function Step4
            n'a alors qu'un minimum de contenu à révéler quand le clavier s'ouvre) ─── */}
       {paymentMethod === 'card' ? (
         <View style={styles.card}>
-          <BankCard cardForm={cardForm} cardDetails={cardDetails} />
+          {savedCards.length > 0 && (
+            <View style={styles.savedBlock} testID="saved-cards">
+              <Text style={styles.cardFieldsLabel}>{t('step4.savedCardsTitle')}</Text>
+              {savedCards.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[styles.savedRow, selectedCardId === c.id && styles.savedRowActive]}
+                  onPress={() => setSelectedCardId(c.id)}
+                  activeOpacity={0.85}
+                  testID="saved-card"
+                >
+                  <Radio on={selectedCardId === c.id} />
+                  <Text style={styles.savedRowText}>💳 {formatSavedCard(c, t('step4.savedCardExp'))}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[styles.savedRow, selectedCardId === null && styles.savedRowActive]}
+                onPress={() => setSelectedCardId(null)}
+                activeOpacity={0.85}
+                testID="use-new-card"
+              >
+                <Radio on={selectedCardId === null} />
+                <Text style={[styles.savedRowText, { color: GOLD }]}>{t('step4.useNewCard')}</Text>
+              </TouchableOpacity>
+              {selectedCardId && <Text style={styles.cardFieldHint}>{t('step4.savedCardHint')}</Text>}
+            </View>
+          )}
+          {!selectedCardId && <BankCard cardForm={cardForm} cardDetails={cardDetails} />}
           <View style={styles.cardFieldsBlock}>
-            <Text style={styles.cardFieldsLabel}>
-              {t('step4.cardNumberLabel')} · {t('step4.cardExpiryLabel')} · {t('step4.cvcLabel')}
-            </Text>
+            {!selectedCardId && (
+              <Text style={styles.cardFieldsLabel}>
+                {t('step4.cardNumberLabel')} · {t('step4.cardExpiryLabel')} · {t('step4.cvcLabel')}
+              </Text>
+            )}
+            {/* Toujours monté (instance Stripe requise pour un éventuel 3DS sur
+                carte enregistrée) ; seul le formulaire est masqué. */}
             <StripeCardField
               ref={cardFieldRef}
               incompleteMessage={t('step4.cardIncomplete')}
               onChange={setCardDetails}
+              hideForm={!!selectedCardId}
             />
           </View>
-          <Text style={styles.cardFieldHint}>{t('step4.cardFieldHint')}</Text>
+          {!selectedCardId && <Text style={styles.cardFieldHint}>{t('step4.cardFieldHint')}</Text>}
         </View>
       ) : (
         <View style={styles.card}>
@@ -570,6 +646,49 @@ const styles = StyleSheet.create({
 
   cardFieldsBlock: {
     marginTop: 2,
+  },
+  savedBlock: {
+    marginBottom: 18,
+    gap: 8,
+  },
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  savedRowActive: {
+    borderColor: GOLD,
+    backgroundColor: 'rgba(201,168,76,0.08)',
+  },
+  savedRowText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOn: {
+    borderColor: GOLD,
+  },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: GOLD,
   },
   cardFieldsLabel: {
     fontSize: 10,

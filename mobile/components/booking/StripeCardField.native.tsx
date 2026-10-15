@@ -20,12 +20,26 @@ const cardFieldStyle: CardFieldInput.Styles = {
 };
 
 export const StripeCardField = forwardRef<StripeCardFieldHandle, StripeCardFieldProps>(
-  function StripeCardField({ onChange, incompleteMessage }, ref) {
+  function StripeCardField({ onChange, incompleteMessage, hideForm }, ref) {
     const { confirmPayment } = useConfirmPayment();
     const detailsRef = useRef<CardFieldInput.Details | undefined>(undefined);
 
     useImperativeHandle(ref, () => ({
-      pay: async (amount, cardForm) => {
+      pay: async (amount, cardForm, savedPaymentMethodId) => {
+        if (savedPaymentMethodId) {
+          const intent = await paymentsApi.createPaymentIntent(amount, 'eur', savedPaymentMethodId);
+          if (intent.status === 'succeeded' && intent.paymentIntentId) return intent.paymentIntentId;
+          // requires_action : 3DS exigé par la banque malgré la carte
+          // enregistrée → confirmation dans l'app, qui affiche le challenge.
+          const { paymentIntent, error } = await confirmPayment(intent.clientSecret, {
+            paymentMethodType: 'Card',
+            paymentMethodData: { paymentMethodId: savedPaymentMethodId },
+          });
+          if (error) throw new Error(error.message);
+          if (!paymentIntent || paymentIntent.status !== 'Succeeded') throw new Error(incompleteMessage);
+          return paymentIntent.id;
+        }
+
         if (!detailsRef.current?.complete) {
           throw new Error(incompleteMessage);
         }
@@ -53,6 +67,8 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, StripeCardField
         return paymentIntent.id;
       },
     }));
+
+    if (hideForm) return null;
 
     return (
       <CardField

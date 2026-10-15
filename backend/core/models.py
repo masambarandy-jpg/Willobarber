@@ -36,6 +36,8 @@ class User(AbstractUser):
     # Dernière notification de recommandation (recommendation ou
     # seasonal_reminder) envoyée par la tâche quotidienne : limite à 1 par semaine.
     last_reco_sent_at = models.DateTimeField(null=True, blank=True)
+    # Customer Stripe du client (cartes mémorisées). Créé au 1er paiement.
+    stripe_customer_id = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return f"{self.username} ({self.role})"

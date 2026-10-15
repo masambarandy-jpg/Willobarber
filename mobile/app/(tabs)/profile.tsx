@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -16,11 +16,13 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { authApi, recommendationsApi } from '@/services/api';
+import { authApi, paymentMethodsApi, recommendationsApi } from '@/services/api';
+import { formatSavedCard } from '@/components/booking/Step4Payment';
+import type { SavedPaymentMethod } from '@/types';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { LegalModal } from '@/components/LegalModal';
@@ -186,6 +188,45 @@ export default function ProfileScreen() {
       clearTimeout(hideTimer);
     };
   }, [isAuthenticated, aiRec]);
+
+  // Cartes mémorisées chez Stripe — rechargées à chaque retour sur l'onglet
+  // (une carte a pu être enregistrée par un paiement entre-temps).
+  const [savedCards, setSavedCards] = useState<SavedPaymentMethod[]>([]);
+  const [removingCardId, setRemovingCardId] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) {
+        setSavedCards([]);
+        return;
+      }
+      paymentMethodsApi.list().then(setSavedCards).catch(() => {});
+    }, [isAuthenticated])
+  );
+
+  const removeCard = async (card: SavedPaymentMethod) => {
+    setRemovingCardId(card.id);
+    try {
+      await paymentMethodsApi.remove(card.id);
+      setSavedCards((prev) => prev.filter((c) => c.id !== card.id));
+    } catch {
+      Alert.alert(t('common.error'), 'Impossible de supprimer cette carte pour le moment.');
+    } finally {
+      setRemovingCardId(null);
+    }
+  };
+
+  const confirmRemoveCard = (card: SavedPaymentMethod) => {
+    const message = `Supprimer la carte ${formatSavedCard(card, 'exp')} ?`;
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) removeCard(card);
+      return;
+    }
+    Alert.alert('Supprimer la carte', message, [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => removeCard(card) },
+    ]);
+  };
 
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -435,6 +476,37 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Moyens de paiement (cartes Stripe mémorisées) */}
+        <View style={styles.settingCard} testID="payment-methods-section">
+          <SectionTitle label="Mes moyens de paiement" />
+          <View style={styles.settingDivider} />
+          {savedCards.length === 0 ? (
+            <Text style={styles.paymentEmpty}>
+              Aucune carte enregistrée. Votre carte sera mémorisée lors de votre prochain paiement.
+            </Text>
+          ) : (
+            savedCards.map((card, i) => (
+              <React.Fragment key={card.id}>
+                {i > 0 && <View style={styles.settingDivider} />}
+                <SettingRow
+                  icon="💳"
+                  label={formatSavedCard(card, 'exp')}
+                  rightElement={
+                    <TouchableOpacity
+                      onPress={() => confirmRemoveCard(card)}
+                      disabled={removingCardId === card.id}
+                      hitSlop={10}
+                      testID="delete-card"
+                    >
+                      <Text style={[styles.cardDelete, removingCardId === card.id && { opacity: 0.4 }]}>🗑️</Text>
+                    </TouchableOpacity>
+                  }
+                />
+              </React.Fragment>
+            ))
+          )}
+        </View>
+
         {/* Info */}
         <View style={styles.settingCard}>
           <SectionTitle label={t('profile.info.title')} />
@@ -676,6 +748,9 @@ const styles = StyleSheet.create({
   settingLabel: { fontSize: 14.5, color: '#fff' },
   settingValue: { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 },
   settingArrow: { fontSize: 20, color: 'rgba(255,255,255,0.35)' },
+
+  paymentEmpty: { fontSize: 13, color: '#6B6560', lineHeight: 19, paddingVertical: 12 },
+  cardDelete: { fontSize: 18 },
 
   // AI recommendation card
   aiCard: {

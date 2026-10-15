@@ -18,6 +18,7 @@ import type {
   WaitingListEntry,
   RecommendationResponse,
   ClientNotification,
+  SavedPaymentMethod,
   ClosedPeriod,
   ClientStatus,
   CoiffeurClient,
@@ -258,10 +259,22 @@ export const checkinApi = {
 
 // ─── Payments API ────────────────────────────────────────────────────────────
 
+export interface PaymentIntentResponse {
+  clientSecret: string;
+  // 'succeeded' : carte enregistrée débitée côté serveur, rien à confirmer.
+  // 'requires_action' : la banque exige une authentification 3DS.
+  status?: string;
+  paymentIntentId?: string;
+}
+
 export const paymentsApi = {
-  createPaymentIntent: (amount: number, currency: string = 'eur') =>
+  createPaymentIntent: (amount: number, currency: string = 'eur', paymentMethodId?: string) =>
     http
-      .post<{ clientSecret: string }>('/payments/create-payment-intent/', { amount, currency })
+      .post<PaymentIntentResponse>('/payments/create-payment-intent/', {
+        amount,
+        currency,
+        ...(paymentMethodId ? { payment_method: paymentMethodId } : {}),
+      })
       .then((r) => {
         console.log(
           'CLIENT SECRET:', r.data.clientSecret,
@@ -269,6 +282,14 @@ export const paymentsApi = {
         );
         return r.data;
       }),
+};
+
+// ─── Cartes enregistrées (Stripe Customer) ───────────────────────────────────
+
+export const paymentMethodsApi = {
+  list: () => http.get<SavedPaymentMethod[]>('/auth/me/payment-methods/').then((r) => r.data),
+
+  remove: (id: string) => http.delete(`/auth/me/payment-methods/${id}/`),
 };
 
 // ─── Reviews API ─────────────────────────────────────────────────────────────

@@ -273,6 +273,16 @@ export interface RecommendationResponse {
   suggested_slots: SuggestedSlot[];
 }
 
+// ─── Cartes enregistrées (GET /auth/me/payment-methods/) ─────────────────────
+
+export interface SavedPaymentMethod {
+  id: string; // pm_…
+  brand: string; // visa, mastercard, amex…
+  last4: string;
+  exp_month: number;
+  exp_year: number;
+}
+
 // ─── Notifications client (GET /client-notifications/ + SSE /sse/client/) ────
 
 export type ClientNotificationType = 'recommendation' | 'seasonal_reminder' | 'invoice';
