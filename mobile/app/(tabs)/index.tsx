@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Asset } from 'expo-asset';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
 import { useAuth } from '@/hooks/useAuth';
 import { useCart } from '@/contexts/CartContext';
@@ -56,11 +57,16 @@ type Produit = {
   prix: number;
 };
 
+// Photos retouchées aux couleurs WilloBarber (originaux dans
+// assets/images/products/_backup/). `photo` reste une URI : le panier
+// l'affiche avec <Image source={{ uri }}>.
+const localPhoto = (asset: number) => Asset.fromModule(asset).uri;
+
 const PRODUITS_META = [
-  { id: 'cire', popular: true, photo: 'https://images.unsplash.com/photo-1775127741095-86ee33b6b385?w=600&q=80', contenance: '75 ml', prix: 18 },
-  { id: 'huile', popular: false, photo: 'https://images.unsplash.com/photo-1777740732168-8ca9b34c975c?w=600&q=80', contenance: '30 ml', prix: 24 },
+  { id: 'cire', popular: true, photo: localPhoto(require('@/assets/images/products/cire.jpg')), contenance: '75 ml', prix: 18 },
+  { id: 'huile', popular: false, photo: localPhoto(require('@/assets/images/products/huile.jpg')), contenance: '30 ml', prix: 24 },
   { id: 'serum', popular: true, photo: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80', contenance: '30 ml', prix: 32 },
-  { id: 'pommade', popular: false, photo: 'https://images.unsplash.com/photo-1775126250972-9321ca2d110b?w=600&q=80', contenance: '100 ml', prix: 22 },
+  { id: 'pommade', popular: false, photo: localPhoto(require('@/assets/images/products/pommade.jpg')), contenance: '100 ml', prix: 22 },
 ];
 
 const PRODUITS_CARD_W = 300;
