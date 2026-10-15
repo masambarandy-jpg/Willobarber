@@ -11,6 +11,7 @@ import Avatar from '@/components/coiffeur/Avatar';
 import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
+import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
 
 // jsPDF s'appuie sur des API navigateur indisponibles sur iOS/Android natif
 // (Expo Go) — un import statique fait planter l'app au chargement du module,
@@ -165,6 +166,8 @@ function formatDisplayName(raw: string): string {
 }
 
 function useDashboardData() {
+  // Incrémenté par le flux SSE à chaque RDV créé/annulé/modifié → rechargement.
+  const { reservationsVersion } = useCoiffeurNotifications();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(MOCK_STATS);
   const [upcomingClients, setUpcomingClients] = useState<UpcomingClient[]>(MOCK_UPCOMING_CLIENTS);
@@ -398,7 +401,7 @@ function useDashboardData() {
     })();
 
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, reservationsVersion]);
 
   return {
     loading,

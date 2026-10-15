@@ -223,6 +223,25 @@ export interface CoiffeurClient {
   deletion_reason: string;
 }
 
+// ─── Notifications coiffeur & temps réel (SSE) ───────────────────────────────
+
+// Notification.data côté backend (signals.reservation_payload). Tous les champs
+// sont optionnels : les notifications antérieures à ce champ ont data = {}.
+export interface ReservationNotificationData {
+  reservation_id?: number;
+  client_name?: string;
+  client_phone?: string;
+  service_name?: string;
+  barber_name?: string;
+  date?: string; // YYYY-MM-DD
+  time?: string; // HH:MM
+  price?: number;
+  status?: string;
+}
+
+// Événements poussés par GET /api/sse/coiffeur/<id>/ (backend/core/sse.py).
+export type CoiffeurSseEvent = 'new_reservation' | 'reservation_cancelled' | 'reservation_updated';
+
 // ─── AI Recommendations ───────────────────────────────────────────────────────
 
 export interface AiRecommendationResponse {
