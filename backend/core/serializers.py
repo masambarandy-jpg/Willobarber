@@ -156,8 +156,8 @@ class NotificationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Notification
-        fields = ['id', 'type', 'title', 'desc', 'time', 'section', 'unread', 'is_read', 'created_at']
-        read_only_fields = ['type', 'title', 'desc', 'created_at']
+        fields = ['id', 'type', 'title', 'desc', 'data', 'time', 'section', 'unread', 'is_read', 'created_at']
+        read_only_fields = ['type', 'title', 'desc', 'data', 'created_at']
 
     def get_time(self, obj):
         return timezone.localtime(obj.created_at).strftime('%H:%M')

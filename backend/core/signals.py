@@ -1,27 +1,37 @@
+from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
-from .models import Notification, Reservation, Review, User
+from . import sse
+from .models import Notification, Reservation, Review
+from .serializers import NotificationSerializer
 
-AT_RISK_THRESHOLD = 3
-AT_RISK_STATUSES = ('cancelled', 'cancelled_client', 'no_show')
+# Reservation n'a pas de champ barbier (agenda unique) : même valeur que
+# l'email de confirmation envoyé dans ReservationViewSet.perform_create.
+SALON_BARBER_NAME = 'Willo'
+CANCELLED_STATUSES = ('cancelled', 'cancelled_client')
 
 
-@receiver(post_save, sender=Reservation)
-def flag_client_at_risk(sender, instance, **kwargs):
-    if instance.status not in AT_RISK_STATUSES:
-        return
+def reservation_payload(reservation):
+    user = reservation.user
+    return {
+        'reservation_id': reservation.id,
+        'client_name': f"{user.first_name} {user.last_name}".strip() or user.username,
+        'client_phone': user.phone or '',
+        'service_name': reservation.service.name,
+        'barber_name': SALON_BARBER_NAME,
+        'date': reservation.date.isoformat(),
+        'time': reservation.time.strftime('%H:%M'),
+        'price': float(reservation.service.price),
+        'status': reservation.status,
+    }
 
-    user = instance.user
-    if user.is_at_risk:
-        return
 
-    incident_count = Reservation.objects.filter(
-        user=user, status__in=AT_RISK_STATUSES,
-    ).count()
-
-    if incident_count >= AT_RISK_THRESHOLD:
-        User.objects.filter(pk=user.pk).update(is_at_risk=True)
+def _publish_after_commit(event, payload):
+    # La création de résa tourne dans un transaction.atomic() (cf.
+    # ReservationViewSet.create) : publier avant le commit laisserait le
+    # coiffeur recharger le planning sans y trouver le nouveau RDV.
+    transaction.on_commit(lambda: sse.publish(event, payload))
 
 
 @receiver(pre_save, sender=Reservation)
@@ -37,24 +47,37 @@ def stash_old_reservation_status(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Reservation)
 def notify_on_reservation_change(sender, instance, created, **kwargs):
-    client_name = f"{instance.user.first_name} {instance.user.last_name}".strip() or instance.user.username
-    heure = instance.time.strftime('%H:%M')
+    payload = reservation_payload(instance)
+    desc = f"{payload['client_name']} · {payload['service_name']} · {payload['time']}"
 
     if created:
-        Notification.objects.create(
+        notification = Notification.objects.create(
             type='rdv',
             title='Nouveau rendez-vous',
-            desc=f"{client_name} · {instance.service.name} · {heure}",
+            desc=desc,
+            data=payload,
         )
+        _publish_after_commit('new_reservation', {
+            **payload,
+            'notification': NotificationSerializer(notification).data,
+        })
         return
 
     old_status = getattr(instance, '_old_status', None)
-    if instance.status == 'cancelled_client' and old_status != 'cancelled_client':
-        Notification.objects.create(
-            type='annulation',
-            title='Rendez-vous annulé',
-            desc=f"{client_name} · {instance.service.name} · {heure}",
-        )
+    if instance.status in CANCELLED_STATUSES and old_status not in CANCELLED_STATUSES:
+        event = {'reservation_id': instance.id, 'barber_id': None}
+        if instance.status == 'cancelled_client':
+            notification = Notification.objects.create(
+                type='annulation',
+                title='Rendez-vous annulé',
+                desc=desc,
+                data=payload,
+            )
+            event['notification'] = NotificationSerializer(notification).data
+        _publish_after_commit('reservation_cancelled', event)
+        return
+
+    _publish_after_commit('reservation_updated', payload)
 
 
 @receiver(post_save, sender=Review)
