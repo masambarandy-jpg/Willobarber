@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
-from . import views
+from . import sse, views
 from .views import (
     BarbershopViewSet, BarberViewSet, ServiceViewSet, ReservationViewSet, ClosedPeriodViewSet,
     WaitingListViewSet, BarberLeaveViewSet, NotificationViewSet,
@@ -59,6 +59,7 @@ urlpatterns = [
     path('clients/<int:pk>/status/', views.update_client_status, name='client-status'),
     path('clients/<int:pk>/', views.delete_client, name='client-delete'),
     path('reminders/send/', views.send_reminders, name='reminders-send'),
+    path('sse/coiffeur/<int:barber_id>/', sse.coiffeur_stream, name='sse-coiffeur'),
     path('reviews/client/', views.my_reviews, name='reviews-client'),
     path('reviews/<int:pk>/reply/', views.reply_to_review, name='review-reply'),
     path('reviews/', views.ReviewListCreateView.as_view(), name='reviews'),

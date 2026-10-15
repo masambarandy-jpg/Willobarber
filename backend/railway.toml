@@ -2,4 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python manage.py migrate && python manage.py seed_jours_feries && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
+# 1 seul worker (le broker SSE de core/sse.py est en mémoire, partagé par
+# processus) mais des threads : chaque flux SSE coiffeur occupe un thread en
+# permanence, un worker sync unique bloquerait toutes les autres requêtes.
+startCommand = "python manage.py migrate && python manage.py seed_jours_feries && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 32"
