@@ -242,12 +242,57 @@ export interface ReservationNotificationData {
 // Événements poussés par GET /api/sse/coiffeur/<id>/ (backend/core/sse.py).
 export type CoiffeurSseEvent = 'new_reservation' | 'reservation_cancelled' | 'reservation_updated';
 
-// ─── AI Recommendations ───────────────────────────────────────────────────────
+// ─── Recommandations (GET /recommendations/, backend/core/recommendations.py) ─
 
-export interface AiRecommendationResponse {
-  recommendations: unknown[] | Record<string, unknown>;
-  ai_text: string | null;
-  message?: string;
+export interface SuggestedSlot {
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  service_id: number;
+  is_preferred: boolean;
+  reason: string;
+}
+
+export interface ClientHabits {
+  visits_count: number;
+  last_visit_date: string | null;
+  days_since_last_visit: number | null;
+  avg_interval_days: number | null;
+  favorite_service: { id: number; name: string; price: number; duration: number } | null;
+  favorite_weekday: number | null; // 0 = lundi
+  favorite_weekday_label: string | null;
+  favorite_time: string | null;
+  favorite_hour: number | null;
+  next_expected_date: string | null;
+  confidence: 'high' | 'medium' | null;
+}
+
+export interface RecommendationResponse {
+  type: 'regular' | 'seasonal' | 'none';
+  message: string | null;
+  habits: ClientHabits;
+  suggested_slots: SuggestedSlot[];
+}
+
+// ─── Notifications client (GET /client-notifications/ + SSE /sse/client/) ────
+
+export type ClientNotificationType = 'recommendation' | 'seasonal_reminder' | 'invoice';
+
+export interface ClientNotification {
+  id: number;
+  type: ClientNotificationType;
+  title: string;
+  desc: string;
+  data: {
+    suggested_slots?: SuggestedSlot[];
+    habits?: ClientHabits;
+    days_since_last_visit?: number;
+    reservation_id?: number;
+    invoice_number?: string;
+    invoice_url?: string;
+    amount_paid?: number;
+  };
+  unread: boolean;
+  created_at: string;
 }
 
 // ─── API Generic ─────────────────────────────────────────────────────────────

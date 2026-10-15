@@ -33,6 +33,9 @@ class User(AbstractUser):
     deletion_reason = models.CharField(max_length=20, blank=True, default='')
     two_factor_enabled = models.BooleanField(default=False)
     loyalty_points = models.IntegerField(default=0)
+    # Dernière notification de recommandation (recommendation ou
+    # seasonal_reminder) envoyée par la tâche quotidienne : limite à 1 par semaine.
+    last_reco_sent_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.username} ({self.role})"
@@ -223,10 +226,18 @@ class Notification(models.Model):
         ('paiement', 'Paiement'),
         ('annulation', 'Annulation'),
         ('rappel', 'Rappel'),
+        # Notifications client (user renseigné).
+        ('recommendation', 'Recommandation'),
+        ('seasonal_reminder', 'Rappel de visite'),
+        ('invoice', 'Facture'),
     ]
 
-    # Pas de FK vers User : ces notifications sont destinées au coiffeur/gérant
-    # uniquement (dashboard IsStaffRole), pas à un client en particulier.
+    # user NULL = notification du coiffeur/gérant (dashboard IsStaffRole, comportement
+    # historique) ; user renseigné = notification destinée à ce client uniquement.
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='client_notifications',
+    )
     type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     title = models.CharField(max_length=255)
     desc = models.CharField(max_length=500)

@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from . import sse, views
 from .views import (
     BarbershopViewSet, BarberViewSet, ServiceViewSet, ReservationViewSet, ClosedPeriodViewSet,
-    WaitingListViewSet, BarberLeaveViewSet, NotificationViewSet,
+    WaitingListViewSet, BarberLeaveViewSet, NotificationViewSet, ClientNotificationViewSet,
 )
 
 router = DefaultRouter()
@@ -16,6 +16,7 @@ router.register(r'closed-periods', ClosedPeriodViewSet)
 router.register(r'waiting-list', WaitingListViewSet)
 router.register(r'barber-leaves', BarberLeaveViewSet)
 router.register(r'notifications', NotificationViewSet)
+router.register(r'client-notifications', ClientNotificationViewSet, basename='client-notification')
 
 urlpatterns = [
     path('export/pdf/', views.export_reservations_pdf, name='export-pdf'),
@@ -44,6 +45,8 @@ urlpatterns = [
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('appointments/check-client/', views.CheckClientView.as_view(), name='check-client'),
     path('recommendations/', views.recommendations, name='recommendations'),
+    path('tasks/run-recommendations/', views.run_recommendations_task, name='run-recommendations'),
+    path('invoices/<str:token>/', views.download_online_invoice, name='online-invoice-download'),
     path('loyalty/redeem/', views.redeem_loyalty, name='redeem-loyalty'),
     path('payments/create-payment-intent/', views.create_payment_intent, name='create-payment-intent'),
     path('reservations/<int:pk>/send-final-invoice/', views.send_final_invoice, name='send-final-invoice'),
@@ -60,6 +63,7 @@ urlpatterns = [
     path('clients/<int:pk>/', views.delete_client, name='client-delete'),
     path('reminders/send/', views.send_reminders, name='reminders-send'),
     path('sse/coiffeur/<int:barber_id>/', sse.coiffeur_stream, name='sse-coiffeur'),
+    path('sse/client/', sse.client_stream, name='sse-client'),
     path('reviews/client/', views.my_reviews, name='reviews-client'),
     path('reviews/<int:pk>/reply/', views.reply_to_review, name='review-reply'),
     path('reviews/', views.ReviewListCreateView.as_view(), name='reviews'),

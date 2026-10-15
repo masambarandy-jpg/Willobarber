@@ -153,6 +153,9 @@ AUTH_USER_MODEL = 'core.User'
 
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
 
+# Secret partagé avec cron-job.org (header X-CRON-TOKEN de /tasks/run-recommendations/).
+CRON_TOKEN = os.environ.get('CRON_TOKEN')
+
 TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
