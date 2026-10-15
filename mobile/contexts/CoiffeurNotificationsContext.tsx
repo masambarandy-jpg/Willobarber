@@ -144,6 +144,7 @@ type ApiNotif = {
   time: string;
   section: Section;
   unread: boolean;
+  created_at?: string;
 };
 
 type ReservationEvent = ReservationNotificationData & { notification?: ApiNotif };
@@ -156,23 +157,46 @@ function formatRdvDate(isoDate?: string): string | undefined {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+// `time` et `section` renvoyés par l'API sont calculés dans le fuseau du
+// serveur (UTC sur Railway) : on les recalcule en heure locale à partir de
+// created_at (ISO 8601 en UTC, suffixe Z). On ne retombe sur les valeurs
+// serveur que si created_at manque ou est illisible.
+function parseCreatedAt(iso?: string): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function localSection(d: Date): Section {
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear()
+    && d.getMonth() === now.getMonth()
+    && d.getDate() === now.getDate();
+  return sameDay ? "AUJOURD'HUI" : 'HIER';
+}
+
 function mapApiNotif(n: ApiNotif): Notif {
   const d = n.data ?? {};
+  const createdAt = parseCreatedAt(n.created_at);
+  const time = createdAt
+    ? createdAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    : n.time;
   return {
     id: String(n.id),
     type: n.type,
     title: n.title,
     desc: n.desc,
-    time: n.time,
-    section: n.section,
+    time,
+    section: createdAt ? localSection(createdAt) : n.section,
     unread: n.unread,
     client: d.client_name || undefined,
     service: d.service_name || undefined,
     barber: d.barber_name || undefined,
     date: formatRdvDate(d.date),
+    // Heure du RDV : TimeField naïf déjà en heure du salon → affichée telle quelle.
     rdvTime: d.time || undefined,
     phone: d.client_phone || undefined,
-    cancelledAt: n.type === 'annulation' ? n.time : undefined,
+    cancelledAt: n.type === 'annulation' ? time : undefined,
   };
 }
 
