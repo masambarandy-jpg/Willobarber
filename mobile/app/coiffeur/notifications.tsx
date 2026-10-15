@@ -72,13 +72,18 @@ function NotifCard({ n, onPress }: { n: Notif; onPress: () => void }) {
   );
 }
 
-function DetailRow({ emoji, label, value }: { emoji: string; label: string; value: string }) {
+// Les notifications antérieures à Notification.data n'ont aucun détail : on
+// affiche un libellé explicite plutôt qu'une ligne vide.
+const NOT_PROVIDED = 'Non renseigné';
+
+function DetailRow({ emoji, label, value }: { emoji: string; label: string; value?: string }) {
+  const display = value?.trim() ? value : NOT_PROVIDED;
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailEmoji}>{emoji}</Text>
       <View style={styles.detailTextWrap}>
         <Text style={styles.detailLabel}>{label}</Text>
-        <Text style={styles.detailValue}>{value}</Text>
+        <Text style={[styles.detailValue, display === NOT_PROVIDED && styles.detailValueMissing]}>{display}</Text>
       </View>
     </View>
   );
@@ -183,21 +188,25 @@ export default function CoiffeurNotificationsScreen() {
 
                 {selectedNotif.type === 'rdv' && (
                   <>
-                    <DetailRow emoji="👤" label="Client" value={selectedNotif.client ?? ''} />
-                    <DetailRow emoji="✂️" label="Prestation" value={selectedNotif.service ?? ''} />
-                    <DetailRow emoji="👨" label="Coiffeur" value={selectedNotif.barber ?? ''} />
-                    <DetailRow emoji="📅" label="Date" value={selectedNotif.date ?? ''} />
-                    <DetailRow emoji="🕐" label="Heure" value={selectedNotif.time} />
-                    <DetailRow emoji="📞" label="Téléphone" value={selectedNotif.phone ?? ''} />
+                    <DetailRow emoji="👤" label="Client" value={selectedNotif.client} />
+                    <DetailRow emoji="✂️" label="Prestation" value={selectedNotif.service} />
+                    <DetailRow emoji="👨" label="Coiffeur" value={selectedNotif.barber} />
+                    <DetailRow emoji="📅" label="Date" value={selectedNotif.date} />
+                    <DetailRow emoji="🕐" label="Heure" value={selectedNotif.rdvTime} />
+                    <DetailRow emoji="📞" label="Téléphone" value={selectedNotif.phone} />
                   </>
                 )}
 
                 {selectedNotif.type === 'annulation' && (
                   <>
-                    <DetailRow emoji="👤" label="Client" value={selectedNotif.client ?? ''} />
-                    <DetailRow emoji="✂️" label="Prestation" value={selectedNotif.service ?? ''} />
-                    <DetailRow emoji="📅" label="Rendez-vous" value={selectedNotif.date ?? ''} />
-                    <DetailRow emoji="❌" label="Annulé" value={`à ${selectedNotif.cancelledAt ?? ''}`} />
+                    <DetailRow emoji="👤" label="Client" value={selectedNotif.client} />
+                    <DetailRow emoji="✂️" label="Prestation" value={selectedNotif.service} />
+                    <DetailRow
+                      emoji="📅"
+                      label="Rendez-vous"
+                      value={selectedNotif.date && [selectedNotif.date, selectedNotif.rdvTime].filter(Boolean).join(' à ')}
+                    />
+                    <DetailRow emoji="❌" label="Annulé" value={selectedNotif.cancelledAt && `à ${selectedNotif.cancelledAt}`} />
                   </>
                 )}
 
@@ -230,8 +239,8 @@ export default function CoiffeurNotificationsScreen() {
 
                 {selectedNotif.type === 'paiement' && (
                   <>
-                    <DetailRow emoji="💰" label="Montant" value={selectedNotif.amount ?? ''} />
-                    <DetailRow emoji="👤" label="Client" value={selectedNotif.client ?? ''} />
+                    <DetailRow emoji="💰" label="Montant" value={selectedNotif.amount} />
+                    <DetailRow emoji="👤" label="Client" value={selectedNotif.client} />
                     <DetailRow emoji="🕐" label="Heure" value={selectedNotif.time} />
                   </>
                 )}
@@ -239,7 +248,7 @@ export default function CoiffeurNotificationsScreen() {
                 {selectedNotif.type === 'rappel' && (
                   <>
                     <DetailRow emoji="📱" label="Type" value="SMS de rappel envoyé" />
-                    <DetailRow emoji="👥" label="Destinataires" value={selectedNotif.smsInfo ?? ''} />
+                    <DetailRow emoji="👥" label="Destinataires" value={selectedNotif.smsInfo} />
                     <DetailRow emoji="🕐" label="Heure" value={selectedNotif.time} />
                   </>
                 )}
@@ -495,6 +504,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: CC.black,
+  },
+  detailValueMissing: {
+    fontWeight: '500',
+    fontStyle: 'italic',
+    color: CC.textSecondary,
   },
   avisBlock: {
     marginBottom: 4,

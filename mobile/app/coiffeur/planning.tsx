@@ -14,6 +14,7 @@ import {
 } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
+import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
 
 const HOUR_HEIGHT = 66;
 const START_HOUR = 11;
@@ -288,6 +289,8 @@ const VIEW_MODES = ['Jour', 'Semaine', 'Mois'] as const;
 const WEEKDAY_LABELS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
 export default function CoiffeurPlanningScreen() {
+  // Incrémenté par le flux SSE à chaque RDV créé/annulé/modifié → rechargement.
+  const { reservationsVersion } = useCoiffeurNotifications();
   const isTablet = useIsTablet();
   const [viewMode, setViewMode] = useState<(typeof VIEW_MODES)[number]>(() => (isTablet ? 'Semaine' : 'Jour'));
   const [selectedBarbers, setSelectedBarbers] = useState<Barber[]>(['Willo', 'Malik', 'Idris']);
@@ -478,7 +481,7 @@ export default function CoiffeurPlanningScreen() {
     })();
 
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, reservationsVersion]);
 
   const confirmPayment = async (method: 'cash' | 'card', amount: number) => {
     if (!selectedRdv) return;
