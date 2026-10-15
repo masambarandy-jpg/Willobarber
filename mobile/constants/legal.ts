@@ -6,9 +6,23 @@ WilloBarber est une application de réservation en ligne permettant à ses utili
 
 L'accès à certaines fonctionnalités (réservation, historique, recommandations) nécessite la création d'un compte utilisateur. L'utilisateur s'engage à fournir des informations exactes et à jour et est responsable de la confidentialité de ses identifiants. Toute utilisation du compte est présumée effectuée par son titulaire.
 
-3. Réservations
+3. Réservation, acompte et annulation – Réservations, Modalités de Paiement et Politique d'Annulation
 
-La réservation d'un rendez-vous via l'application est confirmée dès réception d'une notification de confirmation. WilloBarber se réserve le droit de demander un acompte lors de la prise de rendez-vous pour certaines prestations ; cet acompte est déduit du montant total dû en salon. Toute annulation doit intervenir au moins 24 heures avant l'heure du rendez-vous. Une annulation tardive ou une absence non signalée (« no-show ») peut entraîner la perte de l'acompte versé et être comptabilisée parmi les annulations tardives du compte client, pouvant restreindre l'accès à la réservation en ligne en cas de récidive.
+3.1. Réservation et acompte obligatoire
+
+Toute réservation effectuée via l'application WilloBarber nécessite la validation d'un acompte forfaitaire obligatoire de 5,00 € (cinq euros) via notre prestataire de paiement sécurisé Stripe, ou le règlement intégral de la prestation choisie. Cet acompte a pour objet la réservation ferme et l'immobilisation du créneau horaire auprès du maître barbier sélectionné. Le solde éventuel est payable sur place lors de l'exécution du service.
+
+3.2. Conditions d'annulation et de remboursement
+
+L'Utilisateur dispose de la faculté d'annuler sa réservation directement depuis son espace personnel selon les modalités suivantes :
+
+• Annulation notifiée plus de 24 heures avant l'horaire convenu : l'acompte de 5,00 € (ou l'intégralité de la somme réglée en ligne) fait l'objet d'un remboursement intégral et automatique sur la carte bancaire ayant servi à la transaction, via la plateforme Stripe.
+
+• Annulation notifiée moins de 24 heures avant le rendez-vous ou non-présentation (no-show) : l'acompte forfaitaire de 5,00 € est expressément conservé par le salon WilloBarber à titre d'indemnité d'immobilisation de créneau et de dédommagement forfaitaire pour le préjudice causé par la vacance du fauteuil. Si la totalité de la prestation a été réglée d'avance, seul le montant excédant l'acompte de 5,00 € est remboursé à l'Utilisateur.
+
+3.3. Annulation à l'initiative du salon
+
+Dans l'hypothèse exceptionnelle où l'annulation émane de WilloBarber (indisponibilité fortuite du barbier, force majeure), l'Utilisateur est immédiatement notifié et l'intégralité des sommes perçues (acompte ou montant total) lui est restituée sans délai.
 
 4. Responsabilités
 
