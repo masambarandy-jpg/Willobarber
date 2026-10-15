@@ -18,6 +18,7 @@ import { Asset } from 'expo-asset';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
 import { useAuth } from '@/hooks/useAuth';
 import { useCart } from '@/contexts/CartContext';
+import { useClientNotifications } from '@/contexts/ClientNotificationsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { ServiceCarousel } from '@/components/home/ServiceCarousel';
 import { HamburgerMenu } from '@/components/HamburgerMenu';
@@ -114,6 +115,7 @@ export default function HomeScreen() {
   const isTablet = useIsTablet();
   const { user, isAuthenticated } = useAuth();
   const { addItem, nbArticles } = useCart();
+  const { unreadCount: unreadNotifications } = useClientNotifications();
   const { t } = useLanguage();
   const firstName = user?.first_name || user?.username || 'vous';
   const scrollRef = useRef<ScrollView>(null);
@@ -201,6 +203,19 @@ export default function HomeScreen() {
         </View>
         <View style={styles.headerRight}>
           <LanguagePicker />
+          {isAuthenticated && (
+            <TouchableOpacity style={styles.cartIconBtn} onPress={() => router.push('/(tabs)/notifications')} testID="btn-notifications">
+              <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <Path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </Svg>
+              {unreadNotifications > 0 && (
+                <View style={styles.cartBadge}>
+                  <Text style={styles.cartBadgeText}>{unreadNotifications > 9 ? '9+' : unreadNotifications}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.cartIconBtn} onPress={() => router.push('/cart' as any)}>
             <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
               <Path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>

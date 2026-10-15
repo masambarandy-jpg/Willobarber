@@ -16,7 +16,8 @@ import type {
   AvailableSlotsResponse,
   SalonSettingsPublic,
   WaitingListEntry,
-  AiRecommendationResponse,
+  RecommendationResponse,
+  ClientNotification,
   ClosedPeriod,
   ClientStatus,
   CoiffeurClient,
@@ -296,11 +297,23 @@ export const settingsApi = {
 // ─── Recommendations API ──────────────────────────────────────────────────────
 
 export const recommendationsApi = {
-  get: () => http.get<AiRecommendationResponse>('/recommendations/').then((r) => {
-    console.log('[IA] fetch recommendations response status:', r.status);
-    console.log('[IA] fetch recommendations data:', JSON.stringify(r.data));
-    return r.data;
-  }),
+  // excludeSlots : clés « YYYY-MM-DDTHH:MM » déjà proposées — le backend
+  // renvoie alors 3 nouvelles alternatives (bouton « Voir d'autres créneaux »).
+  get: (excludeSlots: string[] = []) =>
+    http
+      .get<RecommendationResponse>('/recommendations/', {
+        params: excludeSlots.length ? { exclude: excludeSlots.join(',') } : {},
+      })
+      .then((r) => r.data),
+};
+
+// ─── Client notifications API ────────────────────────────────────────────────
+
+export const clientNotificationsApi = {
+  list: () => http.get<ClientNotification[]>('/client-notifications/').then((r) => r.data),
+
+  markRead: (id: number) =>
+    http.patch<ClientNotification>(`/client-notifications/${id}/`, { is_read: true }).then((r) => r.data),
 };
 
 // ─── Appointments API ────────────────────────────────────────────────────────

@@ -195,6 +195,8 @@ export default function BookScreen() {
     reschedule,
     reservationId,
     barberId,
+    recoServiceId,
+    amount: amountParam,
   } = useLocalSearchParams<{
     serviceId?: string;
     quickbook?: string;
@@ -208,6 +210,10 @@ export default function BookScreen() {
     reschedule?: string;
     reservationId?: string;
     barberId?: string;
+    // Mode quickbook venu de RecommendationModal : ID Django du service,
+    // date ISO (YYYY-MM-DD) et montant choisi ('deposit' | 'full').
+    recoServiceId?: string;
+    amount?: string;
   }>();
   const isQuickbook = quickbook === 'true';
   // Mode "reprise rapide" (bouton "Reprendre la même coupe" / "Adapter" de
@@ -232,6 +238,20 @@ export default function BookScreen() {
     2: t('book.cta.continue'),
     3: isRescheduleMode ? t('book.cta.confirmReschedule') : t('book.cta.toPayment'),
   };
+  function quickbookState(): BookingState {
+    const service = SERVICES.find(s => s.name === prestation) ?? null;
+    const barber  = BARBERS.find(b => b.name === barbierParam) ?? (recoServiceId ? BARBERS[0] ?? null : null);
+    let date: Date | null = null;
+    if (dateParam === 'Demain') {
+      date = new Date();
+      date.setDate(date.getDate() + 1);
+      date.setHours(0, 0, 0, 0);
+    } else if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      const [y, m, d] = dateParam.split('-').map(Number);
+      date = new Date(y, m - 1, d);
+    }
+    return { ...INITIAL_BOOKING, service, barber, date, time: heure ?? null };
+  }
   const prefilled = useRef(false);
   // Distingue "on vient d'arriver sur la confirmation" (ne pas reset) de
   // "on revient sur cet onglet après l'avoir quitté" (reset autorisé) —
@@ -246,17 +266,7 @@ export default function BookScreen() {
   // ce ref tenu à jour en parallèle de l'état.
   const confirmedRef = useRef(confirmed);
   const [booking,       setBooking]       = useState<BookingState>(() => {
-    if (isQuickbook) {
-      const service = SERVICES.find(s => s.name === prestation) ?? null;
-      const barber  = BARBERS.find(b => b.name === barbierParam) ?? null;
-      let date: Date | null = null;
-      if (dateParam === 'Demain') {
-        date = new Date();
-        date.setDate(date.getDate() + 1);
-        date.setHours(0, 0, 0, 0);
-      }
-      return { ...INITIAL_BOOKING, service, barber, date, time: heure ?? null };
-    }
+    if (isQuickbook) return quickbookState();
     if (isFastbook) {
       const service = SERVICES.find(s => s.name === prestation) ?? null;
       const barber  = BARBERS.find(b => b.name === barbierParam) ?? null;
@@ -274,7 +284,7 @@ export default function BookScreen() {
   });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
   const [cardForm,      setCardForm]      = useState<CardForm>(EMPTY_CARD);
-  const [amountChoice,  setAmountChoice]  = useState<AmountChoice>('deposit');
+  const [amountChoice,  setAmountChoice]  = useState<AmountChoice>(amountParam === 'full' ? 'full' : 'deposit');
   const [serviceIdMap,  setServiceIdMap]  = useState<Record<string, number>>({});
   const [isPaying,      setIsPaying]      = useState(false);
   const [createdReservationId, setCreatedReservationId] = useState<number | null>(null);
@@ -331,6 +341,33 @@ export default function BookScreen() {
     confirmedRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFastbook, prestation, barbierParam]);
+
+  // Même raison que pour fastbook ci-dessus : l'onglet reste monté, on
+  // resynchronise le wizard quand RecommendationModal rouvre Book avec un
+  // nouveau créneau / montant.
+  useEffect(() => {
+    if (!isQuickbook) return;
+    setBooking(prev => {
+      const next = quickbookState();
+      // Le service venu d'une reco est résolu par l'effet suivant (serviceIdMap).
+      return recoServiceId ? { ...next, service: prev.service } : next;
+    });
+    setAmountChoice(amountParam === 'full' ? 'full' : 'deposit');
+    setStep(4);
+    hasSeenConfirmation.current = false;
+    setConfirmed(false);
+    confirmedRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isQuickbook, recoServiceId, dateParam, heure, amountParam]);
+
+  // Quickbook depuis une recommandation : ID Django → slug statique.
+  useEffect(() => {
+    if (!isQuickbook || !recoServiceId) return;
+    const numericId = Number(recoServiceId);
+    const slug = Object.keys(serviceIdMap).find(key => serviceIdMap[key] === numericId);
+    const matched = SERVICES.find(s => s.id === slug);
+    if (matched) setBooking(prev => (prev.service?.id === matched.id ? prev : { ...prev, service: matched }));
+  }, [isQuickbook, recoServiceId, serviceIdMap]);
 
   // Mode reprogrammation : le serviceId reçu en param est l'ID Django réel du
   // service (venu de la réservation), pas le slug statique — on le résout dès

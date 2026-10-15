@@ -1,12 +1,12 @@
 import base64
+import hmac
 import io
 import logging
 import os
 import random
-from collections import Counter
+import threading
 from datetime import datetime
 
-import anthropic
 import cloudinary.uploader
 import openpyxl
 from openpyxl.styles import Font, PatternFill
@@ -16,8 +16,9 @@ import stripe
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.core import signing
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.urls import reverse
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -34,7 +35,7 @@ from reportlab.lib.enums import TA_RIGHT, TA_CENTER
 from reportlab.lib.colors import HexColor
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import PermissionDenied
@@ -50,6 +51,8 @@ from .models import (
 )
 from .emails import format_date_fr, format_date_fr_short, format_heure_fr
 from .permissions import IsStaffRole
+from .recommendations import build_recommendation, create_client_notification, run_daily_recommendations
+from .slots import SLOT_TIMES
 from .sms import send_reminders_for_tomorrow
 from .serializers import (
     BarbershopSerializer, BarberSerializer, ServiceSerializer, ReservationSerializer,
@@ -61,7 +64,6 @@ from .serializers import (
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_MODEL = 'claude-sonnet-5'
 ACOMPTE_FIXE = 5
 
 
@@ -166,10 +168,20 @@ class BarberLeaveViewSet(viewsets.ModelViewSet):
 
 
 class NotificationViewSet(viewsets.ModelViewSet):
-    queryset = Notification.objects.all()
+    # Notifications du coiffeur uniquement : celles des clients ont un user.
+    queryset = Notification.objects.filter(user__isnull=True)
     serializer_class = NotificationSerializer
     permission_classes = [IsStaffRole]
     http_method_names = ['get', 'patch', 'head', 'options']
+
+
+class ClientNotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
 
 
 class WaitingListViewSet(viewsets.ModelViewSet):
@@ -186,16 +198,6 @@ class WaitingListViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(client=self.request.user)
-
-
-# Créneaux proposés côté client (cf. SLOT_GROUPS dans mobile/components/booking/data.ts) —
-# tenus en phase manuellement, le salon n'ayant qu'un seul barbier donc pas de agenda par
-# ressource à interroger dynamiquement.
-SLOT_TIMES = [
-    '11:00', '11:30', '12:00', '12:30',
-    '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
-    '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '20:30',
-]
 
 
 @api_view(['GET'])
@@ -515,6 +517,16 @@ class ReservationViewSet(viewsets.ModelViewSet):
         reservation = serializer.save(user=self.request.user)
         print(f"[RESERVATION] sauvegardée: id={reservation.id}")
 
+        # Paiement Stripe confirmé côté app avant la création (cf. book.tsx) :
+        # seule la 1re réservation d'un groupe enfants porte le payment_intent_id.
+        if reservation.payment_intent_id:
+            site_root = self.request.build_absolute_uri('/')
+            transaction.on_commit(lambda: threading.Thread(
+                target=send_online_payment_invoice,
+                args=(reservation.id, site_root),
+                daemon=True,
+            ).start())
+
         # Attribution automatique des points fidélité : 2 pts par euro du service
         points_earned = int(round(reservation.service.price * 2))
         user = self.request.user
@@ -777,87 +789,26 @@ class CheckClientView(APIView):
         return Response({'status': 'new'})
 
 
-MOCK_RESERVATION_HISTORY = """- Signature WilloBarber (45€) — 8 fois
-- Taille & rasage (28€) — 2 fois
-- Dernière visite : 12 AVR 2026
-- Intervalle moyen : 28 jours
-- Points fidélité : 316 pts (niveau ARGENT)"""
-
-
-def _generate_ai_recommendation_text(history_text):
-    api_key = os.environ.get('ANTHROPIC_API_KEY')
-    if not api_key:
-        logger.warning('ANTHROPIC_API_KEY manquant — recommandation IA non générée.')
-        return None
-
-    prompt = (
-        "Tu es l'assistant IA de WilloBarber, un salon de coiffure premium à Bruxelles.\n"
-        "Basé sur cet historique client :\n"
-        f"{history_text}\n\n"
-        "Génère une recommandation courte et personnalisée (3-4 phrases max) pour ce client. "
-        "Suggère quand reprendre RDV, quelle prestation et pourquoi. Ton chic et bienveillant."
-    )
-
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=400,
-            thinking={'type': 'disabled'},
-            messages=[{'role': 'user', 'content': prompt}],
-        )
-    except Exception as e:
-        import traceback
-        print("ERREUR IA:", traceback.format_exc())
-        return f"ERREUR: {str(e)}"
-
-    if response.stop_reason == 'refusal':
-        logger.warning('Recommandation IA refusée par les classifieurs de sécurité.')
-        return None
-
-    return next((block.text for block in response.content if block.type == 'text'), None)
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def recommendations(request):
-    user = request.user
+    # ?exclude=2026-10-24T14:00,2026-10-25T15:30 : créneaux déjà proposés au
+    # client (bouton « Voir d'autres créneaux » de RecommendationModal).
+    exclude = [key for key in request.query_params.get('exclude', '').split(',') if key]
+    return Response(build_recommendation(request.user, exclude_slots=exclude))
 
-    if not user.ai_recommendations:
-        return Response({'recommendations': [], 'ai_text': None, 'message': 'Recommandations IA désactivées.'})
 
-    history = Reservation.objects.filter(user=user).exclude(status__in=['cancelled', 'cancelled_client']).order_by('-date')
-
-    recommendations_data = None
-
-    if history.count() >= 2:
-        dates = list(history.order_by('date').values_list('date', flat=True))
-        intervals = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
-        avg_interval = sum(intervals) / len(intervals) if intervals else 0
-
-        counts_by_service = Counter(history.values_list('service_id', flat=True))
-        fav_service_id, fav_service_count = counts_by_service.most_common(1)[0]
-        fav_service = Service.objects.get(pk=fav_service_id)
-        last_reservation = history.first()
-
-        history_text = "\n".join(
-            f"- {r.service.name} ({r.service.price}€) — {r.date}"
-            for r in history[:5]
-        )
-        recommendations_data = {
-            'avg_interval_days': round(avg_interval),
-            'favorite_service': ServiceSerializer(fav_service).data,
-            'last_reservation': ReservationSerializer(last_reservation).data,
-        }
-    else:
-        history_text = MOCK_RESERVATION_HISTORY
-
-    ai_text = _generate_ai_recommendation_text(history_text)
-
-    return Response({
-        'recommendations': recommendations_data or [],
-        'ai_text': ai_text,
-    })
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def run_recommendations_task(request):
+    """Appelé une fois par jour par cron-job.org avec le header X-CRON-TOKEN."""
+    expected = settings.CRON_TOKEN
+    if not expected:
+        return Response({'error': 'CRON_TOKEN non configuré.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    if not hmac.compare_digest(request.headers.get('X-CRON-TOKEN', ''), expected):
+        return Response({'error': 'Token invalide.'}, status=status.HTTP_403_FORBIDDEN)
+    return Response(run_daily_recommendations())
 
 
 @api_view(['GET'])
@@ -922,11 +873,19 @@ def generate_invoice(request, pk):
     if not is_staff and reservation.user_id != request.user.id:
         return Response({'error': "Vous n'avez pas accès à cette facture."}, status=status.HTTP_403_FORBIDDEN)
 
+    print(f"[FACTURE] Génération pour réservation {reservation.id} - {reservation.service.name} - {reservation.service.price}€")
+    invoice_number = f"WB-2026-{random.randint(10000, 99999)}"
+    pdf_bytes = build_online_invoice_pdf(reservation, invoice_number)
+
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="Facture_WilloBarber_{invoice_number}.pdf"'
+    return response
+
+
+def build_online_invoice_pdf(reservation, invoice_number):
+    """Facture du montant réglé en ligne (acompte ou totalité)."""
     user = reservation.user
     service = reservation.service
-    print(f"[FACTURE] Génération pour réservation {reservation.id} - {service.name} - {service.price}€")
-
-    invoice_number = f"WB-2026-{random.randint(10000, 99999)}"
     today = format_date_fr_short(datetime.now().date())
 
     quantity = getattr(reservation, 'child_count', 1) or 1
@@ -1056,10 +1015,7 @@ def generate_invoice(request, pk):
 
     doc.build(elements)
     buffer.seek(0)
-
-    response = HttpResponse(buffer.read(), content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="Facture_WilloBarber_{invoice_number}.pdf"'
-    return response
+    return buffer.read()
 
 
 @api_view(['GET'])
@@ -1297,30 +1253,14 @@ def send_final_invoice(request, pk):
     pdf_bytes, invoice_number = build_final_invoice_pdf(reservation)
 
     try:
-        sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
-        message = Mail(
-            from_email=Email('masamba.randy@gmail.com', 'WilloBarber'),
-            to_emails=To(reservation.user.email),
+        send_invoice_email(
+            reservation.user,
             subject=f'✂️ Facture finale — {reservation.service.name}',
-            html_content=Content('text/html', f"""
-                <div style="font-family: Georgia, serif; background-color: #0D0C0A; color: #FFFFFF; padding: 40px; max-width: 600px; margin: auto;">
-                    <h1 style="color: #C9A84C; font-size: 32px; margin-bottom: 4px;">WilloBarber</h1>
-                    <p style="color: #6B6560; font-size: 12px; letter-spacing: 2px; margin-top: 0;">SALON DE BARBIER · BRUXELLES</p>
-                    <hr style="border: 1px solid #1A1814; margin: 24px 0;">
-                    <h2 style="color: #FFFFFF;">Merci pour votre visite {reservation.user.first_name or reservation.user.username} ✂️</h2>
-                    <p style="color: #CCCCCC;">Votre prestation est entièrement réglée. Vous trouverez votre facture finale en pièce jointe.</p>
-                    <hr style="border: 1px solid #1A1814; margin: 24px 0;">
-                    <p style="color: #C9A84C; font-size: 14px; text-align: center;">À bientôt chez WilloBarber ✂️</p>
-                </div>
-            """),
+            heading=f"Merci pour votre visite {reservation.user.first_name or reservation.user.username} ✂️",
+            body="Votre prestation est entièrement réglée. Vous trouverez votre facture finale en pièce jointe.",
+            pdf_bytes=pdf_bytes,
+            filename=f'{invoice_number}.pdf',
         )
-        message.attachment = Attachment(
-            FileContent(base64.b64encode(pdf_bytes).decode()),
-            FileName(f'{invoice_number}.pdf'),
-            FileType('application/pdf'),
-            Disposition('attachment'),
-        )
-        sg.send(message)
         print(f"[EMAIL] Facture finale envoyée à {reservation.user.email}")
     except Exception as e:
         print(f"[EMAIL ERROR] Facture finale: {str(e)}")
@@ -1330,6 +1270,115 @@ def send_final_invoice(request, pk):
         )
 
     return Response({'success': True, 'invoice_number': invoice_number})
+
+
+def send_invoice_email(user, subject, heading, body, pdf_bytes, filename):
+    sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
+    message = Mail(
+        from_email=Email('masamba.randy@gmail.com', 'WilloBarber'),
+        to_emails=To(user.email),
+        subject=subject,
+        html_content=Content('text/html', f"""
+            <div style="font-family: Georgia, serif; background-color: #0D0C0A; color: #FFFFFF; padding: 40px; max-width: 600px; margin: auto;">
+                <h1 style="color: #C9A84C; font-size: 32px; margin-bottom: 4px;">WilloBarber</h1>
+                <p style="color: #6B6560; font-size: 12px; letter-spacing: 2px; margin-top: 0;">SALON DE BARBIER · BRUXELLES</p>
+                <hr style="border: 1px solid #1A1814; margin: 24px 0;">
+                <h2 style="color: #FFFFFF;">{heading}</h2>
+                <p style="color: #CCCCCC;">{body}</p>
+                <hr style="border: 1px solid #1A1814; margin: 24px 0;">
+                <p style="color: #C9A84C; font-size: 14px; text-align: center;">À bientôt chez WilloBarber ✂️</p>
+            </div>
+        """),
+    )
+    message.attachment = Attachment(
+        FileContent(base64.b64encode(pdf_bytes).decode()),
+        FileName(filename),
+        FileType('application/pdf'),
+        Disposition('attachment'),
+    )
+    sg.send(message)
+
+
+# Lien « Télécharger la facture » de la notification client : ouvert hors de
+# l'app (navigateur), donc sans JWT — l'accès est porté par une signature.
+INVOICE_LINK_SALT = 'online-invoice-download'
+INVOICE_LINK_MAX_AGE = 60 * 60 * 24 * 365
+
+
+def online_invoice_number(reservation):
+    return f"WB-{reservation.date.year}-{reservation.id:05d}"
+
+
+def _payment_intent_succeeded(payment_intent_id):
+    if not settings.STRIPE_SECRET_KEY:
+        print(f"[FACTURE] STRIPE_SECRET_KEY absent — PaymentIntent {payment_intent_id} non vérifié")
+        return True
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    return stripe.PaymentIntent.retrieve(payment_intent_id).status == 'succeeded'
+
+
+def send_online_payment_invoice(reservation_id, site_root):
+    """Après un paiement en ligne : PDF → email au client → notification
+    « invoice » (SSE). Tourne dans un thread après le commit de la réservation,
+    pour ne pas rallonger la réponse de POST /reservations/."""
+    try:
+        reservation = Reservation.objects.select_related('user', 'service').get(pk=reservation_id)
+        if not _payment_intent_succeeded(reservation.payment_intent_id):
+            print(f"[FACTURE] PaymentIntent non réglé pour réservation {reservation_id} — pas de facture")
+            return
+
+        invoice_number = online_invoice_number(reservation)
+        pdf_bytes = build_online_invoice_pdf(reservation, invoice_number)
+        token = signing.dumps(reservation.id, salt=INVOICE_LINK_SALT)
+        invoice_url = site_root.rstrip('/') + reverse('online-invoice-download', args=[token])
+        amount = float(reservation.amount_paid or 0)
+
+        try:
+            send_invoice_email(
+                reservation.user,
+                subject=f'🧾 Votre facture WilloBarber — {reservation.service.name}',
+                heading=f"Merci {reservation.user.first_name or reservation.user.username} ✂️",
+                body=f"Votre paiement de {fmt_eur(amount)} est confirmé. Vous trouverez votre facture en pièce jointe.",
+                pdf_bytes=pdf_bytes,
+                filename=f'Facture_WilloBarber_{invoice_number}.pdf',
+            )
+            print(f"[FACTURE] {invoice_number} envoyée à {reservation.user.email}")
+        except Exception as e:
+            print(f"[EMAIL ERROR] Facture {invoice_number}: {str(e)}")
+
+        create_client_notification(
+            reservation.user, 'invoice',
+            title='Votre facture est disponible',
+            desc=f"{reservation.service.name} · {format_date_fr_short(reservation.date)} · {fmt_eur(amount)}",
+            data={
+                'reservation_id': reservation.id,
+                'invoice_number': invoice_number,
+                'invoice_url': invoice_url,
+                'amount_paid': amount,
+            },
+        )
+    except Exception as e:
+        import traceback
+        print(f"[FACTURE ERROR] réservation {reservation_id}: {str(e)}")
+        print(traceback.format_exc())
+    finally:
+        connection.close()
+
+
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def download_online_invoice(request, token):
+    try:
+        reservation_id = signing.loads(token, salt=INVOICE_LINK_SALT, max_age=INVOICE_LINK_MAX_AGE)
+        reservation = Reservation.objects.select_related('user', 'service').get(pk=reservation_id)
+    except (signing.BadSignature, Reservation.DoesNotExist):
+        return Response({'error': 'Lien de facture invalide ou expiré.'}, status=status.HTTP_404_NOT_FOUND)
+
+    invoice_number = online_invoice_number(reservation)
+    response = HttpResponse(build_online_invoice_pdf(reservation, invoice_number), content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="Facture_WilloBarber_{invoice_number}.pdf"'
+    return response
 
 
 @api_view(['GET'])

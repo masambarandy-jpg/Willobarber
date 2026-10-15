@@ -1,6 +1,7 @@
-"""Diffusion temps réel (Server-Sent Events) vers l'espace coiffeur.
+"""Diffusion temps réel (Server-Sent Events) vers l'espace coiffeur et les clients.
 
-Broker en mémoire : un dict {barber_id: set(queue.Queue)} protégé par un lock.
+Broker en mémoire : deux dicts {id: set(queue.Queue)} protégés par un lock —
+un pour les coiffeurs (clé barber_id), un pour les clients (clé user_id).
 
 LIMITE : ne fonctionne que si les flux SSE et les écritures de réservations
 passent par le MÊME processus Python — d'où `gunicorn --workers 1` avec des
@@ -11,7 +12,8 @@ pub/sub Redis.
 
 Reservation n'a pas de champ barbier (agenda unique du salon, cf. models.py) :
 chaque événement est donc diffusé à tous les coiffeurs connectés, quel que soit
-le barber_id de l'URL.
+le barber_id de l'URL. Les événements client (publish_to_client), eux, ne
+partent que vers les flux ouverts par ce client.
 """
 import json
 import queue
@@ -30,6 +32,7 @@ PING_INTERVAL_SECONDS = 25
 MAX_QUEUED_EVENTS = 100
 
 _subscribers: dict[int, set[queue.Queue]] = {}
+_client_subscribers: dict[int, set[queue.Queue]] = {}
 _lock = threading.Lock()
 
 
@@ -37,27 +40,24 @@ def _format(event, payload):
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _subscribe(barber_id):
+def _subscribe(registry, key):
     q = queue.Queue(maxsize=MAX_QUEUED_EVENTS)
     with _lock:
-        _subscribers.setdefault(barber_id, set()).add(q)
+        registry.setdefault(key, set()).add(q)
     return q
 
 
-def _unsubscribe(barber_id, q):
+def _unsubscribe(registry, key, q):
     with _lock:
-        queues = _subscribers.get(barber_id)
+        queues = registry.get(key)
         if queues is None:
             return
         queues.discard(q)
         if not queues:
-            del _subscribers[barber_id]
+            del registry[key]
 
 
-def publish(event, payload):
-    message = _format(event, payload)
-    with _lock:
-        queues = [q for qs in _subscribers.values() for q in qs]
+def _put_all(queues, message):
     for q in queues:
         try:
             q.put_nowait(message)
@@ -65,11 +65,25 @@ def publish(event, payload):
             pass
 
 
-def _stream(barber_id):
+def publish(event, payload):
+    message = _format(event, payload)
+    with _lock:
+        queues = [q for qs in _subscribers.values() for q in qs]
+    _put_all(queues, message)
+
+
+def publish_to_client(user_id, event, payload):
+    message = _format(event, payload)
+    with _lock:
+        queues = list(_client_subscribers.get(user_id, ()))
+    _put_all(queues, message)
+
+
+def _stream(registry, key):
     # Le flux peut rester ouvert des heures : on rend la connexion Postgres
     # ouverte par l'authentification au lieu de la garder pendant tout le stream.
     connection.close()
-    q = _subscribe(barber_id)
+    q = _subscribe(registry, key)
     try:
         # Premier octet immédiat : déclenche 'open' côté client et force les
         # proxies à commencer à streamer.
@@ -81,21 +95,38 @@ def _stream(barber_id):
                 yield ": ping\n\n"
     finally:
         # Exécuté quand le client se déconnecte (écriture échouée → GeneratorExit).
-        _unsubscribe(barber_id, q)
+        _unsubscribe(registry, key, q)
 
 
-def coiffeur_stream(request, barber_id):
+def _user_from_query_token(request):
     # EventSource ne permet pas d'envoyer un header Authorization : le JWT
-    # coiffeur arrive en query string (?token=...).
+    # arrive en query string (?token=...).
     auth = JWTAuthentication()
     try:
-        user = auth.get_user(auth.get_validated_token(request.GET.get('token', '')))
+        return auth.get_user(auth.get_validated_token(request.GET.get('token', '')))
     except (InvalidToken, TokenError, AuthenticationFailed):
-        return HttpResponse(status=401)
-    if not (user.is_superuser or getattr(user, 'role', None) == 'admin'):
-        return HttpResponse(status=403)
+        return None
 
-    response = StreamingHttpResponse(_stream(barber_id), content_type='text/event-stream')
+
+def _event_stream_response(generator):
+    response = StreamingHttpResponse(generator, content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'
     return response
+
+
+def coiffeur_stream(request, barber_id):
+    user = _user_from_query_token(request)
+    if user is None:
+        return HttpResponse(status=401)
+    if not (user.is_superuser or getattr(user, 'role', None) == 'admin'):
+        return HttpResponse(status=403)
+    return _event_stream_response(_stream(_subscribers, barber_id))
+
+
+def client_stream(request):
+    # Flux personnel : l'identité vient du JWT, jamais de l'URL.
+    user = _user_from_query_token(request)
+    if user is None:
+        return HttpResponse(status=401)
+    return _event_stream_response(_stream(_client_subscribers, user.id))

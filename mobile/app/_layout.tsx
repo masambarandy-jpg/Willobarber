@@ -17,6 +17,7 @@ import {
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { AuthModalProvider } from '@/contexts/AuthModalContext';
 import { CartProvider } from '@/contexts/CartContext';
+import { ClientNotificationsProvider } from '@/contexts/ClientNotificationsContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { StripeWrapper } from '@/components/booking/StripeWrapper';
 import { Colors } from '@/constants';
@@ -78,11 +79,13 @@ export default function RootLayout() {
         <StripeWrapper>
           <LanguageProvider>
             <AuthProvider>
-              <CartProvider>
-                <AuthModalProvider>
-                  <RootNavigation />
-                </AuthModalProvider>
-              </CartProvider>
+              <ClientNotificationsProvider>
+                <CartProvider>
+                  <AuthModalProvider>
+                    <RootNavigation />
+                  </AuthModalProvider>
+                </CartProvider>
+              </ClientNotificationsProvider>
             </AuthProvider>
           </LanguageProvider>
         </StripeWrapper>

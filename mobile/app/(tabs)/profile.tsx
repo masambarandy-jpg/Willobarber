@@ -20,7 +20,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { authApi, recommendationsApi, TokenStorage } from '@/services/api';
+import { authApi, recommendationsApi } from '@/services/api';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { LegalModal } from '@/components/LegalModal';
@@ -117,13 +117,15 @@ export default function ProfileScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiText, setAiText] = useState<string | null>(null);
   const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(null);
+  // null tant que /recommendations/ n'a pas répondu : pas de message « < 3 RDV »
+  // affiché par erreur pendant le chargement.
+  const [visitsCount, setVisitsCount] = useState<number | null>(null);
   const [showAiCard, setShowAiCard] = useState(false);
   const aiCardOpacity = useRef(new Animated.Value(0)).current;
   const aiPatchRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated || !aiRec) {
-      console.log('[AI Recommandations] Désactivé ou non authentifié — pas de fetch.');
       setAiText(null);
       setShowAiCard(false);
       aiCardOpacity.setValue(0);
@@ -156,24 +158,21 @@ export default function ProfileScreen() {
 
     (async () => {
       if (pendingPatch) {
-        console.log('[AI Recommandations] PATCH /auth/me/ en cours — attente avant de fetch /recommendations/...');
         await pendingPatch;
         if (aiPatchRef.current === pendingPatch) aiPatchRef.current = null;
       }
       if (cancelled) return;
 
-      console.log('[AI Recommandations] Toggle actif, appel de /recommendations/...');
       const startTime = Date.now();
       try {
         const data = await recommendationsApi.get();
-        console.log('[AI Recommandations] Réponse backend:', JSON.stringify(data));
         const elapsed = Date.now() - startTime;
         await new Promise((r) => setTimeout(r, Math.max(0, 1500 - elapsed)));
         if (cancelled) return;
         setAiLoading(false);
-        reveal(data.ai_text ?? null);
-      } catch (err: any) {
-        console.log('[AI Recommandations] Erreur:', err?.response?.status, JSON.stringify(err?.response?.data ?? err?.message));
+        setVisitsCount(data.habits.visits_count);
+        reveal(data.type !== 'none' ? data.message : null);
+      } catch {
         const elapsed = Date.now() - startTime;
         await new Promise((r) => setTimeout(r, Math.max(0, 1500 - elapsed)));
         if (cancelled) return;
@@ -389,20 +388,15 @@ export default function ProfileScreen() {
                   <Switch
                     value={aiRec}
                     onValueChange={async v => {
-                      console.log('[IA] token (TokenStorage.getAccess):', await TokenStorage.getAccess());
-                      console.log('[IA] aiRec avant toggle:', aiRec, '-> nouvelle valeur:', v);
-                      console.log('[IA] PATCH payload:', { ai_recommendations: v });
-
                       // Le PATCH démarre et sa promesse est enregistrée AVANT setAiRec(v),
                       // pour que l'effet déclenché par le changement de aiRec puisse l'attendre
                       // et ne fetch /recommendations/ qu'une fois le backend à jour.
                       const patchPromise = (async () => {
                         try {
-                          const res = await authApi.updateProfile({ ai_recommendations: v });
-                          console.log('[IA] PATCH response:', res);
+                          await authApi.updateProfile({ ai_recommendations: v });
                           await refreshUser();
-                        } catch (e) {
-                          console.log('[IA] PATCH erreur (sauvegarde locale suffisante):', e);
+                        } catch {
+                          // Sauvegarde locale (AsyncStorage) suffisante.
                         }
                       })();
                       aiPatchRef.current = patchPromise;
@@ -420,6 +414,12 @@ export default function ProfileScreen() {
                   />
                 }
               />
+
+              {aiRec && visitsCount !== null && visitsCount < 3 && (
+                <Text style={styles.aiHint}>
+                  Les suggestions personnalisées seront activées après vos 3 premiers rendez-vous. En attendant, un rappel sera envoyé si vous ne venez plus depuis 45+ jours.
+                </Text>
+              )}
 
               {!isTablet && aiBlock}
             </View>
@@ -687,6 +687,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   aiLoadingText: { fontSize: 13.5, color: '#6B6560', fontStyle: 'italic' },
+  aiHint: { fontSize: 12.5, color: '#6B6560', lineHeight: 18, paddingLeft: 38, paddingBottom: 10, marginTop: -4 },
   aiCardBadge: { fontSize: 12, fontWeight: '700', color: '#C9A84C', marginBottom: 8 },
   aiCardText: { fontSize: 13.5, color: 'rgba(255,255,255,0.8)', lineHeight: 20, marginBottom: 14 },
   aiCardButton: {
