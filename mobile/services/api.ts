@@ -18,6 +18,8 @@ import type {
   WaitingListEntry,
   AiRecommendationResponse,
   ClosedPeriod,
+  ClientStatus,
+  CoiffeurClient,
 } from '@/types';
 
 const SECURE_KEY_ACCESS = 'wb_access_token';
@@ -422,6 +424,32 @@ export const mediaApi = {
     if (!res.ok) return null;
     return res.json() as Promise<ClientMedia>;
   },
+};
+
+// Actions CRM de l'espace coiffeur : token coiffeur dédié (rôle staff requis),
+// même raison que mediaApi.upload ci-dessus.
+async function patchClient(path: string, body?: object): Promise<CoiffeurClient | null> {
+  const token = await AsyncStorage.getItem('coiffeur_token');
+  if (!token) return null;
+
+  const url = `${API_BASE_URL}${path}`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  console.log('[CLIENTS] PATCH', url, '→', res.status);
+  if (!res.ok) return null;
+  return res.json() as Promise<CoiffeurClient>;
+}
+
+export const clientsApi = {
+  archive: (id: number) => patchClient(`/clients/${id}/archive/`),
+  unarchive: (id: number) => patchClient(`/clients/${id}/unarchive/`),
+  setStatus: (id: number, status: ClientStatus) => patchClient(`/clients/${id}/status/`, { status }),
 };
 
 export default http;
