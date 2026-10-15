@@ -10,12 +10,22 @@ class User(AbstractUser):
         ('client', 'Client'),
         ('admin', 'Admin'),
     ]
+    # Statut CRM choisi manuellement par le coiffeur (aucun calcul automatique).
+    STATUS_CHOICES = [
+        ('nouveau', 'Nouveau'),
+        ('vip', 'VIP'),
+        ('fidele', 'Fidèle'),
+        ('inactif', 'Inactif'),
+        ('a_risque', 'À risque'),
+    ]
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='client')
     phone = models.CharField(max_length=20, blank=True, null=True)
     profile_picture = models.URLField(max_length=500, blank=True, default='')
     ai_recommendations = models.BooleanField(default=True)
-    is_at_risk = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='nouveau')
+    # Archivage CRM par le coiffeur : distinct de is_deleted (suppression RGPD).
+    is_archived = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
     # '' = archivé par le staff (comportement historique), 'client' = suppression RGPD

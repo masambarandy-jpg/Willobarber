@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { API_BASE_URL } from '@/constants';
+import { clientsApi } from '@/services/api';
+import type { ClientStatus, CoiffeurClient } from '@/types';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { EditIcon, MailIcon, PhoneIcon, PersonIcon, CloseIcon } from '@/components/coiffeur/Icons';
@@ -13,12 +15,24 @@ import { useClientMedia } from '@/hooks/useClientMedia';
 import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 import AddMediaButton from '@/components/media/AddMediaButton';
 
-type Badge = 'VIP' | 'Nouveau' | 'Fidèle' | 'Inactif' | null;
+type Badge = 'Nouveau' | 'VIP' | 'Fidèle' | 'Inactif' | 'À risque';
+
+// Le statut est choisi manuellement par le coiffeur (crayon ✏️) : aucun calcul
+// automatique à partir du nombre de RDV ou des annulations.
+const STATUS_TO_BADGE: Record<ClientStatus, Badge> = {
+  nouveau: 'Nouveau',
+  vip: 'VIP',
+  fidele: 'Fidèle',
+  inactif: 'Inactif',
+  a_risque: 'À risque',
+};
+const STATUS_OPTIONS = Object.keys(STATUS_TO_BADGE) as ClientStatus[];
 
 type Client = {
   id: number;
   letter: string;
   name: string;
+  status: ClientStatus;
   badge: Badge;
   email: string;
   phone: string;
@@ -26,24 +40,9 @@ type Client = {
   last: string;
   total: string;
   dateJoined: string;
-  atRisk: boolean;
 };
 
-type ApiClient = {
-  id: number;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string | null;
-  total_reservations: number;
-  last_visit: string | null;
-  total_spent: number;
-  status: string;
-  date_joined: string;
-  is_at_risk: boolean;
-  deleted_at: string | null;
-  deletion_reason: string;
-};
+type ApiClient = CoiffeurClient;
 
 type ArchivedClient = {
   id: number;
@@ -75,12 +74,6 @@ const DEMO_ARCHIVED_CLIENTS: ArchivedClient[] = [
   { id: -3, name: 'Client supprimé', email: 'deleted_20260420100000_ahmed@willobarber.fr', phone: '', deletedAt: '2026-04-20T10:00:00Z', deletedByClient: true },
 ];
 
-function badgeFromReservations(count: number): Badge {
-  if (count >= 10) return 'VIP';
-  if (count === 1) return 'Nouveau';
-  return 'Fidèle';
-}
-
 function mapApiClient(c: ApiClient): Client {
   const firstName = (c.first_name ?? '').trim();
   const lastName = (c.last_name ?? '').trim();
@@ -90,32 +83,44 @@ function mapApiClient(c: ApiClient): Client {
     id: c.id,
     letter: (firstName || name).charAt(0).toUpperCase() || '?',
     name,
-    badge: badgeFromReservations(c.total_reservations),
+    status: c.status,
+    badge: STATUS_TO_BADGE[c.status] ?? 'Nouveau',
     email: c.email ?? '',
     phone: c.phone ?? '',
     rdv: c.total_reservations,
     last: c.last_visit ? format(new Date(c.last_visit), 'd MMM', { locale: fr }) : '—',
     total: `${Math.round(c.total_spent)}€`,
     dateJoined: c.date_joined,
-    atRisk: c.is_at_risk,
   };
 }
 
 const TABS = ['Tous', 'VIP', 'Nouveaux', 'Fidèles', 'Inactifs', 'À risque'] as const;
-const TAB_TO_BADGE: Record<(typeof TABS)[number], Badge | 'ALL' | 'AT_RISK'> = {
+const TAB_TO_BADGE: Record<(typeof TABS)[number], Badge | 'ALL'> = {
   Tous: 'ALL',
   VIP: 'VIP',
   Nouveaux: 'Nouveau',
   Fidèles: 'Fidèle',
   Inactifs: 'Inactif',
-  'À risque': 'AT_RISK',
+  'À risque': 'À risque',
 };
 
 const EMPTY_FORM = { firstName: '', lastName: '', email: '', phone: '' };
 
-type EditBadge = 'VIP' | 'Nouveau' | 'Fidèle' | 'Inactif' | '';
-const EMPTY_EDIT_FORM = { name: '', email: '', phone: '', badge: '' as EditBadge };
-const BADGE_OPTIONS: Exclude<EditBadge, ''>[] = ['VIP', 'Nouveau', 'Fidèle', 'Inactif'];
+const EMPTY_EDIT_FORM = { name: '', email: '', phone: '' };
+
+// Alert.alert() avec plusieurs boutons ne déclenche pas onPress sur Expo Web
+// (cf. planning.tsx) — window.confirm sur web, Alert.alert en natif.
+function confirmer(title: string, message: string, confirmLabel: string): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+  }
+  return new Promise<boolean>((resolve) => {
+    Alert.alert(title, message, [
+      { text: 'Annuler', onPress: () => resolve(false), style: 'cancel' },
+      { text: confirmLabel, onPress: () => resolve(true) },
+    ]);
+  });
+}
 
 export default function CoiffeurClientsScreen() {
   const isTablet = useIsTablet();
@@ -128,11 +133,15 @@ export default function CoiffeurClientsScreen() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [addClientErrors, setAddClientErrors] = useState<{ phone?: string }>({});
 
-  const [editModalVisible, setEditModalVisible] = useState(false);
   const [clientEnEdition, setClientEnEdition] = useState<Client | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const [panelEditing, setPanelEditing] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const [statusModalClient, setStatusModalClient] = useState<Client | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<ClientStatus>('nouveau');
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
+  const [archivingId, setArchivingId] = useState<number | null>(null);
 
   const [archivedModalVisible, setArchivedModalVisible] = useState(false);
   const [archivedClients, setArchivedClients] = useState<ArchivedClient[]>(DEMO_ARCHIVED_CLIENTS);
@@ -256,11 +265,7 @@ export default function CoiffeurClientsScreen() {
   };
 
   const filter = TAB_TO_BADGE[activeTab];
-  const badgeFiltered = filter === 'ALL'
-    ? clients
-    : filter === 'AT_RISK'
-      ? clients.filter((c) => c.atRisk)
-      : clients.filter((c) => c.badge === filter);
+  const badgeFiltered = filter === 'ALL' ? clients : clients.filter((c) => c.badge === filter);
 
   const searchQueryNormalized = searchQuery.trim().toLowerCase();
   const filtered = searchQueryNormalized
@@ -275,7 +280,7 @@ export default function CoiffeurClientsScreen() {
 
     const totalClients = clients.length;
     const vipCount = clients.filter((c) => c.badge === 'VIP').length;
-    const atRiskCount = clients.filter((c) => c.atRisk).length;
+    const atRiskCount = clients.filter((c) => c.badge === 'À risque').length;
     const newThisMonth = clients.filter((c) => new Date(c.dateJoined) >= startOfThisMonth).length;
     const totalLastMonth = clients.filter((c) => new Date(c.dateJoined) < startOfThisMonth).length;
     const growthPercent = totalLastMonth > 0 ? Math.round((newThisMonth / totalLastMonth) * 100) : 0;
@@ -306,6 +311,7 @@ export default function CoiffeurClientsScreen() {
       id: Date.now(),
       letter: (form.firstName ?? '').trim().charAt(0).toUpperCase(),
       name: `${form.firstName.trim()} ${form.lastName.trim()}`,
+      status: 'nouveau',
       badge: 'Nouveau',
       email: form.email.trim(),
       phone: form.phone.trim(),
@@ -313,7 +319,6 @@ export default function CoiffeurClientsScreen() {
       last: '—',
       total: '0€',
       dateJoined: new Date().toISOString(),
-      atRisk: false,
     };
 
     setClients((prev) => [newClient, ...prev]);
@@ -322,7 +327,7 @@ export default function CoiffeurClientsScreen() {
 
   const fillEditForm = (client: Client) => {
     setClientEnEdition(client);
-    setEditForm({ name: client.name, email: client.email, phone: client.phone, badge: client.badge || '' });
+    setEditForm({ name: client.name, email: client.email, phone: client.phone });
   };
 
   const selectClient = (client: Client) => {
@@ -331,22 +336,70 @@ export default function CoiffeurClientsScreen() {
     if (!isTablet) setDetailModalVisible(true);
   };
 
-  const ouvrirEdition = (client: Client) => {
-    fillEditForm(client);
-    if (isTablet) {
-      setPanelEditing(true);
-    } else {
-      setEditModalVisible(true);
+  const ouvrirStatut = (client: Client) => {
+    setSelectedStatus(client.status);
+    setStatusModalClient(client);
+  };
+
+  const fermerStatut = () => {
+    if (isSavingStatus) return;
+    setStatusModalClient(null);
+  };
+
+  const enregistrerStatut = async () => {
+    if (!statusModalClient) return;
+    setIsSavingStatus(true);
+    try {
+      const updated = await clientsApi.setStatus(statusModalClient.id, selectedStatus);
+      if (!updated) {
+        showToast('Impossible de mettre à jour le statut');
+        return;
+      }
+      const badge = STATUS_TO_BADGE[updated.status];
+      setClientEnEdition((prev) => (prev?.id === updated.id ? { ...prev, status: updated.status, badge } : prev));
+      setStatusModalClient(null);
+      fetchClients();
+      showToast(`Statut mis à jour : ${badge}`);
+    } catch (e) {
+      console.log('[CLIENTS] status error', e);
+      showToast('Impossible de mettre à jour le statut');
+    } finally {
+      setIsSavingStatus(false);
+    }
+  };
+
+  const archiverClient = async (client: Client) => {
+    const ok = await confirmer(
+      'Archiver ce client ?',
+      "Le client sera déplacé dans l'onglet Archivés. Vous pourrez le restaurer à tout moment.",
+      'Archiver',
+    );
+    if (!ok) return;
+
+    setArchivingId(client.id);
+    try {
+      const updated = await clientsApi.archive(client.id);
+      if (!updated) {
+        showToast("Impossible d'archiver le client");
+        return;
+      }
+      setClients((prev) => prev.filter((c) => c.id !== client.id));
+      if (clientEnEdition?.id === client.id) {
+        setClientEnEdition(null);
+        setDetailModalVisible(false);
+      }
+      fetchClients();
+      showToast('Client archivé');
+    } catch (e) {
+      console.log('[CLIENTS] archive error', e);
+      showToast("Impossible d'archiver le client");
+    } finally {
+      setArchivingId(null);
     }
   };
 
   const updateEditField = (key: 'name' | 'email' | 'phone', value: string) => {
     setEditForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const closeEditModal = () => {
-    setEditModalVisible(false);
-    setClientEnEdition(null);
   };
 
   const fermerPanelEdition = () => {
@@ -363,17 +416,11 @@ export default function CoiffeurClientsScreen() {
       letter: (name ?? '').charAt(0).toUpperCase() || clientEnEdition.letter,
       email: editForm.email.trim(),
       phone: editForm.phone.trim(),
-      badge: editForm.badge || null,
     };
 
     setClients((prev) => prev.map((c) => (c.id === clientEnEdition.id ? updated : c)));
-
-    if (isTablet) {
-      setClientEnEdition(updated);
-      setPanelEditing(false);
-    } else {
-      closeEditModal();
-    }
+    setClientEnEdition(updated);
+    setPanelEditing(false);
   };
 
   useEffect(() => {
@@ -442,22 +489,6 @@ export default function CoiffeurClientsScreen() {
         placeholderTextColor={CC.textSecondary}
         keyboardType="phone-pad"
       />
-
-      <Text style={styles.fieldLabel}>STATUT</Text>
-      <View style={styles.badgeToggleRow}>
-        {BADGE_OPTIONS.map((option) => {
-          const active = editForm.badge === option;
-          return (
-            <TouchableOpacity
-              key={option}
-              style={[styles.badgeToggleItem, active && badgeToggleActiveStyle(option)]}
-              onPress={() => setEditForm((prev) => ({ ...prev, badge: option }))}
-            >
-              <Text style={[styles.badgeToggleText, active && badgeToggleActiveTextStyle(option)]}>{option}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
     </>
   );
 
@@ -495,7 +526,7 @@ export default function CoiffeurClientsScreen() {
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>À RISQUE</Text>
             <Text style={[styles.statValue, stats.atRiskCount > 0 && styles.statValueRisk]}>{stats.atRiskCount}</Text>
-            <Text style={styles.statSub}>no-show / annulations</Text>
+            <Text style={styles.statSub}>à surveiller</Text>
           </View>
         </View>
 
@@ -552,18 +583,26 @@ export default function CoiffeurClientsScreen() {
             <View style={styles.clientTopRow}>
               <Avatar letter={c.letter} size={42} />
               <Text style={styles.clientName}>{c.name}</Text>
-              {c.badge && (
-                <View style={[styles.badge, badgeStyle(c.badge)]}>
-                  <Text style={[styles.badgeText, badgeTextStyle(c.badge)]}>{c.badge}</Text>
-                </View>
-              )}
-              {c.atRisk && (
-                <View style={[styles.badge, styles.riskBadge]}>
-                  <Text style={[styles.badgeText, styles.riskBadgeText]}>🚩 À risque</Text>
-                </View>
-              )}
-              <TouchableOpacity style={styles.editBtn} onPress={() => ouvrirEdition(c)}>
+              <View style={[styles.badge, badgeStyle(c.badge)]}>
+                <Text style={[styles.badgeText, badgeTextStyle(c.badge)]}>{badgeLabel(c.badge)}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => ouvrirStatut(c)}
+                accessibilityLabel="Modifier le statut"
+              >
                 <EditIcon size={13} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => archiverClient(c)}
+                disabled={archivingId === c.id}
+                accessibilityLabel="Archiver ce client"
+              >
+                {archivingId === c.id
+                  ? <ActivityIndicator color={CC.black} size="small" />
+                  : <Text style={styles.archiveIconText}>🗄️</Text>
+                }
               </TouchableOpacity>
             </View>
             <Text style={styles.clientEmail}>{c.email}</Text>
@@ -620,18 +659,11 @@ export default function CoiffeurClientsScreen() {
                       <Avatar letter={clientEnEdition.letter} size={80} />
                     </View>
                     <Text style={styles.detailName}>{clientEnEdition.name}</Text>
-                    {clientEnEdition.badge && (
-                      <View style={[styles.badge, badgeStyle(clientEnEdition.badge), styles.detailBadge]}>
-                        <Text style={[styles.badgeText, badgeTextStyle(clientEnEdition.badge)]}>
-                          {clientEnEdition.badge}
-                        </Text>
-                      </View>
-                    )}
-                    {clientEnEdition.atRisk && (
-                      <View style={[styles.badge, styles.riskBadge, styles.detailBadge]}>
-                        <Text style={[styles.badgeText, styles.riskBadgeText]}>🚩 À risque</Text>
-                      </View>
-                    )}
+                    <View style={[styles.badge, badgeStyle(clientEnEdition.badge), styles.detailBadge]}>
+                      <Text style={[styles.badgeText, badgeTextStyle(clientEnEdition.badge)]}>
+                        {badgeLabel(clientEnEdition.badge)}
+                      </Text>
+                    </View>
 
                     <View style={styles.detailDivider} />
 
@@ -751,25 +783,42 @@ export default function CoiffeurClientsScreen() {
         </View>
       </Modal>
 
-      <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={closeEditModal}>
-        <View style={styles.editOverlay}>
-          <View style={styles.editCard}>
-            <Text style={styles.editTitle}>Modifier le client</Text>
-
-            {clientEnEdition && (
-              <View style={styles.editAvatarWrap}>
-                <Avatar letter={clientEnEdition.letter} size={56} />
-              </View>
+      <Modal visible={statusModalClient !== null} transparent animationType="fade" onRequestClose={fermerStatut}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Statut du client</Text>
+            {statusModalClient && (
+              <Text style={styles.statusModalSubtitle}>{statusModalClient.name}</Text>
             )}
 
-            {editFields}
+            <View style={styles.badgeToggleRow}>
+              {STATUS_OPTIONS.map((option) => {
+                const badge = STATUS_TO_BADGE[option];
+                const active = selectedStatus === option;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[styles.badgeToggleItem, active && badgeToggleActiveStyle(badge)]}
+                    onPress={() => setSelectedStatus(option)}
+                    disabled={isSavingStatus}
+                  >
+                    <Text style={[styles.badgeToggleText, active && badgeToggleActiveTextStyle(badge)]}>
+                      {badgeLabel(badge)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             <View style={styles.modalActionsRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={closeEditModal}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={fermerStatut} disabled={isSavingStatus}>
                 <Text style={styles.cancelBtnText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmBtn} onPress={sauvegarderClient}>
-                <Text style={styles.confirmBtnText}>Enregistrer</Text>
+              <TouchableOpacity style={styles.confirmBtn} onPress={enregistrerStatut} disabled={isSavingStatus}>
+                {isSavingStatus
+                  ? <ActivityIndicator color={CC.white} size="small" />
+                  : <Text style={styles.confirmBtnText}>Enregistrer</Text>
+                }
               </TouchableOpacity>
             </View>
           </View>
@@ -790,18 +839,11 @@ export default function CoiffeurClientsScreen() {
                   <Avatar letter={clientEnEdition.letter} size={56} />
                 </View>
                 <Text style={[styles.detailName, { marginBottom: 4 }]}>{clientEnEdition.name}</Text>
-                {clientEnEdition.badge && (
-                  <View style={[styles.badge, badgeStyle(clientEnEdition.badge), styles.detailBadge]}>
-                    <Text style={[styles.badgeText, badgeTextStyle(clientEnEdition.badge)]}>
-                      {clientEnEdition.badge}
-                    </Text>
-                  </View>
-                )}
-                {clientEnEdition.atRisk && (
-                  <View style={[styles.badge, styles.riskBadge, styles.detailBadge]}>
-                    <Text style={[styles.badgeText, styles.riskBadgeText]}>🚩 À risque</Text>
-                  </View>
-                )}
+                <View style={[styles.badge, badgeStyle(clientEnEdition.badge), styles.detailBadge]}>
+                  <Text style={[styles.badgeText, badgeTextStyle(clientEnEdition.badge)]}>
+                    {badgeLabel(clientEnEdition.badge)}
+                  </Text>
+                </View>
 
                 <View style={styles.detailDivider} />
 
@@ -918,28 +960,32 @@ export default function CoiffeurClientsScreen() {
   );
 }
 
-function badgeStyle(badge: Exclude<Badge, null>) {
+function badgeLabel(badge: Badge) {
+  return badge === 'À risque' ? '🚩 À risque' : badge;
+}
+
+function badgeStyle(badge: Badge) {
   if (badge === 'VIP') return { backgroundColor: CC.vipBg };
   if (badge === 'Nouveau') return { backgroundColor: CC.successBg };
   if (badge === 'Fidèle') return { backgroundColor: CC.grayBg };
   return { backgroundColor: CC.errorBg };
 }
 
-function badgeTextStyle(badge: Exclude<Badge, null>) {
+function badgeTextStyle(badge: Badge) {
   if (badge === 'VIP') return { color: CC.vipText };
   if (badge === 'Nouveau') return { color: CC.successText };
   if (badge === 'Fidèle') return { color: CC.grayText };
   return { color: CC.errorText };
 }
 
-function badgeToggleActiveStyle(badge: Exclude<EditBadge, ''>) {
+function badgeToggleActiveStyle(badge: Badge) {
   if (badge === 'VIP') return { backgroundColor: CC.vipBg, borderColor: CC.vipBg };
   if (badge === 'Nouveau') return { backgroundColor: CC.successBg, borderColor: CC.successBg };
   if (badge === 'Fidèle') return { backgroundColor: CC.grayBg, borderColor: CC.grayBg };
   return { backgroundColor: CC.errorBg, borderColor: CC.errorBg };
 }
 
-function badgeToggleActiveTextStyle(badge: Exclude<EditBadge, ''>) {
+function badgeToggleActiveTextStyle(badge: Badge) {
   if (badge === 'VIP') return { color: CC.vipText };
   if (badge === 'Nouveau') return { color: CC.successText };
   if (badge === 'Fidèle') return { color: CC.grayText };
@@ -1339,12 +1385,6 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontWeight: '700',
   },
-  riskBadge: {
-    backgroundColor: CC.errorBg,
-  },
-  riskBadgeText: {
-    color: CC.errorText,
-  },
   editBtn: {
     width: 28,
     height: 28,
@@ -1353,6 +1393,9 @@ const styles = StyleSheet.create({
     borderColor: CC.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  archiveIconText: {
+    fontSize: 13,
   },
   clientEmail: {
     fontSize: 11.5,
@@ -1401,6 +1444,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: CC.black,
     marginBottom: 18,
+  },
+  statusModalSubtitle: {
+    fontSize: 14,
+    color: CC.textSecondary,
+    marginTop: -12,
+    marginBottom: 16,
   },
   archivedModalHeader: {
     flexDirection: 'row',
@@ -1486,14 +1535,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-  },
-  editTitle: {
-    fontFamily: SERIF,
-    fontWeight: '600',
-    fontSize: 22,
-    color: CC.black,
-    textAlign: 'center',
-    marginBottom: 18,
   },
   editAvatarWrap: {
     alignSelf: 'center',

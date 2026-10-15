@@ -40,7 +40,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
-from django.db.models import Count, Max, Sum
+from django.db.models import Count, Max, Q, Sum
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
@@ -1473,14 +1473,10 @@ def _serialize_clients(queryset):
             'last_visit': c.last_visit.isoformat() if c.last_visit else None,
             'total_spent': float(c.total_spent or 0),
             'date_joined': c.date_joined.isoformat(),
-            'is_at_risk': c.is_at_risk,
+            'status': c.status,
+            'is_archived': c.is_archived,
             'deleted_at': c.deleted_at.isoformat() if c.deleted_at else None,
             'deletion_reason': c.deletion_reason,
-            'status': (
-                'VIP' if c.total_reservations >= 10
-                else 'Nouveau' if c.total_reservations == 1
-                else 'Fidèle'
-            ),
         }
         for c in clients
     ]
@@ -1489,14 +1485,16 @@ def _serialize_clients(queryset):
 @api_view(['GET'])
 @permission_classes([IsStaffRole])
 def client_list(request):
-    clients = User.objects.filter(role='client', is_deleted=False)
+    clients = User.objects.filter(role='client', is_deleted=False, is_archived=False)
     return Response(_serialize_clients(clients))
 
 
 @api_view(['GET'])
 @permission_classes([IsStaffRole])
 def deleted_client_list(request):
-    clients = User.objects.filter(role='client', is_deleted=True)
+    # L'onglet "Archivés" regroupe les clients archivés par le coiffeur et les
+    # comptes supprimés (staff ou RGPD) : tous se reprennent via restore_client.
+    clients = User.objects.filter(role='client').filter(Q(is_deleted=True) | Q(is_archived=True))
     return Response(_serialize_clients(clients))
 
 
@@ -1518,10 +1516,11 @@ def delete_client(request, pk):
 @permission_classes([IsStaffRole])
 def restore_client(request, pk):
     try:
-        client = User.objects.get(pk=pk, role='client', is_deleted=True)
+        client = User.objects.get(Q(is_deleted=True) | Q(is_archived=True), pk=pk, role='client')
     except User.DoesNotExist:
         return Response({'error': 'Client supprimé introuvable.'}, status=status.HTTP_404_NOT_FOUND)
 
+    client.is_archived = False
     client.is_deleted = False
     client.deleted_at = None
     client.deletion_reason = ''
@@ -1529,7 +1528,47 @@ def restore_client(request, pk):
     # côté staff ne touche jamais is_active, donc ce champ ne peut valoir False
     # ici que si le compte a été anonymisé via /auth/delete-account/).
     client.is_active = True
-    client.save(update_fields=['is_deleted', 'deleted_at', 'deletion_reason', 'is_active'])
+    client.save(update_fields=['is_archived', 'is_deleted', 'deleted_at', 'deletion_reason', 'is_active'])
+    return Response(_serialize_clients(User.objects.filter(pk=client.pk))[0])
+
+
+def _set_client_archived(pk, archived):
+    try:
+        client = User.objects.get(pk=pk, role='client', is_deleted=False)
+    except User.DoesNotExist:
+        return Response({'error': 'Client introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    client.is_archived = archived
+    client.save(update_fields=['is_archived'])
+    return Response(_serialize_clients(User.objects.filter(pk=client.pk))[0])
+
+
+@api_view(['PATCH'])
+@permission_classes([IsStaffRole])
+def archive_client(request, pk):
+    return _set_client_archived(pk, True)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsStaffRole])
+def unarchive_client(request, pk):
+    return _set_client_archived(pk, False)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsStaffRole])
+def update_client_status(request, pk):
+    new_status = request.data.get('status')
+    if new_status not in dict(User.STATUS_CHOICES):
+        return Response({'error': 'Statut invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        client = User.objects.get(pk=pk, role='client', is_deleted=False)
+    except User.DoesNotExist:
+        return Response({'error': 'Client introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    client.status = new_status
+    client.save(update_fields=['status'])
     return Response(_serialize_clients(User.objects.filter(pk=client.pk))[0])
 
 

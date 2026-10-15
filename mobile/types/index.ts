@@ -202,6 +202,27 @@ export interface ClosedPeriod {
   created_at: string;
 }
 
+// ─── Clients (espace coiffeur) ──────────────────────────────────────────────
+
+// Statut CRM choisi manuellement par le coiffeur (aucun calcul automatique).
+export type ClientStatus = 'nouveau' | 'vip' | 'fidele' | 'inactif' | 'a_risque';
+
+export interface CoiffeurClient {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string | null;
+  total_reservations: number;
+  last_visit: string | null;
+  total_spent: number;
+  date_joined: string;
+  status: ClientStatus;
+  is_archived: boolean;
+  deleted_at: string | null;
+  deletion_reason: string;
+}
+
 // ─── AI Recommendations ───────────────────────────────────────────────────────
 
 export interface AiRecommendationResponse {
