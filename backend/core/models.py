@@ -230,6 +230,9 @@ class Notification(models.Model):
     type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     title = models.CharField(max_length=255)
     desc = models.CharField(max_length=500)
+    # Détails structurés affichés dans la modale (client, prestation, date…).
+    # Vide ({}) pour les notifications créées avant son ajout.
+    data = models.JSONField(default=dict, blank=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
