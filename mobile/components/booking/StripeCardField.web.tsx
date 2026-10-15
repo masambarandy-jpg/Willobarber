@@ -62,7 +62,7 @@ const fieldLabelStyle: React.CSSProperties = {
 };
 
 const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldProps>(
-  function StripeCardFieldInner({ onChange, incompleteMessage }, ref) {
+  function StripeCardFieldInner({ onChange, incompleteMessage, hideForm }, ref) {
     const { t } = useLanguage();
     const stripe = useStripe();
     const elements = useElements();
@@ -79,13 +79,27 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
     };
 
     useImperativeHandle(ref, () => ({
-      pay: async (amount, cardForm) => {
+      pay: async (amount, cardForm, savedPaymentMethodId) => {
         if (isProcessing.current) {
           throw new Error(incompleteMessage);
         }
         isProcessing.current = true;
 
         try {
+          if (savedPaymentMethodId) {
+            const intent = await paymentsApi.createPaymentIntent(amount, 'eur', savedPaymentMethodId);
+            if (intent.status === 'succeeded' && intent.paymentIntentId) return intent.paymentIntentId;
+            // requires_action : 3DS exigé par la banque malgré la carte
+            // enregistrée → confirmCardPayment ouvre la modale 3DS de Stripe.js.
+            if (!stripe) throw new Error(incompleteMessage);
+            const { paymentIntent, error } = await stripe.confirmCardPayment(intent.clientSecret, {
+              payment_method: savedPaymentMethodId,
+            });
+            if (error) throw new Error(error.message || incompleteMessage);
+            if (!paymentIntent || paymentIntent.status !== 'succeeded') throw new Error(incompleteMessage);
+            return paymentIntent.id;
+          }
+
           const cardNumberElement = elements?.getElement(CardNumberElement);
           if (!stripe || !elements || !cardNumberElement) {
             throw new Error(incompleteMessage);
@@ -142,6 +156,8 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
     }));
 
     const numberOptions = { ...elementOptions, placeholder: '1234 5678 9012 3456' };
+
+    if (hideForm) return null;
 
     return (
       <div>

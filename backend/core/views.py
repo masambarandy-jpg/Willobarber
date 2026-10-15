@@ -1121,12 +1121,63 @@ def export_reservations_excel(request):
     return response
 
 
+def get_or_create_stripe_customer(user):
+    """Customer Stripe du client, créé (et mémorisé sur User) au 1er besoin."""
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    if user.stripe_customer_id:
+        try:
+            customer = stripe.Customer.retrieve(user.stripe_customer_id)
+            if not getattr(customer, 'deleted', False):
+                return customer
+        except stripe.error.InvalidRequestError:
+            # Customer supprimé côté Stripe ou créé avec une autre clé (test ↔ live).
+            pass
+    customer = stripe.Customer.create(
+        email=user.email or None,
+        name=f"{user.first_name} {user.last_name}".strip() or user.username,
+        metadata={'user_id': user.id},
+    )
+    user.stripe_customer_id = customer.id
+    user.save(update_fields=['stripe_customer_id'])
+    return customer
+
+
+def _customer_payment_method(user, payment_method_id):
+    """La carte, si elle appartient bien au customer de ce client — sinon None."""
+    if not user.stripe_customer_id:
+        return None
+    try:
+        payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
+    except stripe.error.InvalidRequestError:
+        return None
+    return payment_method if payment_method.customer == user.stripe_customer_id else None
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_payment_intent(request):
+    """Deux cas :
+
+    - Nouvelle carte (pas de payment_method) : PaymentIntent rattaché au
+      customer avec setup_future_usage='on_session' — l'app le confirme avec la
+      carte saisie, et Stripe la mémorise sur le customer une fois réglé.
+    - Carte enregistrée (payment_method=pm_…) : PaymentIntent confirmé ici,
+      directement (off_session=True, confirm=True) → status 'succeeded', rien à
+      saisir côté app.
+
+    3D Secure : même avec une carte enregistrée, la banque peut exiger une
+    nouvelle authentification (SCA). Stripe lève alors une CardError
+    'authentication_required' ; on renvoie le client_secret du PaymentIntent
+    avec status 'requires_action' et l'app le confirme avec la même carte, ce
+    qui affiche le challenge 3DS (cf. StripeCardField.*.tsx).
+
+    clientSecret reste toujours présent dans la réponse : les versions de l'app
+    antérieures aux cartes enregistrées ne lisent que ce champ.
+    """
     stripe.api_key = settings.STRIPE_SECRET_KEY
     amount = request.data.get('amount')
     currency = request.data.get('currency', 'eur')
+    payment_method_id = request.data.get('payment_method')
 
     try:
         amount = int(round(float(amount) * 100))
@@ -1136,16 +1187,96 @@ def create_payment_intent(request):
     if amount <= 0:
         return Response({'error': 'Montant invalide.'}, status=status.HTTP_400_BAD_REQUEST)
 
+    params = {
+        'amount': amount,
+        'currency': currency,
+        'metadata': {'user_id': request.user.id, 'username': request.user.username},
+    }
+
+    if payment_method_id:
+        if not _customer_payment_method(request.user, payment_method_id):
+            return Response({'error': 'Carte introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            intent = stripe.PaymentIntent.create(
+                **params,
+                customer=request.user.stripe_customer_id,
+                payment_method=payment_method_id,
+                off_session=True,
+                confirm=True,
+            )
+        except stripe.error.CardError as e:
+            pending = getattr(e.error, 'payment_intent', None)
+            if e.code == 'authentication_required' and pending:
+                return Response({
+                    'clientSecret': pending['client_secret'],
+                    'status': 'requires_action',
+                    'paymentIntentId': pending['id'],
+                })
+            return Response({'error': e.user_message or str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except stripe.error.StripeError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'clientSecret': intent.client_secret, 'status': intent.status, 'paymentIntentId': intent.id})
+
     try:
-        intent = stripe.PaymentIntent.create(
-            amount=amount,
-            currency=currency,
-            metadata={'user_id': request.user.id, 'username': request.user.username},
-        )
+        customer = get_or_create_stripe_customer(request.user)
+        params.update(customer=customer.id, setup_future_usage='on_session')
+    except stripe.error.StripeError as e:
+        # La mémorisation de carte est un bonus : le paiement passe sans customer.
+        print(f"[STRIPE] Customer indisponible pour user {request.user.id}: {e}")
+
+    try:
+        intent = stripe.PaymentIntent.create(**params)
     except stripe.error.StripeError as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    return Response({'clientSecret': intent.client_secret})
+    return Response({'clientSecret': intent.client_secret, 'status': intent.status, 'paymentIntentId': intent.id})
+
+
+def _saved_cards(user):
+    """Cartes du customer, une par empreinte : payer deux fois avec la même carte
+    « nouvelle » l'enregistre deux fois chez Stripe (la plus récente gagne)."""
+    if not user.stripe_customer_id or not settings.STRIPE_SECRET_KEY:
+        return {}
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    by_fingerprint = {}
+    for pm in stripe.PaymentMethod.list(customer=user.stripe_customer_id, type='card').auto_paging_iter():
+        by_fingerprint.setdefault(pm.card.fingerprint, []).append(pm)
+    return by_fingerprint
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_payment_methods(request):
+    try:
+        cards = _saved_cards(request.user)
+    except stripe.error.StripeError as e:
+        print(f"[STRIPE] Liste des cartes indisponible pour user {request.user.id}: {e}")
+        cards = {}
+    return Response([
+        {
+            'id': pms[0].id,
+            'brand': pms[0].card.brand,
+            'last4': pms[0].card.last4,
+            'exp_month': pms[0].card.exp_month,
+            'exp_year': pms[0].card.exp_year,
+        }
+        for pms in cards.values()
+    ])
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_my_payment_method(request, pm_id):
+    try:
+        cards = _saved_cards(request.user)
+        duplicates = next((pms for pms in cards.values() if any(pm.id == pm_id for pm in pms)), None)
+        if duplicates is None:
+            return Response({'error': 'Carte introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        for pm in duplicates:
+            stripe.PaymentMethod.detach(pm.id)
+    except stripe.error.StripeError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def build_final_invoice_pdf(reservation):

@@ -1,4 +1,8 @@
 from datetime import date, datetime, time, timedelta
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import stripe
 
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -134,3 +138,87 @@ class RecommendationApiTests(TestCase):
         self.assertEqual(data['type'], 'none')
         self.assertEqual(data['habits']['visits_count'], 0)
         self.assertEqual(data['suggested_slots'], [])
+
+
+def _card(pm_id, fingerprint, last4='4242', customer='cus_1'):
+    return SimpleNamespace(
+        id=pm_id, customer=customer,
+        card=SimpleNamespace(brand='visa', last4=last4, exp_month=12, exp_year=2027, fingerprint=fingerprint),
+    )
+
+
+def _intent(status='requires_payment_method'):
+    return SimpleNamespace(id='pi_1', client_secret='pi_1_secret', status=status)
+
+
+@override_settings(STRIPE_SECRET_KEY='sk_test_dummy')
+class SavedPaymentMethodTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user('client', email='c@x.be', first_name='Ana', role='client')
+        self.client.force_authenticate(self.user)
+
+    @patch('core.views.stripe.PaymentIntent.create', return_value=_intent())
+    @patch('core.views.stripe.Customer.create', return_value=SimpleNamespace(id='cus_new'))
+    def test_first_payment_creates_customer_and_saves_card(self, customer_create, intent_create):
+        r = self.client.post('/api/payments/create-payment-intent/', {'amount': 5}, format='json')
+        self.assertEqual(r.json()['clientSecret'], 'pi_1_secret')
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.stripe_customer_id, 'cus_new')
+        kwargs = intent_create.call_args.kwargs
+        self.assertEqual((kwargs['amount'], kwargs['customer'], kwargs['setup_future_usage']), (500, 'cus_new', 'on_session'))
+
+    @patch('core.views.stripe.PaymentIntent.create', return_value=_intent())
+    @patch('core.views.stripe.Customer.create', side_effect=stripe.error.APIConnectionError('down'))
+    def test_payment_still_works_without_customer(self, customer_create, intent_create):
+        r = self.client.post('/api/payments/create-payment-intent/', {'amount': 45}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('customer', intent_create.call_args.kwargs)
+
+    @patch('core.views.stripe.PaymentIntent.create', return_value=_intent('succeeded'))
+    @patch('core.views.stripe.PaymentMethod.retrieve', return_value=_card('pm_1', 'fp1'))
+    def test_saved_card_is_confirmed_server_side(self, retrieve, intent_create):
+        self.user.stripe_customer_id = 'cus_1'
+        self.user.save()
+        r = self.client.post('/api/payments/create-payment-intent/', {'amount': 5, 'payment_method': 'pm_1'}, format='json')
+        self.assertEqual(r.json()['status'], 'succeeded')
+        kwargs = intent_create.call_args.kwargs
+        self.assertEqual((kwargs['payment_method'], kwargs['off_session'], kwargs['confirm']), ('pm_1', True, True))
+
+    @patch('core.views.stripe.PaymentMethod.retrieve', return_value=_card('pm_1', 'fp1'))
+    def test_saved_card_requiring_3ds_returns_client_secret(self, retrieve):
+        self.user.stripe_customer_id = 'cus_1'
+        self.user.save()
+        error = stripe.error.CardError('auth', None, 'authentication_required', json_body={'error': {
+            'code': 'authentication_required', 'message': 'auth',
+            'payment_intent': {'id': 'pi_3ds', 'client_secret': 'pi_3ds_secret', 'object': 'payment_intent'},
+        }})
+        with patch('core.views.stripe.PaymentIntent.create', side_effect=error):
+            r = self.client.post('/api/payments/create-payment-intent/', {'amount': 5, 'payment_method': 'pm_1'}, format='json')
+        self.assertEqual(r.json(), {'clientSecret': 'pi_3ds_secret', 'status': 'requires_action', 'paymentIntentId': 'pi_3ds'})
+
+    @patch('core.views.stripe.PaymentMethod.retrieve', return_value=_card('pm_x', 'fp', customer='cus_other'))
+    def test_cannot_pay_with_someone_elses_card(self, retrieve):
+        self.user.stripe_customer_id = 'cus_1'
+        self.user.save()
+        r = self.client.post('/api/payments/create-payment-intent/', {'amount': 5, 'payment_method': 'pm_x'}, format='json')
+        self.assertEqual(r.status_code, 404)
+
+    def test_list_is_empty_without_customer(self):
+        self.assertEqual(self.client.get('/api/auth/me/payment-methods/').json(), [])
+
+    def _mock_list(self, cards):
+        return patch('core.views.stripe.PaymentMethod.list', return_value=SimpleNamespace(auto_paging_iter=lambda: iter(cards)))
+
+    def test_list_dedupes_by_fingerprint_and_delete_detaches_duplicates(self):
+        self.user.stripe_customer_id = 'cus_1'
+        self.user.save()
+        cards = [_card('pm_new', 'fp1'), _card('pm_old', 'fp1'), _card('pm_mc', 'fp2', last4='4444')]
+        with self._mock_list(cards):
+            listed = self.client.get('/api/auth/me/payment-methods/').json()
+        self.assertEqual([c['id'] for c in listed], ['pm_new', 'pm_mc'])
+        self.assertEqual(listed[0], {'id': 'pm_new', 'brand': 'visa', 'last4': '4242', 'exp_month': 12, 'exp_year': 2027})
+        with self._mock_list(cards), patch('core.views.stripe.PaymentMethod.detach') as detach:
+            self.assertEqual(self.client.delete('/api/auth/me/payment-methods/pm_new/').status_code, 204)
+            self.assertEqual(self.client.delete('/api/auth/me/payment-methods/pm_unknown/').status_code, 404)
+        self.assertEqual([c.args[0] for c in detach.call_args_list], ['pm_new', 'pm_old'])
