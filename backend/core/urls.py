@@ -25,6 +25,8 @@ urlpatterns = [
     path('reservations/<int:pk>/qr/', views.reservation_qr_code, name='reservation-qr'),
     path('checkin/<uuid:qr_code>/', views.checkin_reservation, name='checkin'),
     path('slots/available/', views.available_slots, name='available-slots'),
+    # Avant le router : sinon 'availability' serait pris pour un pk de /barbers/<pk>/.
+    path('barbers/availability/', views.barbers_week_availability, name='barbers-week-availability'),
     path('', include(router.urls)),
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/login/', views.LoginView.as_view(), name='login'),

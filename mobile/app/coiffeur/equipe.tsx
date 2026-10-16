@@ -7,10 +7,11 @@ import Avatar from '@/components/coiffeur/Avatar';
 import { ChatIcon, EditIcon, TrashIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
+import { coiffeurTeamApi, type BarberDayAvailability, type WeekAvailability } from '@/services/api';
+import type { BarberName } from '@/types';
 
 const API_BASE_URL = 'https://willobarber-production-6951.up.railway.app';
 
-type SlotState = 'ferme' | 'reserve' | 'dispo';
 type Status = 'Actif' | 'Absent';
 
 type TeamMember = {
@@ -20,13 +21,10 @@ type TeamMember = {
   role: string;
   status: Status;
   tags: string[];
-  rdv: number;
   rating: string;
   exp: string;
   email: string;
   phone: string;
-  am: SlotState[];
-  pm: SlotState[];
 };
 
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -39,13 +37,10 @@ const INITIAL_TEAM: TeamMember[] = [
     role: 'Fondateur & Master Barber',
     status: 'Actif',
     tags: ['Fade', 'Texturé', 'Rasoir'],
-    rdv: 124,
     rating: '5,0',
     exp: '30 ans',
     email: 'willo@willobarber.fr',
     phone: '06 45 78 29 70',
-    am: ['reserve', 'reserve', 'dispo', 'dispo', 'reserve', 'reserve', 'ferme'],
-    pm: ['dispo', 'dispo', 'reserve', 'reserve', 'dispo', 'dispo', 'ferme'],
   },
   {
     id: 'malik',
@@ -54,13 +49,10 @@ const INITIAL_TEAM: TeamMember[] = [
     role: 'Barbier Senior',
     status: 'Actif',
     tags: ['Barbe', 'Rasage', 'Classique'],
-    rdv: 96,
     rating: '4,9',
     exp: '12 ans',
     email: 'malik@willobarber.fr',
     phone: '06 32 11 45 67',
-    am: ['ferme', 'dispo', 'reserve', 'reserve', 'dispo', 'reserve', 'reserve'],
-    pm: ['ferme', 'reserve', 'dispo', 'ferme', 'reserve', 'dispo', 'ferme'],
   },
   {
     id: 'idris',
@@ -69,13 +61,10 @@ const INITIAL_TEAM: TeamMember[] = [
     role: 'Barbier & Coloriste',
     status: 'Absent',
     tags: ['Color', 'Crop', 'Soin'],
-    rdv: 64,
     rating: '4,8',
     exp: '8 ans',
     email: 'idris@willobarber.fr',
     phone: '06 78 90 12 34',
-    am: ['ferme', 'reserve', 'dispo', 'reserve', 'reserve', 'dispo', 'ferme'],
-    pm: ['dispo', 'ferme', 'reserve', 'dispo', 'ferme', 'reserve', 'dispo'],
   },
 ];
 
@@ -83,8 +72,9 @@ const EMPTY_EDIT_FORM = { name: '', role: '', email: '', phone: '', status: 'Act
 const EMPTY_ADD_FORM = { name: '', role: '', email: '', phone: '', tag1: '', tag2: '', tag3: '', status: 'Actif' as Status };
 
 // Réel : GET/PATCH/POST/DELETE /api/barbers/ → id, name, role, status, email,
-// phone, specialties (pas de rdv/rating/exp/am/pm côté API — ces stats
-// d'aperçu restent locales, cf. LOCAL_STATS_BY_NAME ci-dessous).
+// phone, specialties. Note/expérience n'existent pas côté API et restent
+// locales (LOCAL_STATS_BY_NAME) ; RDV et disponibilités viennent de
+// /api/barbers/availability/ (agenda par barbier).
 type ApiBarber = {
   id: number;
   name: string;
@@ -95,41 +85,17 @@ type ApiBarber = {
   specialties: string[];
 };
 
-type LocalStats = Pick<TeamMember, 'rdv' | 'rating' | 'exp' | 'am' | 'pm'>;
+type LocalStats = Pick<TeamMember, 'rating' | 'exp'>;
 
 const LOCAL_STATS_BY_NAME: Record<string, LocalStats> = {
-  'Willo Diallo': {
-    rdv: 124, rating: '5,0', exp: '30 ans',
-    am: ['reserve', 'reserve', 'dispo', 'dispo', 'reserve', 'reserve', 'ferme'],
-    pm: ['dispo', 'dispo', 'reserve', 'reserve', 'dispo', 'dispo', 'ferme'],
+  'Willo Diallo': { rating: '5,0', exp: '30 ans',
   },
-  'Malik Haddad': {
-    rdv: 96, rating: '4,9', exp: '12 ans',
-    am: ['ferme', 'dispo', 'reserve', 'reserve', 'dispo', 'reserve', 'reserve'],
-    pm: ['ferme', 'reserve', 'dispo', 'ferme', 'reserve', 'dispo', 'ferme'],
+  'Malik Haddad': { rating: '4,9', exp: '12 ans',
   },
-  'Idris Camara': {
-    rdv: 64, rating: '4,8', exp: '8 ans',
-    am: ['ferme', 'reserve', 'dispo', 'reserve', 'reserve', 'dispo', 'ferme'],
-    pm: ['dispo', 'ferme', 'reserve', 'dispo', 'ferme', 'reserve', 'dispo'],
+  'Idris Camara': { rating: '4,8', exp: '8 ans',
   },
 };
-const DEFAULT_STATS: LocalStats = {
-  rdv: 0, rating: '—', exp: '—',
-  am: Array(7).fill('dispo') as SlotState[],
-  pm: Array(7).fill('dispo') as SlotState[],
-};
-
-// Le nom renvoyé par l'API (/api/barbers/) ne correspond pas toujours
-// exactement à la clé 'Willo Diallo' de LOCAL_STATS_BY_NAME (ex: juste
-// 'Willo'), auquel cas le lookup échoue et retombe sur DEFAULT_STATS
-// (0 RDV, note et expérience vides). Ces disponibilités sont donc forcées
-// pour Willo sans condition sur `stats` (l'égalité par référence avec
-// DEFAULT_STATS s'est révélée peu fiable en pratique).
-const WILLO_FALLBACK_AVAILABILITY: Pick<LocalStats, 'am' | 'pm'> = {
-  am: ['ferme', 'dispo', 'dispo', 'dispo', 'dispo', 'dispo', 'dispo'],
-  pm: ['ferme', 'dispo', 'dispo', 'dispo', 'dispo', 'dispo', 'dispo'],
-};
+const DEFAULT_STATS: LocalStats = { rating: '—', exp: '—' };
 
 function mapApiBarber(b: ApiBarber): TeamMember {
   console.log('ÉQUIPE — nom barbier reçu de l\'API:', b.name);
@@ -145,11 +111,8 @@ function mapApiBarber(b: ApiBarber): TeamMember {
     tags: b.specialties ?? [],
     email: b.email ?? '',
     phone: b.phone ?? '',
-    rdv: isWillo && !stats.rdv ? 124 : stats.rdv,
     rating: isWillo && (!stats.rating || stats.rating === '—') ? '5,0' : stats.rating,
     exp: isWillo && (!stats.exp || stats.exp === '—') ? '30 ans' : stats.exp,
-    am: isWillo ? WILLO_FALLBACK_AVAILABILITY.am : stats.am,
-    pm: isWillo ? WILLO_FALLBACK_AVAILABILITY.pm : stats.pm,
   };
 }
 
@@ -162,10 +125,31 @@ function trierFondateurEnPremier(members: TeamMember[]): TeamMember[] {
   });
 }
 
-function slotColor(state: SlotState) {
-  if (state === 'reserve') return { backgroundColor: CC.gold, borderWidth: 0 };
-  if (state === 'ferme') return { backgroundColor: '#e5ddd0', borderWidth: 0 };
-  return { backgroundColor: 'rgba(201,168,76,0.1)', borderWidth: 1, borderColor: CC.inputBorder };
+// Clé de l'agenda (Reservation.barber) : prénom du barbier (« Malik Haddad » → Malik).
+function barberKey(name: string): BarberName | null {
+  const first = (name ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+  return (['Willo', 'Malik', 'Idris'] as const).find((b) => b.toLowerCase() === first) ?? null;
+}
+
+// Moins de 30 % de créneaux libres : « presque complet ».
+const ALMOST_FULL_RATIO = 0.3;
+
+function dayCell(day: BarberDayAvailability): { box: object; text: object; label: string } {
+  if (day.state === 'closed' || day.state === 'leave') {
+    return { box: { backgroundColor: '#e5ddd0' }, text: { color: CC.textSecondary }, label: day.state === 'leave' ? 'Congé' : '—' };
+  }
+  if (day.state === 'past') {
+    return { box: { backgroundColor: 'transparent', borderWidth: 1, borderColor: CC.trackBg }, text: { color: '#c9c2b6' }, label: '·' };
+  }
+  if (day.free === 0) return { box: { backgroundColor: CC.black }, text: { color: CC.white }, label: '0' };
+  if (day.free / day.total <= ALMOST_FULL_RATIO) {
+    return { box: { backgroundColor: CC.gold }, text: { color: CC.black }, label: String(day.free) };
+  }
+  return {
+    box: { backgroundColor: 'rgba(201,168,76,0.1)', borderWidth: 1, borderColor: CC.inputBorder },
+    text: { color: CC.black },
+    label: String(day.free),
+  };
 }
 
 export default function CoiffeurEquipeScreen() {
@@ -173,6 +157,10 @@ export default function CoiffeurEquipeScreen() {
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(true);
   const [usingMockTeam, setUsingMockTeam] = useState(false);
+  // null = pas (encore) chargée : la grille affiche alors un message, jamais de données fictives.
+  const [availability, setAvailability] = useState<WeekAvailability | null>(null);
+  const [availabilityError, setAvailabilityError] = useState(false);
+  const todayIso = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Brussels' });
 
   // undefined = pas encore lu dans AsyncStorage, null = lu mais absent, string = token trouvé
   const [token, setToken] = useState<string | null | undefined>(undefined);
@@ -233,6 +221,15 @@ export default function CoiffeurEquipeScreen() {
     if (token === undefined) return;
     fetchTeam(token);
   }, [token, fetchTeam]);
+
+  useEffect(() => {
+    coiffeurTeamApi.weekAvailability()
+      .then(setAvailability)
+      .catch((e) => {
+        console.log('ERREUR ÉQUIPE — disponibilités:', e);
+        setAvailabilityError(true);
+      });
+  }, []);
 
   const ouvrirChat = (member: TeamMember) => {
     setMemberPourMessage(member);
@@ -433,8 +430,10 @@ export default function CoiffeurEquipeScreen() {
         ) : (
         <View style={isTablet && styles.teamGrid}>
         {team.map((m) => {
+          const key = barberKey(m.name);
+          const week = key ? availability?.barbers[key] : undefined;
           const stats = [
-            { value: String(m.rdv), label: 'RDV/mois' },
+            { value: week ? String(week.week_rdv) : '—', label: 'RDV semaine' },
             { value: m.rating, label: 'Note' },
             { value: m.exp, label: 'Expérience' },
           ];
@@ -473,15 +472,35 @@ export default function CoiffeurEquipeScreen() {
               </View>
 
               <Text style={styles.availLabel}>DISPONIBILITÉ — SEMAINE</Text>
-              <View style={styles.availGrid}>
-                {DAYS.map((day, i) => (
-                  <View key={i} style={styles.availCol}>
-                    <Text style={styles.availDayLabel}>{day}</Text>
-                    <View style={[styles.slot, slotColor(m.am[i])]} />
-                    <View style={[styles.slot, slotColor(m.pm[i])]} />
-                  </View>
-                ))}
-              </View>
+              {week ? (
+                <View style={styles.availGrid}>
+                  {week.days.map((day, i) => {
+                    const cell = dayCell(day);
+                    const isToday = day.date === todayIso;
+                    return (
+                      <View key={day.date} style={styles.availCol}>
+                        <Text style={[styles.availDayLabel, isToday && styles.availDayToday]}>
+                          {DAYS[i]} {Number(day.date.slice(8, 10))}
+                        </Text>
+                        <View
+                          style={[styles.dayCell, cell.box]}
+                          accessibilityLabel={
+                            day.state === 'open' ? `${day.free} créneaux libres` : day.reason ?? 'Jour passé'
+                          }
+                        >
+                          <Text style={[styles.dayCellText, cell.text]}>{cell.label}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={styles.availEmpty}>
+                  {availabilityError || (availability && !key)
+                    ? 'Disponibilités indisponibles pour ce barbier.'
+                    : 'Chargement des disponibilités…'}
+                </Text>
+              )}
 
               <View style={styles.actionsRow}>
                 <TouchableOpacity style={styles.planningBtn} onPress={() => router.push('/coiffeur/planning')}>
@@ -506,15 +525,19 @@ export default function CoiffeurEquipeScreen() {
         <View style={styles.legendCard}>
           <View style={styles.legendItem}>
             <View style={[styles.legendSwatch, { backgroundColor: 'rgba(201,168,76,0.1)', borderWidth: 1, borderColor: CC.inputBorder }]} />
-            <Text style={styles.legendText}>Disponible</Text>
+            <Text style={styles.legendText}>Créneaux libres (nombre)</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendSwatch, { backgroundColor: CC.gold }]} />
-            <Text style={styles.legendText}>Réservé</Text>
+            <Text style={styles.legendText}>Presque complet</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendSwatch, { backgroundColor: CC.black }]} />
+            <Text style={styles.legendText}>Complet</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendSwatch, { backgroundColor: '#e5ddd0' }]} />
-            <Text style={styles.legendText}>Fermé</Text>
+            <Text style={styles.legendText}>Fermé / congé</Text>
           </View>
         </View>
       </CoiffeurScreen>
@@ -963,10 +986,26 @@ const styles = StyleSheet.create({
     color: CC.textSecondary,
     marginBottom: 2,
   },
-  slot: {
+  availDayToday: {
+    color: CC.black,
+    fontWeight: '700',
+  },
+  dayCell: {
     width: '100%',
-    height: 16,
-    borderRadius: 4,
+    height: 34,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayCellText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  availEmpty: {
+    fontSize: 12.5,
+    color: CC.textSecondary,
+    fontStyle: 'italic',
+    marginBottom: 18,
   },
   actionsRow: {
     flexDirection: 'row',

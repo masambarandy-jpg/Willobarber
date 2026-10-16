@@ -6,9 +6,6 @@ from . import sse
 from .models import Notification, Reservation, Review
 from .serializers import NotificationSerializer
 
-# Reservation n'a pas de champ barbier (agenda unique) : même valeur que
-# l'email de confirmation envoyé dans ReservationViewSet.perform_create.
-SALON_BARBER_NAME = 'Willo'
 CANCELLED_STATUSES = ('cancelled', 'cancelled_client')
 
 
@@ -19,7 +16,7 @@ def reservation_payload(reservation):
         'client_name': f"{user.first_name} {user.last_name}".strip() or user.username,
         'client_phone': user.phone or '',
         'service_name': reservation.service.name,
-        'barber_name': SALON_BARBER_NAME,
+        'barber_name': reservation.barber,
         'date': reservation.date.isoformat(),
         'time': reservation.time.strftime('%H:%M'),
         'price': float(reservation.service.price),

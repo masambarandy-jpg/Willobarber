@@ -68,6 +68,9 @@ type ApiReservation = {
   payment_status: PaymentStatus;
   payment_method: PaymentMethodType;
   amount_paid: string | null;
+  // Agenda par barbier (Reservation.barber) ; absent des réponses d'un backend
+  // antérieur → Willo, comme le défaut côté serveur.
+  barber?: Barber;
 };
 
 type ClosedPeriod = {
@@ -447,7 +450,7 @@ export default function CoiffeurPlanningScreen() {
               service: r.service_name,
               client: r.client_display_name,
               status: r.status,
-              barber: 'Willo', // pas d'endpoint équipe/affectation barbier : fallback
+              barber: r.barber && r.barber in BARBER_STYLE ? r.barber : 'Willo',
               amount: parseFloat(r.service_price) || 0,
               paymentStatus: r.payment_status,
               paymentMethod: r.payment_method,

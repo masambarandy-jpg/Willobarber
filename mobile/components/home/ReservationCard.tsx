@@ -41,9 +41,9 @@ export function ReservationCard({ reservation, compact = false }: ReservationCar
       onPress={() => router.push(`/(tabs)/reservations`)}
     >
       <View style={styles.topRow}>
-        <Avatar name={reservation.barber_name} size={compact ? 38 : 46} />
+        <Avatar name={reservation.barber} size={compact ? 38 : 46} />
         <View style={styles.info}>
-          <Text style={styles.barberName}>{reservation.barber_name}</Text>
+          <Text style={styles.barberName}>{reservation.barber}</Text>
           <Text style={styles.serviceName}>{reservation.service_name}</Text>
         </View>
         <Badge label={statusInfo.label} variant={variant} />

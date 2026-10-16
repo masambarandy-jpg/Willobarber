@@ -104,8 +104,8 @@ export interface Reservation {
   reference: string;
   client: number;
   client_name: string;
-  barber: number;
-  barber_name: string;
+  // Agenda par barbier : prénom du barbier (Reservation.barber, cf. BARBER_CHOICES).
+  barber: BarberName;
   service: number;
   service_name: string;
   date: string;
@@ -125,8 +125,11 @@ export interface Reservation {
   checked_in_at?: string | null;
 }
 
+export type BarberName = 'Willo' | 'Malik' | 'Idris';
+
 export interface CreateReservationPayload {
   service: number;
+  barber?: BarberName;
   date: string;
   time: string;
   notes?: string;

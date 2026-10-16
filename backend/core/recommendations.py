@@ -21,7 +21,7 @@ from django.utils import timezone
 
 from . import sse
 from .emails import JOURS_FR, format_date_fr
-from .models import ClosedPeriod, Notification, Reservation, User
+from .models import DEFAULT_BARBER, ClosedPeriod, Notification, Reservation, User
 from .serializers import NotificationSerializer
 from .slots import CLOSED_WEEKDAYS, SLOT_TIMES, hhmm_to_minutes, slot_fits_before_closing
 
@@ -263,8 +263,10 @@ def suggest_slots(user_id, habits, exclude_slots=None, now=None, count=3):
 
     booked = {
         slot_key(d, t.strftime('%H:%M'))
+        # Les créneaux recommandés se réservent chez le barbier par défaut (cf.
+        # book.tsx) : seul son agenda compte.
         for d, t in Reservation.objects
-            .filter(date__range=(window_start, window_end), status__in=ACTIVE_STATUSES)
+            .filter(barber=DEFAULT_BARBER, date__range=(window_start, window_end), status__in=ACTIVE_STATUSES)
             .values_list('date', 'time')
     }
 
