@@ -6,6 +6,7 @@ PDF reportlab → email SendGrid avec PDF joint → notification client
 « boutique_order » + événement SSE new_boutique_order.
 """
 import io
+import logging
 from xml.sax.saxutils import escape
 
 from django.core import signing
@@ -26,6 +27,8 @@ from core.recommendations import SALON_TZ, create_client_notification
 from core.serializers import NotificationSerializer
 from core.views import PayeStamp, fmt_eur, send_invoice_email
 from .models import Order
+
+logger = logging.getLogger(__name__)
 
 TVA_RATE = 0.21
 INVOICE_LINK_SALT = 'boutique-invoice-download'
@@ -88,7 +91,14 @@ def notify_coiffeur_new_order(order, site_root):
         data=payload,
     )
     event = {**payload, 'notification': NotificationSerializer(notification).data}
-    transaction.on_commit(lambda: sse.publish('new_boutique_order', event))
+
+    def publish():
+        try:
+            sse.publish('new_boutique_order', event)
+        except Exception:
+            logger.exception("SSE new_boutique_order non publié (commande %s)", order.numero)
+
+    transaction.on_commit(publish)
 
 
 def build_boutique_invoice_pdf(order):

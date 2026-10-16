@@ -178,6 +178,8 @@ LOGGING = {
     'handlers': {
         'console': {'class': 'logging.StreamHandler'},
     },
+    # logger.exception() des apps (boutique, core…) → logs Railway.
+    'root': {'handlers': ['console'], 'level': 'WARNING'},
     'loggers': {
         'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
     },
