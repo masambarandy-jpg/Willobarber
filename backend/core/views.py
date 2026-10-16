@@ -49,7 +49,9 @@ from .models import (
     Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList,
     BarberLeave, Notification, NotificationPreference, PaymentCard, UserSession,
 )
-from .emails import format_date_fr, format_date_fr_short, format_heure_fr
+from .emails import (
+    format_date_fr, format_date_fr_short, format_heure_fr, is_late_cancellation, queue_reservation_email,
+)
 from .permissions import IsStaffRole
 from .recommendations import build_recommendation, create_client_notification, run_daily_recommendations
 from .slots import SLOT_TIMES
@@ -65,6 +67,7 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 ACOMPTE_FIXE = 5
+CANCELLED_STATUSES = ('cancelled', 'cancelled_client')
 
 
 class PayeStamp(Flowable):
@@ -227,49 +230,6 @@ def available_slots(request):
     return Response({'date': date_str, 'slots': slots})
 
 
-def send_confirmation_email(to_email, first_name, service_name, date, time, barber, total_price, acompte=5):
-    try:
-        sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
-        solde = total_price - acompte
-        date_fr = format_date_fr(date)
-        heure_fr = format_heure_fr(time)
-        html_content = f"""
-        <div style="font-family: Georgia, serif; background-color: #0D0C0A; color: #FFFFFF; padding: 40px; max-width: 600px; margin: auto;">
-            <h1 style="color: #C9A84C; font-size: 32px; margin-bottom: 4px;">WilloBarber</h1>
-            <p style="color: #6B6560; font-size: 12px; letter-spacing: 2px; margin-top: 0;">SALON DE BARBIER · BRUXELLES</p>
-            <hr style="border: 1px solid #1A1814; margin: 24px 0;">
-            <h2 style="color: #FFFFFF;">Bonjour {first_name} 👋</h2>
-            <p style="color: #CCCCCC;">Votre réservation est confirmée ! Nous avons hâte de vous accueillir.</p>
-            <div style="background: #1A1814; border-radius: 12px; padding: 24px; margin: 24px 0;">
-                <table style="width: 100%; color: #FFFFFF;">
-                    <tr><td style="color: #6B6560; padding: 6px 0;">Prestation</td><td style="text-align:right; font-weight:bold;">{service_name}</td></tr>
-                    <tr><td style="color: #6B6560; padding: 6px 0;">Date</td><td style="text-align:right;">{date_fr}</td></tr>
-                    <tr><td style="color: #6B6560; padding: 6px 0;">Heure</td><td style="text-align:right;">{heure_fr}</td></tr>
-                    <tr><td style="color: #6B6560; padding: 6px 0;">Barbier</td><td style="text-align:right;">{barber}</td></tr>
-                    <tr><td style="color: #6B6560; padding: 6px 0;">Acompte réglé</td><td style="text-align:right; color: #2D6A4F;">-{acompte}€</td></tr>
-                    <tr><td style="color: #6B6560; padding: 6px 0; font-weight:bold;">Solde au salon</td><td style="text-align:right; color: #C9A84C; font-weight:bold;">{solde}€</td></tr>
-                </table>
-            </div>
-            <p style="color: #CCCCCC;">📍 Rue Auguste Van Zande 78, Bruxelles</p>
-            <p style="color: #6B6560; font-size: 12px;">Annulation gratuite jusqu'à 24h avant le rendez-vous.</p>
-            <hr style="border: 1px solid #1A1814; margin: 24px 0;">
-            <p style="color: #C9A84C; font-size: 14px; text-align: center;">À bientôt chez WilloBarber ✂️</p>
-        </div>
-        """
-        message = Mail(
-            from_email=Email('masamba.randy@gmail.com', 'WilloBarber'),
-            to_emails=To(to_email),
-            subject=f'✂️ Confirmation — {service_name} le {date_fr}',
-            html_content=Content('text/html', html_content)
-        )
-        response = sg.send(message)
-        print(f"[EMAIL] Confirmation envoyée à {to_email} — SendGrid status={response.status_code}")
-        return True
-    except Exception as e:
-        print(f"[EMAIL ERROR] Échec envoi confirmation à {to_email}: {e}")
-        return False
-
-
 password_reset_token_generator = PasswordResetTokenGenerator()
 
 
@@ -297,7 +257,7 @@ def send_password_reset_email(request, user):
         </div>
         """
         message = Mail(
-            from_email=Email('masamba.randy@gmail.com', 'WilloBarber'),
+            from_email=Email(settings.SENDGRID_FROM_EMAIL, settings.SENDGRID_FROM_NAME),
             to_emails=To(user.email),
             subject='🔑 Réinitialisation de votre mot de passe WilloBarber',
             html_content=Content('text/html', html_content)
@@ -452,6 +412,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
     # — cf. reservationsApi.cancel()/.reschedule() côté mobile.
     CLIENT_ALLOWED_FIELDS = {'status', 'cancellation_reason', 'date', 'time'}
 
+    def _app_url(self):
+        return settings.APP_URL or self.request.build_absolute_uri('/')
+
     def perform_update(self, serializer):
         user = self.request.user
         is_staff = user.is_superuser or getattr(user, 'role', None) == 'admin'
@@ -465,7 +428,18 @@ class ReservationViewSet(viewsets.ModelViewSet):
             if 'status' in requested_fields and self.request.data.get('status') != 'cancelled_client':
                 raise PermissionDenied("Vous ne pouvez qu'annuler votre réservation.")
         previous_status = serializer.instance.status
+        previous_slot = {'date': serializer.instance.date, 'time': serializer.instance.time}
         reservation = serializer.save()
+
+        # Emails client : annulation (client ou salon) ou reprogrammation.
+        if previous_status not in CANCELLED_STATUSES and reservation.status in CANCELLED_STATUSES:
+            queue_reservation_email(
+                reservation, 'cancelled', self._app_url(), late=is_late_cancellation(reservation),
+            )
+        elif reservation.status not in CANCELLED_STATUSES and (
+            (reservation.date, reservation.time) != (previous_slot['date'], previous_slot['time'])
+        ):
+            queue_reservation_email(reservation, 'rescheduled', self._app_url(), previous=previous_slot)
 
         # Retirer les points gagnés à la création pour éviter le farming
         # (annulation par le client ou par le salon, une seule fois).
@@ -533,26 +507,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
         user.loyalty_points = (user.loyalty_points or 0) + points_earned
         user.save(update_fields=['loyalty_points'])
 
-        try:
-            print(f"[EMAIL] Envoi à {self.request.user.email} pour réservation {reservation.id}")
-            email_sent = send_confirmation_email(
-                to_email=self.request.user.email,
-                first_name=self.request.user.first_name or self.request.user.username,
-                service_name=reservation.service.name,
-                date=reservation.date,
-                time=reservation.time,
-                barber="Willo",
-                total_price=float(reservation.service.price),
-                acompte=5
-            )
-            if email_sent:
-                print(f"[EMAIL] Envoyé avec succès à {self.request.user.email} pour réservation {reservation.id}")
-            else:
-                print(f"[EMAIL] Échec de l'envoi à {self.request.user.email} pour réservation {reservation.id} (voir [EMAIL ERROR] ci-dessus)")
-        except Exception as e:
-            import traceback
-            print(f"[EMAIL ERROR] {str(e)}")
-            print(traceback.format_exc())
+        queue_reservation_email(reservation, 'confirmed', self._app_url())
 
 
 class RegisterView(APIView):
@@ -1406,7 +1361,7 @@ def send_final_invoice(request, pk):
 def send_invoice_email(user, subject, heading, body, pdf_bytes, filename):
     sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
     message = Mail(
-        from_email=Email('masamba.randy@gmail.com', 'WilloBarber'),
+        from_email=Email(settings.SENDGRID_FROM_EMAIL, settings.SENDGRID_FROM_NAME),
         to_emails=To(user.email),
         subject=subject,
         html_content=Content('text/html', f"""
