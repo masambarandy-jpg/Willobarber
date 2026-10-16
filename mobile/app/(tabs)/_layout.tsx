@@ -1,5 +1,5 @@
 import { Tabs, useSegments } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import ClientIPadLayout, { ClientRoute } from '@/components/client/ClientIPadLayout';
@@ -7,6 +7,8 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 const GOLD     = '#C9A84C';
 const INACTIVE = '#9A9490';
+// Au-delà, les 5 onglets restent groupés au centre au lieu de s'étaler
+const TAB_BAR_MAX_W = 600;
 
 const SEGMENT_TO_ROUTE: Record<string, ClientRoute> = {
   catalogue: 'catalogue',
@@ -18,6 +20,8 @@ const SEGMENT_TO_ROUTE: Record<string, ClientRoute> = {
 export default function TabsLayout() {
   const isTablet = useIsTablet();
   const { t } = useLanguage();
+  const { width } = useWindowDimensions();
+  const sideGutter = Math.max(0, (width - TAB_BAR_MAX_W) / 2);
   const segments = useSegments();
   const lastSegment = segments[segments.length - 1];
   const active: ClientRoute = SEGMENT_TO_ROUTE[lastSegment as string] ?? 'home';
@@ -26,11 +30,28 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: isTablet ? { display: 'none' } : styles.bar,
+        tabBarStyle: isTablet
+          ? { display: 'none' }
+          : [styles.bar, sideGutter > 0 && { paddingHorizontal: sideGutter }],
         tabBarShowLabel: true,
         tabBarActiveTintColor: GOLD,
         tabBarInactiveTintColor: INACTIVE,
-        tabBarLabelStyle: styles.label,
+        // Toujours sous l'icône, même entre 600 et 767px où React Navigation
+        // passerait sinon en mode « beside-icon »
+        tabBarLabelPosition: 'below-icon',
+        // numberOfLines / adjustsFontSizeToFit sont des props de Text, pas de
+        // style : d'où un label rendu à la main plutôt que tabBarLabelStyle
+        tabBarLabel: ({ color, children }) => (
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            style={[styles.label, { color }]}
+          >
+            {children}
+          </Text>
+        ),
+        tabBarItemStyle: styles.item,
         tabBarIconStyle: styles.icon,
       }}
     >
@@ -92,7 +113,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="reservations"
         options={{
-          title: t('nav.mySpace'),
+          // Libellé court : « Mon espace » ne tient pas sur 5 onglets à 320–390px
+          title: t('nav.mySpaceShort'),
           tabBarIcon: ({ color }) => (
             <View style={{ width: 24, height: 24 }}>
               <Svg width="22" height="22" viewBox="0 0 24 24"
@@ -156,12 +178,16 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 10,
   },
+  item: {
+    paddingHorizontal: 2,
+  },
   icon: {
     marginBottom: 4,
   },
   label: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     marginTop: 2,
+    textAlign: 'center',
   },
 });
