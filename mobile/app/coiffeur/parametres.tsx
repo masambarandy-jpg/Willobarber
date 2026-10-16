@@ -257,6 +257,7 @@ function ProfilTab() {
 
 type DayHours = { day: string; open: boolean; debut: string; fin: string };
 
+// Ordre = weekday backend (lundi = 0), cf. modèle OpeningHours.
 const DEFAULT_HOURS: DayHours[] = [
   { day: 'Lundi', open: false, debut: '11:00', fin: '21:00' },
   { day: 'Mardi', open: true, debut: '11:00', fin: '21:00' },
@@ -272,6 +273,30 @@ const HOURS_OPTIONS = [
   '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00',
 ];
 
+type OpeningHoursApiDay = { weekday: number; is_closed: boolean; open_time: string; close_time: string };
+
+const toApiDay = (h: DayHours, weekday: number): OpeningHoursApiDay => ({
+  weekday,
+  is_closed: !h.open,
+  open_time: h.debut,
+  close_time: h.fin,
+});
+
+// Fermeture à 00:00 = minuit, donc toujours après l'ouverture.
+const isValidRange = (h: DayHours) => !h.open || h.fin === '00:00' || h.fin > h.debut;
+
+async function putOpeningHours(days: OpeningHoursApiDay[]): Promise<OpeningHoursApiDay[]> {
+  const token = await AsyncStorage.getItem('coiffeur_token');
+  if (!token) throw new Error('no-token');
+  const res = await fetch(`${API_BASE_URL}/api/opening-hours/`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(days),
+  });
+  if (!res.ok) throw new Error(`opening-hours-put-failed-${res.status}`);
+  return res.json();
+}
+
 function EtablissementTab() {
   const [name, setName] = useState('WilloBarber');
   const [address, setAddress] = useState('Rue Auguste Van Zande 78, 1082 Bruxelles');
@@ -282,14 +307,78 @@ function EtablissementTab() {
   const [pickerIndex, setPickerIndex] = useState(0);
   const [pickerType, setPickerType] = useState<'debut' | 'fin'>('debut');
   const [horairesEnregistres, setHorairesEnregistres] = useState(false);
+  const [savingHoraires, setSavingHoraires] = useState(false);
+  const [horairesError, setHorairesError] = useState('');
 
-  const enregistrerHoraires = () => {
+  // Horaires réels du salon : ce sont eux qui définissent les créneaux proposés
+  // aux clients (GET public /api/opening-hours/, cf. backend/core/slots.py).
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/api/opening-hours/`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`opening-hours-fetch-failed-${res.status}`);
+        return res.json() as Promise<OpeningHoursApiDay[]>;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setHours((prev) => prev.map((h, weekday) => {
+          const d = data.find((x) => x.weekday === weekday);
+          return d ? { ...h, open: !d.is_closed, debut: d.open_time, fin: d.close_time } : h;
+        }));
+      })
+      .catch((error) => {
+        console.log('ERREUR HORAIRES — GET /api/opening-hours/:', error);
+        if (!cancelled) setHorairesError('Impossible de charger les horaires du salon.');
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const flashEnregistre = () => {
     setHorairesEnregistres(true);
     setTimeout(() => setHorairesEnregistres(false), 3000);
   };
 
-  const toggleDay = (day: string) => {
-    setHours((prev) => prev.map((h) => (h.day === day ? { ...h, open: !h.open } : h)));
+  // Enregistre immédiatement chaque changement (toggle ou heure) ; en cas
+  // d'échec, l'écran revient à l'état précédent pour ne pas mentir au coiffeur.
+  const saveDay = async (weekday: number, next: DayHours) => {
+    if (!isValidRange(next)) {
+      setHorairesError(`${next.day} : l'heure de fermeture doit être après l'heure d'ouverture.`);
+      return;
+    }
+    const previous = hours;
+    setHorairesError('');
+    setHours((prev) => prev.map((h, i) => (i === weekday ? next : h)));
+    try {
+      await putOpeningHours([toApiDay(next, weekday)]);
+      flashEnregistre();
+    } catch (error) {
+      console.log('ERREUR HORAIRES — PUT /api/opening-hours/:', error);
+      setHours(previous);
+      setHorairesError("Les horaires n'ont pas pu être enregistrés. Réessayez.");
+    }
+  };
+
+  const enregistrerHoraires = async () => {
+    const invalid = hours.find((h) => !isValidRange(h));
+    if (invalid) {
+      setHorairesError(`${invalid.day} : l'heure de fermeture doit être après l'heure d'ouverture.`);
+      return;
+    }
+    setSavingHoraires(true);
+    setHorairesError('');
+    try {
+      await putOpeningHours(hours.map(toApiDay));
+      flashEnregistre();
+    } catch (error) {
+      console.log('ERREUR HORAIRES — PUT /api/opening-hours/:', error);
+      setHorairesError("Les horaires n'ont pas pu être enregistrés. Réessayez.");
+    } finally {
+      setSavingHoraires(false);
+    }
+  };
+
+  const toggleDay = (index: number) => {
+    saveDay(index, { ...hours[index], open: !hours[index].open });
   };
 
   const openPicker = (index: number, type: 'debut' | 'fin') => {
@@ -299,8 +388,8 @@ function EtablissementTab() {
   };
 
   const selectHeure = (heure: string) => {
-    setHours((prev) => prev.map((h, i) => (i === pickerIndex ? { ...h, [pickerType]: heure } : h)));
     setPickerVisible(false);
+    saveDay(pickerIndex, { ...hours[pickerIndex], [pickerType]: heure });
   };
 
   const heureSelectionnee = hours[pickerIndex]?.[pickerType];
@@ -330,18 +419,34 @@ function EtablissementTab() {
               ) : (
                 <Text style={[styles.hourValue, styles.hourValueClosed]}>Fermé</Text>
               )}
-              <Toggle value={h.open} onChange={() => toggleDay(h.day)} />
+              <Toggle value={h.open} onChange={() => toggleDay(i)} />
             </View>
           </View>
         ))}
 
+        {!!horairesError && (
+          <View style={styles.profilErrorBox}>
+            <Text style={styles.profilErrorText}>{horairesError}</Text>
+          </View>
+        )}
+
         <TouchableOpacity
           onPress={enregistrerHoraires}
-          style={[styles.saveBtn, styles.saveHorairesBtn, horairesEnregistres && styles.saveBtnDone]}
+          disabled={savingHoraires}
+          style={[
+            styles.saveBtn,
+            styles.saveHorairesBtn,
+            horairesEnregistres && styles.saveBtnDone,
+            savingHoraires && { opacity: 0.7 },
+          ]}
         >
-          <Text style={[styles.saveBtnText, horairesEnregistres && styles.saveBtnTextDone]}>
-            {horairesEnregistres ? '✓ Horaires enregistrés !' : 'Enregistrer les horaires'}
-          </Text>
+          {savingHoraires ? (
+            <ActivityIndicator size="small" color={CC.white} />
+          ) : (
+            <Text style={[styles.saveBtnText, horairesEnregistres && styles.saveBtnTextDone]}>
+              {horairesEnregistres ? '✓ Horaires enregistrés !' : 'Enregistrer les horaires'}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
 

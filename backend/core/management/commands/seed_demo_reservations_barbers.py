@@ -19,7 +19,7 @@ from django.db import transaction
 
 from core.models import BarberLeave, ClosedPeriod, Reservation, Service, User
 from core.recommendations import salon_now
-from core.slots import CLOSED_WEEKDAYS, SLOT_TIMES
+from core.slots import day_hours, slot_times_for
 
 DEMO_USERNAME = 'demo_regular'
 # Même e-mail que seed_reco_demo : seul critère de suppression des RDV de démo.
@@ -105,13 +105,13 @@ class Command(BaseCommand):
             .filter(barber=barber, date=day, status__in=ACTIVE).values_list('time', flat=True)
         }
         picked = [h for h in wanted if h not in taken]
-        spare = (s for s in SLOT_TIMES if s not in taken and s not in picked)
+        spare = (s for s in slot_times_for(day) if s not in taken and s not in picked)
         picked += [s for _, s in zip(range(len(wanted) - len(picked)), spare)]
         return picked
 
     def _closed(self, barber, day):
         return (
-            day.weekday() in CLOSED_WEEKDAYS
+            day_hours(day) is None
             or ClosedPeriod.objects.filter(start_date__lte=day, end_date__gte=day).exists()
             or BarberLeave.objects.filter(barber=barber, start_date__lte=day, end_date__gte=day).exists()
         )

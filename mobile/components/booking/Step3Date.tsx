@@ -11,12 +11,17 @@ import {
 } from 'react-native';
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { closedPeriodsApi, slotsApi, waitingListApi } from '@/services/api';
-import type { BarberName, ClosedPeriod } from '@/types';
-import { SLOT_GROUPS, isSlotAvailable, type BookingState } from './data';
+import { closedPeriodsApi, openingHoursApi, slotsApi, waitingListApi } from '@/services/api';
+import type { BarberName, ClosedPeriod, OpeningHoursDay } from '@/types';
+import {
+  DEFAULT_CLOSING_MINUTES,
+  closingMinutesOf,
+  groupSlots,
+  hhmmToMinutes,
+  isSlotAvailable,
+  type BookingState,
+} from './data';
 import type { TranslationKey } from '@/i18n/translations';
-
-const ALL_SLOTS = SLOT_GROUPS.flatMap((g) => g.slots);
 
 const GOLD       = '#C9A84C';
 const CARD       = '#1A1814';
@@ -46,6 +51,32 @@ function findClosedPeriod(date: Date, closedPeriods: ClosedPeriod[]): ClosedPeri
   }) ?? null;
 }
 
+function formatHour(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+}
+
+/** « MAR – DIM 11h – 21h · Fermé : LUN » — jours consécutifs aux mêmes horaires regroupés. */
+function summarizeHours(hours: OpeningHoursDay[], dayLabel: (i: number) => string, closedLabel: string): string {
+  const byDay = [...hours].sort((a, b) => a.weekday - b.weekday);
+  const span = (h: OpeningHoursDay) =>
+    `${formatHour(hhmmToMinutes(h.open_time))} – ${formatHour(closingMinutesOf(h.close_time))}`;
+  const parts: string[] = [];
+  let i = 0;
+  while (i < byDay.length) {
+    if (byDay[i].is_closed) { i++; continue; }
+    let j = i;
+    while (j + 1 < byDay.length && !byDay[j + 1].is_closed && span(byDay[j + 1]) === span(byDay[i])) j++;
+    const days = j > i ? `${dayLabel(byDay[i].weekday)} – ${dayLabel(byDay[j].weekday)}` : dayLabel(byDay[i].weekday);
+    parts.push(`${days} ${span(byDay[i])}`);
+    i = j + 1;
+  }
+  const closed = byDay.filter((h) => h.is_closed).map((h) => dayLabel(h.weekday));
+  if (closed.length) parts.push(`${closedLabel} : ${closed.join(', ')}`);
+  return parts.join(' · ');
+}
+
 type Cell = { day: number; prev: boolean } | null;
 
 function buildCells(year: number, month: number): Cell[] {
@@ -69,9 +100,10 @@ interface CalendarProps {
   selectedDate: Date | null;
   onSelect: (d: Date) => void;
   closedPeriods: ClosedPeriod[];
+  openingHours: OpeningHoursDay[];
 }
 
-function Calendar({ selectedDate, onSelect, closedPeriods }: CalendarProps) {
+function Calendar({ selectedDate, onSelect, closedPeriods, openingHours }: CalendarProps) {
   const { t } = useLanguage();
   const MONTH_LABELS = Array.from({ length: 12 }, (_, i) => t(`step3.month.${i}` as TranslationKey));
   const DAY_LABELS = Array.from({ length: 7 }, (_, i) => t(`step3.day.${i}` as TranslationKey));
@@ -115,8 +147,12 @@ function Calendar({ selectedDate, onSelect, closedPeriods }: CalendarProps) {
     return d < t;
   };
 
-  // col 0 = lundi = fermé (dimanche = ouvert)
-  const isWeekdayClosed = (col: number) => col === 0;
+  // col 0 = lundi = weekday 0 côté backend. Tant que les horaires ne sont pas
+  // chargés, on garde l'ancien défaut (lundi fermé).
+  const isWeekdayClosed = (col: number) =>
+    openingHours.length
+      ? openingHours.find((h) => h.weekday === col)?.is_closed ?? false
+      : col === 0;
 
   const isPeriodClosed = (day: number) =>
     findClosedPeriod(new Date(viewYear, viewMonth, day), closedPeriods) !== null;
@@ -240,6 +276,11 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
   const { t } = useLanguage();
 
   const [closedPeriods, setClosedPeriods] = useState<ClosedPeriod[]>([]);
+  const [openingHours, setOpeningHours] = useState<OpeningHoursDay[]>([]);
+  // Grille du jour sélectionné, telle que renvoyée par le backend (horaires du salon).
+  const [daySlots, setDaySlots] = useState<string[]>([]);
+  const [dayClosed, setDayClosed] = useState(false);
+  const [closingMinutes, setClosingMinutes] = useState(DEFAULT_CLOSING_MINUTES);
   const [bookedTimes, setBookedTimes] = useState<Set<string>>(new Set());
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [joiningWaitlist, setJoiningWaitlist] = useState(false);
@@ -249,6 +290,9 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
     let cancelled = false;
     closedPeriodsApi.list()
       .then((periods) => { if (!cancelled) setClosedPeriods(periods); })
+      .catch(() => {});
+    openingHoursApi.list()
+      .then((hours) => { if (!cancelled) setOpeningHours(hours); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -263,8 +307,16 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
         if (cancelled) return;
         const taken = new Set(res.slots.filter((s) => !s.is_available).map((s) => s.start_time));
         setBookedTimes(taken);
+        setDaySlots(res.slots.map((s) => s.start_time));
+        setDayClosed(Boolean(res.is_closed));
+        setClosingMinutes(closingMinutesOf(res.close_time));
       })
-      .catch(() => { if (!cancelled) setBookedTimes(new Set()); })
+      .catch(() => {
+        if (cancelled) return;
+        setBookedTimes(new Set());
+        setDaySlots([]);
+        setDayClosed(false);
+      })
       .finally(() => { if (!cancelled) setLoadingSlots(false); });
     return () => { cancelled = true; };
   }, [barberName]);
@@ -272,6 +324,8 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
   useEffect(() => {
     if (!selectedDate) {
       setBookedTimes(new Set());
+      setDaySlots([]);
+      setDayClosed(false);
       setJoinedWaitlist(false);
       return;
     }
@@ -288,7 +342,7 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
 
   const slotAvailable = (slot: string) => {
     if (!service) return !bookedTimes.has(slot);
-    if (!isSlotAvailable(slot, service.dur)) return false;
+    if (!isSlotAvailable(slot, service.dur, closingMinutes)) return false;
 
     // Pour les services "counter" (enfants multiples), on doit s'assurer
     // que N créneaux consécutifs sont libres pour éviter que le coiffeur
@@ -298,16 +352,16 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
       return !bookedTimes.has(slot);
     }
 
-    // Trouve l'index du créneau dans ALL_SLOTS puis vérifie les N suivants
-    const startIdx = ALL_SLOTS.indexOf(slot);
+    // Trouve l'index du créneau dans la grille du jour puis vérifie les N suivants
+    const startIdx = daySlots.indexOf(slot);
     if (startIdx === -1) return !bookedTimes.has(slot);
 
     for (let i = 0; i < count; i++) {
-      const candidate = ALL_SLOTS[startIdx + i];
+      const candidate = daySlots[startIdx + i];
       // Si on dépasse la grille (fin de journée), impossible
       if (!candidate) return false;
       // Si on dépasse l'horaire de fermeture, impossible
-      if (!isSlotAvailable(candidate, service.dur)) return false;
+      if (!isSlotAvailable(candidate, service.dur, closingMinutes)) return false;
       // Si le créneau est déjà pris, impossible
       if (bookedTimes.has(candidate)) return false;
     }
@@ -315,9 +369,13 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
   };
 
   const dayFull = Boolean(
-    selectedDate && !closedPeriod && !loadingSlots &&
-    ALL_SLOTS.every((slot) => !slotAvailable(slot))
+    selectedDate && !closedPeriod && !dayClosed && !loadingSlots && daySlots.length > 0 &&
+    daySlots.every((slot) => !slotAvailable(slot))
   );
+
+  const hoursNote = openingHours.length
+    ? summarizeHours(openingHours, (i) => t(`step3.day.${i}` as TranslationKey), t('step3.closedLabel'))
+    : t('step3.hoursNote');
 
   const handleJoinWaitingList = async () => {
     if (!selectedDate || !serviceId) return;
@@ -359,14 +417,19 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
 
       {/* Calendar card */}
       <View style={styles.calCard}>
-        <Calendar selectedDate={selectedDate} onSelect={onDateSelect} closedPeriods={closedPeriods} />
+        <Calendar
+          selectedDate={selectedDate}
+          onSelect={onDateSelect}
+          closedPeriods={closedPeriods}
+          openingHours={openingHours}
+        />
       </View>
 
       {/* Hours badge */}
       <View style={styles.hoursBadge}>
         <Text style={styles.hoursBadgeIcon}>⏱</Text>
         <Text style={styles.hoursBadgeText}>
-          {t('step3.hoursNote')}
+          {hoursNote}
         </Text>
       </View>
 
@@ -380,10 +443,18 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
         </View>
       )}
 
+      {/* Jour fermé dans les horaires du salon */}
+      {selectedDate && !closedPeriod && !loadingSlots && dayClosed && (
+        <View style={styles.closedBadge}>
+          <Text style={styles.closedBadgeIcon}>🔒</Text>
+          <Text style={styles.closedBadgeText}>{t('step3.dayClosed')}</Text>
+        </View>
+      )}
+
       {/* Slot groups */}
-      {selectedDate && !closedPeriod && (
+      {selectedDate && !closedPeriod && !dayClosed && (
         <View style={styles.slotsWrap}>
-          {SLOT_GROUPS.map((group) => (
+          {groupSlots(daySlots).map((group) => (
             <View key={group.label} style={styles.slotGroup}>
               <Text style={styles.slotGroupLabel}>{t(`step3.slotGroup.${group.label}` as TranslationKey)}</Text>
               <View style={styles.slotsGrid}>

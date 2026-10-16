@@ -8,8 +8,7 @@ import stripe
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import Barbershop, BarberLeave, ClosedPeriod, Notification, Reservation, Service, User
-from .slots import SLOT_TIMES
+from .models import Barbershop, BarberLeave, ClosedPeriod, Notification, OpeningHours, Reservation, Service, User
 from .recommendations import (
     SALON_TZ, get_client_habits, process_user, should_send_seasonal_reminder, suggest_slots,
 )
@@ -315,6 +314,8 @@ class ReservationEmailTests(TestCase):
 
     @patch('core.views.send_online_payment_invoice')
     def test_late_cancellation_keeps_deposit(self, _invoice, sg):
+        # now + 3h peut tomber hors horaires (ex. lancé le soir) : salon ouvert 24h/24 ici.
+        OpeningHours.objects.update(is_closed=False, open_time=time(0), close_time=time(0))
         tomorrow = (datetime.now(SALON_TZ) + timedelta(hours=3))
         reservation = self.book(date=tomorrow.date().isoformat(), time=tomorrow.strftime('%H:00'))
         self.patch_resa(reservation, {'status': 'cancelled_client'})
@@ -383,8 +384,9 @@ class BarberAgendaTests(TestCase):
         self.api.force_authenticate(self.staff)
         data = self.api.get('/api/barbers/availability/', {'week_start': '2026-11-16'}).data
         friday = data['barbers']['Malik']['days'][4]
-        self.assertEqual((friday['state'], friday['booked'], friday['free']), ('open', 2, len(SLOT_TIMES) - 2))
-        self.assertEqual(data['barbers']['Willo']['days'][4]['free'], len(SLOT_TIMES))
+        full_day = 20  # 11:00 → 20:30, horaires par défaut
+        self.assertEqual((friday['state'], friday['booked'], friday['free']), ('open', 2, full_day - 2))
+        self.assertEqual(data['barbers']['Willo']['days'][4]['free'], full_day)
         self.assertEqual(data['barbers']['Malik']['days'][0]['state'], 'closed')  # lundi
         self.assertEqual(data['barbers']['Malik']['week_rdv'], 2)
 
@@ -406,3 +408,80 @@ class BarberAgendaTests(TestCase):
         self.assertEqual(demo.filter(barber='Willo', date=saturday).count(), 8)
         self.assertTrue(Reservation.objects.filter(pk=real.pk, user=self.client_user).exists())
         self.assertFalse(Notification.objects.filter(type='rdv').exists())  # bulk_create : pas de notif coiffeur
+
+
+@patch('core.views.queue_reservation_email')
+class OpeningHoursTests(TestCase):
+    """Les horaires réglés côté coiffeur pilotent la grille proposée au client."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user('owner', role='admin')
+        shop = Barbershop.objects.create(name='WB', address='x', phone='x', owner=self.staff)
+        self.service = Service.objects.create(name='Signature', price=45, duration=45, barbershop=shop)
+        self.client_user = User.objects.create_user('randy', email='randy@example.com')
+        self.api = APIClient()
+        self.friday = '2026-11-20'
+        self.monday = '2026-11-16'
+
+    def slots(self, day):
+        return self.api.get('/api/slots/available/', {'date': day, 'barber': 'Willo'}).data
+
+    def put_hours(self, payload, as_user=None):
+        self.api.force_authenticate(as_user or self.staff)
+        return self.api.put('/api/opening-hours/', payload, format='json')
+
+    def test_seeded_defaults_match_previous_grid(self, _mail):
+        data = self.api.get('/api/opening-hours/').data
+        self.assertEqual(len(data), 7)
+        self.assertEqual(data[0], {'weekday': 0, 'is_closed': True, 'open_time': '11:00', 'close_time': '21:00'})
+        friday = [s['start_time'] for s in self.slots(self.friday)['slots']]
+        self.assertEqual((friday[0], friday[-1], len(friday)), ('11:00', '20:30', 20))
+        self.assertEqual(self.slots(self.monday)['slots'], [])
+
+    def test_only_staff_can_update(self, _mail):
+        payload = [{'weekday': 4, 'is_closed': False, 'open_time': '15:00', 'close_time': '18:00'}]
+        self.api.force_authenticate(None)
+        self.assertEqual(self.api.put('/api/opening-hours/', payload, format='json').status_code, 403)
+        self.assertEqual(self.put_hours(payload, as_user=self.client_user).status_code, 403)
+        self.assertEqual(OpeningHours.objects.get(weekday=4).open_time, time(11))
+
+    def test_friday_hours_restrict_client_slots(self, _mail):
+        response = self.put_hours([{'weekday': 4, 'is_closed': False, 'open_time': '15:00', 'close_time': '18:00'}])
+        self.assertEqual(response.status_code, 200, response.data)
+        data = self.slots(self.friday)
+        self.assertEqual([s['start_time'] for s in data['slots']], ['15:00', '15:30', '16:00', '16:30', '17:00', '17:30'])
+        self.assertEqual((data['open_time'], data['close_time'], data['is_closed']), ('15:00', '18:00', False))
+
+    def test_closing_a_day_empties_its_slots(self, _mail):
+        self.put_hours([{'weekday': 1, 'is_closed': True}])
+        data = self.slots('2026-11-17')  # mardi
+        self.assertEqual((data['is_closed'], data['slots']), (True, []))
+
+    def test_reopening_monday(self, _mail):
+        self.put_hours([{'weekday': 0, 'is_closed': False, 'open_time': '09:00', 'close_time': '12:00'}])
+        self.assertEqual([s['start_time'] for s in self.slots(self.monday)['slots']],
+                         ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30'])
+
+    def test_invalid_range_is_rejected(self, _mail):
+        response = self.put_hours([{'weekday': 4, 'is_closed': False, 'open_time': '18:00', 'close_time': '15:00'}])
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(OpeningHours.objects.get(weekday=4).close_time, time(21))
+        # 00:00 en fermeture = minuit : accepté.
+        self.assertEqual(self.put_hours([{'weekday': 4, 'open_time': '20:00', 'close_time': '00:00'}]).status_code, 200)
+        self.assertEqual(self.slots(self.friday)['slots'][-1]['start_time'], '23:30')
+
+    def test_client_cannot_book_outside_hours(self, _mail):
+        self.put_hours([{'weekday': 4, 'is_closed': False, 'open_time': '15:00', 'close_time': '18:00'}])
+        self.api.force_authenticate(self.client_user)
+        book = lambda day, hhmm: self.api.post(
+            '/api/reservations/', {'service': self.service.id, 'date': day, 'time': hhmm}, format='json')
+        self.assertEqual(book(self.friday, '11:00').status_code, 400)
+        self.assertEqual(book(self.monday, '15:00').status_code, 400)
+        self.assertEqual(book(self.friday, '15:00').status_code, 201)
+
+    def test_week_availability_follows_hours(self, _mail):
+        self.put_hours([{'weekday': 4, 'is_closed': False, 'open_time': '15:00', 'close_time': '18:00'},
+                        {'weekday': 2, 'is_closed': True}])
+        days = self.api.get('/api/barbers/availability/', {'week_start': self.monday}).data['barbers']['Willo']['days']
+        self.assertEqual((days[4]['state'], days[4]['total']), ('open', 6))
+        self.assertEqual(days[2]['state'], 'closed')

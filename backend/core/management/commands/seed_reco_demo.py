@@ -5,7 +5,7 @@ from django.db import transaction
 
 from core.models import Barbershop, Notification, Reservation, Service, User
 from core.recommendations import salon_now
-from core.slots import SLOT_TIMES
+from core.slots import slot_times_for
 
 PASSWORD = 'Demo1234!'
 REGULAR_INTERVAL_DAYS = 28  # multiple de 7 : toutes les visites tombent le même jour
@@ -45,7 +45,9 @@ def _free_time(day, preferred):
     taken = set(
         Reservation.objects.filter(date=day, status__in=['pending', 'confirmed']).values_list('time', flat=True)
     )
-    ordered = SLOT_TIMES[SLOT_TIMES.index(preferred):] + SLOT_TIMES[:SLOT_TIMES.index(preferred)]
+    grid = slot_times_for(day)
+    start = grid.index(preferred) if preferred in grid else 0
+    ordered = grid[start:] + grid[:start]
     for hhmm in ordered:
         t = time.fromisoformat(hhmm)
         if t not in taken:

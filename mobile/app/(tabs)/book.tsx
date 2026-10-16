@@ -37,7 +37,7 @@ import {
   type CardForm,
   type PaymentMethod,
   SERVICES,
-  SLOT_GROUPS,
+  consecutiveSlots,
   type StaticBarber,
   type StaticService,
 } from '@/components/booking/data';
@@ -75,8 +75,7 @@ function RecapSidebar({
       // Calcule l'heure de fin pour montrer la plage totale au client :
       // chaque enfant occupe un créneau consécutif de la grille (cf. création
       // des réservations dans handleNext), la fin = dernier créneau + durée.
-      const allSlots = SLOT_GROUPS.flatMap((g) => g.slots);
-      const lastSlot = allSlots[allSlots.indexOf(time) + count - 1] ?? time;
+      const lastSlot = consecutiveSlots(time, count)[count - 1];
       const durationMin = getServiceDurationMinutes(service.dur);
       const [h, m] = lastSlot.split(':').map(Number);
       const endTotalMin = h * 60 + m + durationMin;
@@ -492,11 +491,7 @@ export default function BookScreen() {
         // Créneaux consécutifs de la grille (mêmes que ceux vérifiés par
         // Step3Date.slotAvailable) : le backend ne détecte un conflit que sur
         // un date+heure identique, donc il faut bloquer les vrais créneaux.
-        const allSlots = SLOT_GROUPS.flatMap((g) => g.slots);
-        const startIdx = allSlots.indexOf(booking.time);
-        const slotTimes = Array.from({ length: count }, (_, i) =>
-          startIdx === -1 ? booking.time! : allSlots[startIdx + i],
-        );
+        const slotTimes = consecutiveSlots(booking.time!, count);
 
         // Crée une réservation par enfant (ou une seule si service normal).
         // Le paiement est associé à la 1ère réservation uniquement.
