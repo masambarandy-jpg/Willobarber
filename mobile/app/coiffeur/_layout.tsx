@@ -13,6 +13,7 @@ const NAV_ROUTES: CoiffeurRoute[] = [
   'prestations',
   'clients',
   'equipe',
+  'commandes',
   'avis',
   'notifications',
   'parametres',
@@ -51,6 +52,7 @@ export default function CoiffeurLayout() {
       <Stack.Screen name="prestations" />
       <Stack.Screen name="clients" />
       <Stack.Screen name="equipe" />
+      <Stack.Screen name="commandes" />
       <Stack.Screen name="avis" />
       <Stack.Screen name="notifications" />
       <Stack.Screen name="parametres" />

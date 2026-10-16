@@ -5,13 +5,19 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { API_BASE_URL } from '@/constants';
 import { useSSE } from '@/hooks/useSSE';
-import type { CoiffeurSseEvent, ReservationNotificationData } from '@/types';
+import type { BoutiqueOrderNotificationData, CoiffeurSseEvent, ReservationNotificationData } from '@/types';
 
-const SSE_EVENTS: readonly CoiffeurSseEvent[] = ['new_reservation', 'reservation_cancelled', 'reservation_updated'];
+const SSE_EVENTS: readonly CoiffeurSseEvent[] = [
+  'new_reservation',
+  'reservation_cancelled',
+  'reservation_updated',
+  'new_boutique_order',
+  'boutique_order_updated',
+];
 // Repli si le flux SSE ne passe pas (cf. useSSE) : rechargement périodique.
 const FALLBACK_POLLING_MS = 5000;
 
-export type NotifType = 'rdv' | 'avis' | 'paiement' | 'annulation' | 'rappel';
+export type NotifType = 'rdv' | 'avis' | 'paiement' | 'annulation' | 'rappel' | 'boutique_order';
 export type Section = "AUJOURD'HUI" | 'HIER';
 
 export type Notif = {
@@ -36,6 +42,9 @@ export type Notif = {
   reviewId?: number;
   amount?: string;
   smsInfo?: string;
+  // Commande boutique (type 'boutique_order') : snapshot au moment du paiement,
+  // la modale recharge ensuite la commande pour en avoir le statut à jour.
+  order?: BoutiqueOrderNotificationData;
 };
 
 export const INITIAL_NOTIFICATIONS: Notif[] = [
@@ -140,14 +149,14 @@ type ApiNotif = {
   type: NotifType;
   title: string;
   desc: string;
-  data?: ReservationNotificationData | null;
+  data?: (ReservationNotificationData & BoutiqueOrderNotificationData) | null;
   time: string;
   section: Section;
   unread: boolean;
   created_at?: string;
 };
 
-type ReservationEvent = ReservationNotificationData & { notification?: ApiNotif };
+type CoiffeurEvent = ReservationNotificationData & BoutiqueOrderNotificationData & { notification?: ApiNotif };
 
 function formatRdvDate(isoDate?: string): string | undefined {
   if (!isoDate) return undefined;
@@ -197,6 +206,7 @@ function mapApiNotif(n: ApiNotif): Notif {
     rdvTime: d.time || undefined,
     phone: d.client_phone || undefined,
     cancelledAt: n.type === 'annulation' ? time : undefined,
+    order: n.type === 'boutique_order' ? d : undefined,
   };
 }
 
@@ -221,6 +231,8 @@ type CoiffeurNotificationsContextType = {
   // qui affichent des réservations (dashboard, planning) le mettent dans les
   // dépendances de leur fetch pour se recharger.
   reservationsVersion: number;
+  // Idem pour les commandes boutique (nouvelle commande payée, statut modifié).
+  ordersVersion: number;
 };
 
 const CoiffeurNotificationsContext = createContext<CoiffeurNotificationsContextType>({
@@ -229,6 +241,7 @@ const CoiffeurNotificationsContext = createContext<CoiffeurNotificationsContextT
   loading: false,
   marquerLue: () => {},
   reservationsVersion: 0,
+  ordersVersion: 0,
 });
 
 export function CoiffeurNotificationsProvider({ children }: { children: React.ReactNode }) {
@@ -237,6 +250,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
   // undefined = pas encore lu depuis AsyncStorage, null = coiffeur déconnecté.
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [reservationsVersion, setReservationsVersion] = useState(0);
+  const [ordersVersion, setOrdersVersion] = useState(0);
   const [polling, setPolling] = useState(false);
   const knownIds = useRef<Set<string> | null>(null);
 
@@ -254,6 +268,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
   }, [token]);
 
   const bumpReservations = useCallback(() => setReservationsVersion((v) => v + 1), []);
+  const bumpOrders = useCallback(() => setOrdersVersion((v) => v + 1), []);
 
   const fetchNotifications = useCallback(async () => {
     if (token === undefined) return;
@@ -269,10 +284,12 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
       const data: ApiNotif[] = await response.json();
       const mapped = data.map(mapApiNotif);
 
-      // En polling, une notification inconnue signale un RDV créé/annulé.
+      // En polling, une notification inconnue signale un RDV créé/annulé ou une commande.
       const previous = knownIds.current;
       knownIds.current = new Set(mapped.map((n) => n.id));
-      if (previous && mapped.some((n) => !previous.has(n.id))) bumpReservations();
+      const fresh = previous ? mapped.filter((n) => !previous.has(n.id)) : [];
+      if (fresh.some((n) => n.type !== 'boutique_order')) bumpReservations();
+      if (fresh.some((n) => n.type === 'boutique_order')) bumpOrders();
 
       setNotifications(mapped);
     } catch (error) {
@@ -281,7 +298,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
     } finally {
       setLoading(false);
     }
-  }, [token, bumpReservations]);
+  }, [token, bumpReservations, bumpOrders]);
 
   useEffect(() => {
     fetchNotifications();
@@ -300,17 +317,19 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
       : null,
     events: SSE_EVENTS,
     onEvent: (event, data) => {
-      const payload = (data ?? {}) as ReservationEvent;
-      if (event === 'new_reservation' || event === 'reservation_cancelled') {
+      const payload = (data ?? {}) as CoiffeurEvent;
+      if (event === 'new_reservation' || event === 'reservation_cancelled' || event === 'new_boutique_order') {
         prependNotification(payload.notification);
       }
-      bumpReservations();
+      if (event === 'new_boutique_order' || event === 'boutique_order_updated') bumpOrders();
+      else bumpReservations();
     },
     onOpen: (reconnect) => {
       // Des événements ont pu être perdus pendant la coupure : resynchronisation.
       if (reconnect) {
         fetchNotifications();
         bumpReservations();
+        bumpOrders();
       }
     },
     onFallback: () => setPolling(true),
@@ -345,7 +364,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
   const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
-    <CoiffeurNotificationsContext.Provider value={{ notifications, unreadCount, loading, marquerLue, reservationsVersion }}>
+    <CoiffeurNotificationsContext.Provider value={{ notifications, unreadCount, loading, marquerLue, reservationsVersion, ordersVersion }}>
       {children}
     </CoiffeurNotificationsContext.Provider>
   );

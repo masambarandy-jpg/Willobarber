@@ -25,7 +25,11 @@ const ICONS: Record<ClientNotificationType, React.ComponentProps<typeof Feather>
   recommendation: 'star',
   seasonal_reminder: 'clock',
   invoice: 'file-text',
+  boutique_invoice: 'package',
 };
+
+// Factures RDV et boutique : même bouton « Télécharger la facture » (lien signé).
+const isInvoice = (n: ClientNotification) => n.type === 'invoice' || n.type === 'boutique_invoice';
 
 function formatCreatedAt(iso: string): string {
   const d = new Date(iso);
@@ -77,7 +81,7 @@ export default function ClientNotificationsScreen() {
             <TouchableOpacity
               style={[styles.card, n.unread && styles.cardUnread]}
               onPress={() => open(n)}
-              activeOpacity={n.type === 'invoice' ? 1 : 0.85}
+              activeOpacity={isInvoice(n) ? 1 : 0.85}
               testID={`notif-${n.type}`}
             >
               <View style={styles.iconCircle}>
@@ -89,7 +93,7 @@ export default function ClientNotificationsScreen() {
                   <Text style={styles.time}>{formatCreatedAt(n.created_at)}</Text>
                 </View>
                 <Text style={styles.desc}>{n.desc}</Text>
-                {n.type === 'invoice' && n.data.invoice_url && (
+                {isInvoice(n) && n.data.invoice_url && (
                   <TouchableOpacity style={styles.invoiceBtn} onPress={() => downloadInvoice(n)} activeOpacity={0.85}>
                     <Feather name="download" size={14} color="#1A1208" />
                     <Text style={styles.invoiceBtnText}>Télécharger la facture</Text>

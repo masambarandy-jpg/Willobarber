@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -19,6 +19,7 @@ import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
+import { CartPaymentSection, type CartPaymentHandle } from '@/components/boutique/CartPaymentSection';
 
 export default function CartScreen() {
   const router = useRouter();
@@ -30,6 +31,8 @@ export default function CartScreen() {
   const [checkoutError, setCheckoutError] = useState('');
   const [deliveryMode, setDeliveryMode] = useState<'salon' | 'domicile'>('salon');
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [isPaying, setIsPaying] = useState(false);
+  const paymentRef = useRef<CartPaymentHandle>(null);
 
   const deliveryFee = deliveryMode === 'domicile' ? 4.95 : 0;
   const finalTotal  = total + deliveryFee;
@@ -40,12 +43,37 @@ export default function CartScreen() {
       return;
     }
     setCheckoutError('');
+    if (deliveryMode === 'domicile' && !deliveryAddress.trim()) {
+      setCheckoutError(t('cart.addressRequired'));
+      return;
+    }
+    // Comme une réservation : paiement Stripe d'abord, puis création de la
+    // commande avec le PaymentIntent réglé (vérifié côté backend).
+    let paymentIntentId: string | undefined;
+    setIsPaying(true);
     try {
-      await checkout();
-    } catch {
+      paymentIntentId = await paymentRef.current?.pay(Number(finalTotal.toFixed(2)));
+    } catch (e) {
+      setCheckoutError(e instanceof Error && e.message ? e.message : t('cart.checkoutError'));
+      return;
+    } finally {
+      setIsPaying(false);
+    }
+    if (!paymentIntentId) {
       setCheckoutError(t('cart.checkoutError'));
+      return;
+    }
+    try {
+      await checkout({
+        paymentIntentId,
+        deliveryType: deliveryMode === 'domicile' ? 'domicile' : 'retrait_salon',
+        deliveryAddress,
+      });
+    } catch (e: any) {
+      setCheckoutError(e?.response?.data?.detail || t('cart.checkoutError'));
     }
   };
+  const busy = isLoading || isPaying;
 
   // ── Confirmation screen ──────────────────────────────────────────────────────
   if (lastOrder) {
@@ -325,6 +353,8 @@ export default function CartScreen() {
               </View>
             </View>
 
+            <CartPaymentSection ref={paymentRef} />
+
             {!!checkoutError && (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>{checkoutError}</Text>
@@ -332,12 +362,13 @@ export default function CartScreen() {
             )}
 
             <TouchableOpacity
-              style={[styles.ctaBtn, isLoading && { opacity: 0.7 }]}
+              style={[styles.ctaBtn, busy && { opacity: 0.7 }]}
               activeOpacity={0.85}
               onPress={handleCheckout}
-              disabled={isLoading}
+              disabled={busy}
+              testID="btn-cart-checkout"
             >
-              {isLoading
+              {busy
                 ? <ActivityIndicator color="#1A1208" size="small" />
                 : (
                   <Text style={styles.ctaBtnText}>
@@ -465,6 +496,8 @@ export default function CartScreen() {
               </View>
             </View>
 
+            <CartPaymentSection ref={paymentRef} />
+
             {!!checkoutError && (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>{checkoutError}</Text>
@@ -475,12 +508,13 @@ export default function CartScreen() {
           {/* CTA fixe bas */}
           <View style={styles.ctaFixed}>
             <TouchableOpacity
-              style={[styles.ctaBtn, isLoading && { opacity: 0.7 }]}
+              style={[styles.ctaBtn, busy && { opacity: 0.7 }]}
               activeOpacity={0.85}
               onPress={handleCheckout}
-              disabled={isLoading}
+              disabled={busy}
+              testID="btn-cart-checkout"
             >
-              {isLoading
+              {busy
                 ? <ActivityIndicator color="#1A1208" size="small" />
                 : (
                   <Text style={styles.ctaBtnText}>

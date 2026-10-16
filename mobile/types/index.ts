@@ -240,7 +240,59 @@ export interface ReservationNotificationData {
 }
 
 // Événements poussés par GET /api/sse/coiffeur/<id>/ (backend/core/sse.py).
-export type CoiffeurSseEvent = 'new_reservation' | 'reservation_cancelled' | 'reservation_updated';
+export type CoiffeurSseEvent =
+  | 'new_reservation'
+  | 'reservation_cancelled'
+  | 'reservation_updated'
+  | 'new_boutique_order'
+  | 'boutique_order_updated';
+
+// ─── Commandes boutique côté coiffeur (backend/boutique) ─────────────────────
+
+export type BoutiqueDeliveryType = 'domicile' | 'retrait_salon';
+
+export type BoutiqueOrderStatus =
+  | 'pending' | 'confirmed' | 'preparing' | 'ready' | 'shipped' | 'delivered' | 'picked_up' | 'completed' | 'cancelled';
+
+// Payload de l'événement SSE new_boutique_order et de Notification.data
+// (boutique/invoices.py → order_payload).
+export interface BoutiqueOrderNotificationData {
+  order_id?: number;
+  numero?: string;
+  client_name?: string;
+  client_phone?: string;
+  items?: { name: string; qty: number; price: number }[];
+  total?: number;
+  delivery_type?: BoutiqueDeliveryType;
+  delivery_address?: string;
+  status?: BoutiqueOrderStatus;
+  invoice_url?: string;
+  created_at?: string;
+}
+
+// GET /api/boutique/gestion/commandes/ (StaffOrderSerializer).
+export interface StaffBoutiqueOrder {
+  id: number;
+  numero: string;
+  status: BoutiqueOrderStatus;
+  status_label: string;
+  total: string;
+  delivery_type: BoutiqueDeliveryType;
+  delivery_address: string;
+  delivery_fee: string;
+  paid_at: string | null;
+  created_at: string;
+  client_name: string;
+  client_phone: string;
+  client_email: string;
+  invoice_url: string;
+  items: {
+    id: number;
+    quantite: number;
+    prix_unitaire: string;
+    product: { id: number; nom: string; contenance: string; photo_url: string };
+  }[];
+}
 
 // ─── Recommandations (GET /recommendations/, backend/core/recommendations.py) ─
 
@@ -285,7 +337,7 @@ export interface SavedPaymentMethod {
 
 // ─── Notifications client (GET /client-notifications/ + SSE /sse/client/) ────
 
-export type ClientNotificationType = 'recommendation' | 'seasonal_reminder' | 'invoice';
+export type ClientNotificationType = 'recommendation' | 'seasonal_reminder' | 'invoice' | 'boutique_invoice';
 
 export interface ClientNotification {
   id: number;
@@ -300,6 +352,8 @@ export interface ClientNotification {
     invoice_number?: string;
     invoice_url?: string;
     amount_paid?: number;
+    order_id?: number;
+    order_numero?: string;
   };
   unread: boolean;
   created_at: string;

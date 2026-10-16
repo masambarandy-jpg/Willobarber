@@ -22,6 +22,8 @@ import type {
   ClosedPeriod,
   ClientStatus,
   CoiffeurClient,
+  StaffBoutiqueOrder,
+  BoutiqueOrderStatus,
 } from '@/types';
 
 const SECURE_KEY_ACCESS = 'wb_access_token';
@@ -370,6 +372,33 @@ export type BoutiqueProduct = {
 
 export const boutiqueApi = {
   products: () => http.get<BoutiqueProduct[]>('/boutique/produits/').then((r) => r.data),
+};
+
+// ─── Commandes boutique — espace coiffeur ────────────────────────────────────
+// Token coiffeur dédié (rôle admin requis), comme mediaApi.upload.
+
+async function coiffeurFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = await AsyncStorage.getItem('coiffeur_token');
+  if (!token) throw new Error('Session coiffeur absente');
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...init.headers },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+export const coiffeurBoutiqueApi = {
+  orders: (period: 'today' | 'week' | 'all' = 'week') =>
+    coiffeurFetch<StaffBoutiqueOrder[]>(`/boutique/gestion/commandes/?period=${period}`),
+
+  order: (id: number) => coiffeurFetch<StaffBoutiqueOrder>(`/boutique/gestion/commandes/${id}/`),
+
+  setStatus: (id: number, status: BoutiqueOrderStatus) =>
+    coiffeurFetch<StaffBoutiqueOrder>(`/boutique/gestion/commandes/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
 };
 
 // ─── Waiting list API ────────────────────────────────────────────────────────

@@ -14,11 +14,21 @@ export type CartItem = {
   photo: string;
 };
 
+export type CheckoutPayload = {
+  // PaymentIntent réglé par StripeCardField.pay() — vérifié par le backend.
+  paymentIntentId: string;
+  deliveryType: 'retrait_salon' | 'domicile';
+  deliveryAddress?: string;
+};
+
 export type OrderData = {
   id: number;
   numero: string;
   status: string;
   total: string;
+  delivery_type?: 'retrait_salon' | 'domicile';
+  delivery_address?: string;
+  delivery_fee?: string;
   created_at: string;
   items: Array<{
     id: number;
@@ -44,7 +54,7 @@ type CartContextType = {
   total: number;
   nbArticles: number;
   isLoading: boolean;
-  checkout: () => Promise<OrderData>;
+  checkout: (payload: CheckoutPayload) => Promise<OrderData>;
   lastOrder: OrderData | null;
   clearLastOrder: () => void;
 };
@@ -103,7 +113,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const total = items.reduce((sum, i) => sum + i.prix * i.qte, 0);
   const nbArticles = items.reduce((sum, i) => sum + i.qte, 0);
 
-  const checkout = useCallback(async (): Promise<OrderData> => {
+  const checkout = useCallback(async ({ paymentIntentId, deliveryType, deliveryAddress }: CheckoutPayload): Promise<OrderData> => {
     setIsLoading(true);
     try {
       const token = await TokenStorage.getAccess();
@@ -114,6 +124,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             product_id: item.product_id,
             quantite: item.qte,
           })),
+          payment_intent_id: paymentIntentId,
+          delivery_type: deliveryType,
+          delivery_address: deliveryType === 'domicile' ? deliveryAddress ?? '' : '',
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
