@@ -23,7 +23,7 @@ from . import sse
 from .emails import JOURS_FR, format_date_fr
 from .models import DEFAULT_BARBER, ClosedPeriod, Notification, Reservation, User
 from .serializers import NotificationSerializer
-from .slots import CLOSED_WEEKDAYS, SLOT_TIMES, hhmm_to_minutes, slot_fits_before_closing
+from .slots import day_hours, hhmm_to_minutes, slot_times_for, slot_within_hours, weekly_hours
 
 SALON_TZ = ZoneInfo('Europe/Brussels')
 
@@ -162,8 +162,8 @@ def _closed_dates(start, end):
     return closed
 
 
-def _is_open(d, closed_dates):
-    return d.weekday() not in CLOSED_WEEKDAYS and d not in closed_dates
+def _is_open(d, closed_dates, hours):
+    return day_hours(d, hours) is not None and d not in closed_dates
 
 
 def ideal_target_date(habits, now=None):
@@ -171,12 +171,13 @@ def ideal_target_date(habits, now=None):
     intervalle moyen), jamais avant demain, recalée sur le jour favori du client
     s'il tombe à ±3 jours, puis décalée au prochain jour d'ouverture."""
     now = now or salon_now()
+    hours = weekly_hours()
     earliest = now.date() + timedelta(days=1)
     base = max(date.fromisoformat(habits['next_expected_date']), earliest)
 
     fav_weekday = habits.get('favorite_weekday')
     target = base
-    if fav_weekday is not None and fav_weekday not in CLOSED_WEEKDAYS:
+    if fav_weekday is not None and hours[fav_weekday] is not None:
         nearby = [
             base + timedelta(days=offset)
             for offset in range(-3, 4)
@@ -190,8 +191,11 @@ def ideal_target_date(habits, now=None):
             target = base + timedelta(days=(fav_weekday - base.weekday()) % 7)
 
     closed_dates = _closed_dates(target, target + timedelta(days=SEARCH_DAYS_AFTER))
-    while not _is_open(target, closed_dates):
-        target += timedelta(days=1)
+    # Borné : si le salon est fermé toute la semaine, on garde la date calculée.
+    for offset in range(SEARCH_DAYS_AFTER + 1):
+        candidate = target + timedelta(days=offset)
+        if _is_open(candidate, closed_dates, hours):
+            return candidate
     return target
 
 
@@ -255,6 +259,7 @@ def suggest_slots(user_id, habits, exclude_slots=None, now=None, count=3):
     window_start = max(earliest, target - timedelta(days=SEARCH_DAYS_BEFORE))
     window_end = target + timedelta(days=SEARCH_DAYS_AFTER)
     closed_dates = _closed_dates(window_start, window_end)
+    hours = weekly_hours()
 
     service = habits['favorite_service']
     fav_time = habits['favorite_time']
@@ -283,20 +288,21 @@ def suggest_slots(user_id, habits, exclude_slots=None, now=None, count=3):
     ideal_key = slot_key(target, fav_time)
     if (
         ideal_key not in booked and ideal_key not in excluded
-        and slot_fits_before_closing(fav_time, service['duration'])
+        and target not in closed_dates
+        and slot_within_hours(target, fav_time, service['duration'], hours)
     ):
         slots.append(to_slot(target, fav_time, True, 'Votre créneau habituel'))
 
     candidates = []
     d = window_start
     while d <= window_end:
-        if _is_open(d, closed_dates):
+        if _is_open(d, closed_dates, hours):
             day_delta = (d - target).days
-            for hhmm in SLOT_TIMES:
+            for hhmm in slot_times_for(d, hours):
                 key = slot_key(d, hhmm)
                 if key == ideal_key or key in booked or key in excluded:
                     continue
-                if not slot_fits_before_closing(hhmm, service['duration']):
+                if not slot_within_hours(d, hhmm, service['duration'], hours):
                     continue
                 minute_delta = hhmm_to_minutes(hhmm) - fav_minutes
                 tier = _tier(day_delta, minute_delta)

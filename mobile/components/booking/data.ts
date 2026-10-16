@@ -169,26 +169,32 @@ export const BARBERS: StaticBarber[] = [
   },
 ];
 
-export const SLOT_GROUPS: SlotGroup[] = [
-  {
-    label: 'MATINÉE',
-    slots: ['11:00', '11:30', '12:00', '12:30'],
-  },
-  {
-    label: 'APRÈS-MIDI',
-    slots: ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'],
-  },
-  {
-    label: 'SOIRÉE',
-    slots: ['17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '20:30'],
-  },
+// La grille du jour vient du backend (/slots/available/, calculée depuis les
+// horaires réglés par le coiffeur — cf. backend/core/slots.py) ; on ne fait ici
+// que la ranger par tranche. Pas d'une case : 30 min.
+export const SLOT_STEP_MINUTES = 30;
+
+const SLOT_GROUP_BOUNDS = [
+  { label: 'MATINÉE', until: 13 * 60 },
+  { label: 'APRÈS-MIDI', until: 17 * 60 },
+  { label: 'SOIRÉE', until: 24 * 60 },
 ];
+
+export function groupSlots(slots: string[]): SlotGroup[] {
+  let from = 0;
+  return SLOT_GROUP_BOUNDS.map(({ label, until }) => {
+    const group = { label, slots: slots.filter((s) => hhmmToMinutes(s) >= from && hhmmToMinutes(s) < until) };
+    from = until;
+    return group;
+  }).filter((g) => g.slots.length > 0);
+}
 
 export const LOYALTY_DISCOUNT = 5;
 
 export const ACOMPTE_FIXE = 5;
 
-const CLOSING_MINUTES = 21 * 60;
+// Repli tant que les horaires du jour ne sont pas chargés (anciens horaires fixes).
+export const DEFAULT_CLOSING_MINUTES = 21 * 60;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -240,11 +246,32 @@ export function getServiceDurationMinutes(dur: string): number {
   return parseInt(dur, 10) || 30;
 }
 
-export function isSlotAvailable(slot: string, serviceDur: string): boolean {
-  const [h, m]    = slot.split(':').map(Number);
-  const slotMinutes = h * 60 + m;
-  const endMinutes   = slotMinutes + getServiceDurationMinutes(serviceDur);
-  return endMinutes <= CLOSING_MINUTES;
+export function hhmmToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+
+/** Fermeture « HH:MM » en minutes — 00:00 = minuit. */
+export function closingMinutesOf(closeTime: string | null | undefined): number {
+  if (!closeTime) return DEFAULT_CLOSING_MINUTES;
+  return hhmmToMinutes(closeTime) || 24 * 60;
+}
+
+export function isSlotAvailable(
+  slot: string,
+  serviceDur: string,
+  closingMinutes: number = DEFAULT_CLOSING_MINUTES,
+): boolean {
+  const endMinutes = hhmmToMinutes(slot) + getServiceDurationMinutes(serviceDur);
+  return endMinutes <= closingMinutes;
+}
+
+/** `count` créneaux consécutifs de la grille à partir de `start` (services « counter »). */
+export function consecutiveSlots(start: string, count: number): string[] {
+  return Array.from({ length: count }, (_, i) => {
+    const m = hhmmToMinutes(start) + i * SLOT_STEP_MINUTES;
+    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  });
 }
 
 export function fmtPrice(n: number): string {

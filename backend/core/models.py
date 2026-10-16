@@ -207,6 +207,32 @@ class ClosedPeriod(models.Model):
         return f"{self.reason} ({self.start_date} → {self.end_date})"
 
 
+class OpeningHours(models.Model):
+    """Horaires hebdomadaires du salon (une ligne par jour), réglés par le
+    coiffeur dans Paramètres › Établissement. Ils définissent la grille de
+    créneaux proposée au client (cf. slots.py). close_time = 00:00 signifie
+    minuit."""
+    WEEKDAY_CHOICES = [
+        (0, 'Lundi'), (1, 'Mardi'), (2, 'Mercredi'), (3, 'Jeudi'),
+        (4, 'Vendredi'), (5, 'Samedi'), (6, 'Dimanche'),
+    ]
+
+    # datetime.weekday() : lundi = 0.
+    weekday = models.PositiveSmallIntegerField(choices=WEEKDAY_CHOICES, unique=True)
+    is_closed = models.BooleanField(default=False)
+    open_time = models.TimeField(default='11:00')
+    close_time = models.TimeField(default='21:00')
+
+    class Meta:
+        ordering = ['weekday']
+
+    def __str__(self):
+        label = self.get_weekday_display()
+        if self.is_closed:
+            return f"{label} : fermé"
+        return f"{label} : {self.open_time:%H:%M} – {self.close_time:%H:%M}"
+
+
 class ClientMedia(models.Model):
     MEDIA_TYPE_CHOICES = [
         ('photo', 'Photo'),

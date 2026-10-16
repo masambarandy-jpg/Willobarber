@@ -85,6 +85,18 @@ export interface TimeSlot {
 export interface AvailableSlotsResponse {
   slots: TimeSlot[];
   date: string;
+  /** Jour fermé (horaires hebdo ou fermeture exceptionnelle) : slots est vide. */
+  is_closed?: boolean;
+  open_time?: string | null;
+  close_time?: string | null;
+}
+
+/** Horaires hebdomadaires du salon (weekday : lundi = 0, comme datetime.weekday()). */
+export interface OpeningHoursDay {
+  weekday: number;
+  is_closed: boolean;
+  open_time: string;
+  close_time: string;
 }
 
 // ─── Reservation ─────────────────────────────────────────────────────────────

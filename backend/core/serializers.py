@@ -1,6 +1,6 @@
 from django.utils import timezone
 from rest_framework import serializers
-from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, Review, WaitingList, BarberLeave, Notification, NotificationPreference, PaymentCard
+from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitingList, BarberLeave, Notification, NotificationPreference, PaymentCard
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -97,6 +97,25 @@ class ClosedPeriodSerializer(serializers.ModelSerializer):
         end = attrs.get('end_date', getattr(self.instance, 'end_date', None))
         if start and end and end < start:
             raise serializers.ValidationError({'end_date': 'La date de fin doit être après la date de début.'})
+        return attrs
+
+
+class OpeningHoursSerializer(serializers.ModelSerializer):
+    open_time = serializers.TimeField(format='%H:%M')
+    close_time = serializers.TimeField(format='%H:%M')
+
+    class Meta:
+        model = OpeningHours
+        fields = ['weekday', 'is_closed', 'open_time', 'close_time']
+
+    def validate(self, attrs):
+        if attrs.get('is_closed'):
+            return attrs
+        open_time = attrs.get('open_time', getattr(self.instance, 'open_time', None))
+        close_time = attrs.get('close_time', getattr(self.instance, 'close_time', None))
+        # 00:00 en fermeture = minuit, donc toujours après l'ouverture.
+        if open_time and close_time and close_time.hour + close_time.minute and close_time <= open_time:
+            raise serializers.ValidationError({'close_time': "L'heure de fermeture doit être après l'heure d'ouverture."})
         return attrs
 
 

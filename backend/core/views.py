@@ -47,7 +47,7 @@ from django.template.response import TemplateResponse
 from django.utils import timezone
 from .models import (
     BARBER_CHOICES, DEFAULT_BARBER,
-    Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList,
+    Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitingList,
     BarberLeave, Notification, NotificationPreference, PaymentCard, UserSession,
 )
 from .emails import (
@@ -55,12 +55,12 @@ from .emails import (
 )
 from .permissions import IsStaffRole
 from .recommendations import SALON_TZ, build_recommendation, create_client_notification, run_daily_recommendations
-from .slots import CLOSED_WEEKDAYS, SLOT_TIMES
+from .slots import day_hours, minutes_to_hhmm, slot_times_for, weekly_hours
 from .sms import send_reminders_for_tomorrow
 from .serializers import (
     BarbershopSerializer, BarberSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
-    ClosedPeriodSerializer, ReviewSerializer, WaitingListSerializer,
+    ClosedPeriodSerializer, OpeningHoursSerializer, ReviewSerializer, WaitingListSerializer,
     BarberLeaveSerializer, NotificationSerializer,
     NotificationPreferenceSerializer, PaymentCardSerializer,
 )
@@ -204,6 +204,40 @@ class WaitingListViewSet(viewsets.ModelViewSet):
         serializer.save(client=self.request.user)
 
 
+@api_view(['GET', 'PUT'])
+@permission_classes([AllowAny])
+def opening_hours(request):
+    """Horaires hebdomadaires du salon (7 jours, lundi = 0).
+
+    GET : public (le flow de réservation en a besoin). PUT : staff uniquement,
+    liste de jours [{weekday, is_closed, open_time, close_time}] — seuls les
+    jours envoyés sont modifiés."""
+    if request.method == 'PUT':
+        if not IsStaffRole().has_permission(request, None):
+            raise PermissionDenied('Réservé au salon.')
+        entries = request.data if isinstance(request.data, list) else [request.data]
+        errors = {}
+        validated = []
+        for entry in entries:
+            weekday = entry.get('weekday') if isinstance(entry, dict) else None
+            if weekday not in range(7):
+                return Response({'error': 'weekday (0-6) requis pour chaque jour.'}, status=status.HTTP_400_BAD_REQUEST)
+            instance = OpeningHours.objects.filter(weekday=weekday).first()
+            serializer = OpeningHoursSerializer(instance, data=entry, partial=instance is not None)
+            if serializer.is_valid():
+                validated.append(serializer)
+            else:
+                errors[weekday] = serializer.errors
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            for serializer in validated:
+                serializer.save()
+
+    hours = OpeningHours.objects.all()
+    return Response(OpeningHoursSerializer(hours, many=True).data)
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def available_slots(request):
@@ -224,6 +258,11 @@ def available_slots(request):
     on_leave = BarberLeave.objects.filter(
         barber=barber, start_date__lte=requested_date, end_date__gte=requested_date,
     ).exists()
+    # Jour fermé (horaires hebdo du salon ou fermeture exceptionnelle) : aucun créneau.
+    span = day_hours(requested_date)
+    is_closed = span is None or ClosedPeriod.objects.filter(
+        start_date__lte=requested_date, end_date__gte=requested_date,
+    ).exists()
     booked_hhmm = {
         t.strftime('%H:%M')
         for t in Reservation.objects
@@ -234,10 +273,17 @@ def available_slots(request):
 
     slots = [
         {'start_time': slot, 'end_time': slot, 'is_available': not on_leave and slot not in booked_hhmm}
-        for slot in SLOT_TIMES
+        for slot in ([] if is_closed else slot_times_for(requested_date))
     ]
 
-    return Response({'date': date_str, 'barber': barber, 'slots': slots})
+    return Response({
+        'date': date_str,
+        'barber': barber,
+        'is_closed': is_closed,
+        'open_time': minutes_to_hhmm(span[0]) if span else None,
+        'close_time': minutes_to_hhmm(span[1] % (24 * 60)) if span else None,
+        'slots': slots,
+    })
 
 
 @api_view(['GET'])
@@ -246,7 +292,8 @@ def barbers_week_availability(request):
     """Créneaux encore libres par barbier et par jour, sur une semaine
     (?week_start=YYYY-MM-DD, lundi de la semaine en cours par défaut).
 
-    État d'un jour : 'closed' (lundi, fermeture salon), 'leave' (congé du
+    État d'un jour : 'closed' (jour fermé dans les horaires ou fermeture
+    exceptionnelle du salon), 'leave' (congé du
     barbier), 'past' (jour écoulé) ou 'open'. Aujourd'hui, seuls les créneaux
     pas encore commencés comptent comme libres."""
     now = timezone.localtime(timezone.now(), SALON_TZ)
@@ -264,18 +311,20 @@ def barbers_week_availability(request):
     for barber, d, t in active.filter(date__range=(days[0], days[-1])).values_list('barber', 'date', 'time'):
         booked.setdefault((barber, d), set()).add(t.strftime('%H:%M'))
     totals = dict(active.values_list('barber').annotate(n=Count('id')).values_list('barber', 'n'))
+    hours = weekly_hours()
+    grids = {d: slot_times_for(d, hours) for d in days}
 
     def day_state(barber, d):
         taken = booked.get((barber, d), set())
-        info = {'date': d.isoformat(), 'total': len(SLOT_TIMES), 'booked': len(taken), 'free': 0}
+        info = {'date': d.isoformat(), 'total': len(grids[d]), 'booked': len(taken), 'free': 0}
         period = next((p for p in closed_periods if p.start_date <= d <= p.end_date), None)
-        if d.weekday() in CLOSED_WEEKDAYS or period:
+        if hours[d.weekday()] is None or period:
             return {**info, 'state': 'closed', 'reason': period.reason if period else 'Fermé'}
         if any(l.barber == barber and l.start_date <= d <= l.end_date for l in leaves):
             return {**info, 'state': 'leave', 'reason': 'Congé'}
         if d < today:
             return {**info, 'state': 'past'}
-        upcoming = [s for s in SLOT_TIMES if d > today or s > now.strftime('%H:%M')]
+        upcoming = [s for s in grids[d] if d > today or s > now.strftime('%H:%M')]
         return {**info, 'state': 'open', 'free': sum(s not in taken for s in upcoming)}
 
     return Response({
@@ -517,6 +566,23 @@ class ReservationViewSet(viewsets.ModelViewSet):
             {'error': "Ce créneau vient d'être pris. Veuillez choisir un autre horaire."},
             status=status.HTTP_409_CONFLICT,
         )
+
+        # Un client ne réserve que dans la grille du jour (horaires du salon) ;
+        # le staff garde la main pour caler un RDV hors horaires.
+        user = request.user
+        if not (user.is_superuser or getattr(user, 'role', None) == 'admin'):
+            try:
+                requested_date = datetime.strptime(str(date), '%Y-%m-%d').date()
+            except ValueError:
+                requested_date = None
+            if requested_date and (
+                ClosedPeriod.objects.filter(start_date__lte=requested_date, end_date__gte=requested_date).exists()
+                or str(time)[:5] not in slot_times_for(requested_date)
+            ):
+                return Response(
+                    {'error': "Le salon est fermé à cet horaire. Veuillez choisir un autre créneau."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         with transaction.atomic():
             # select_for_update ferme la fenêtre de course quand une réservation

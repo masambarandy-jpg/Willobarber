@@ -21,6 +21,7 @@ import type {
   ClientNotification,
   SavedPaymentMethod,
   ClosedPeriod,
+  OpeningHoursDay,
   ClientStatus,
   CoiffeurClient,
   StaffBoutiqueOrder,
@@ -355,6 +356,12 @@ export const appointmentsApi = {
 
 export const closedPeriodsApi = {
   list: () => http.get<ClosedPeriod[]>('/closed-periods/').then((r) => r.data),
+};
+
+// ─── Opening hours API (horaires hebdo du salon) ─────────────────────────────
+
+export const openingHoursApi = {
+  list: () => http.get<OpeningHoursDay[]>('/opening-hours/').then((r) => r.data),
 };
 
 // ─── Boutique API (produits — stock) ─────────────────────────────────────────
