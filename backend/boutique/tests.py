@@ -1,7 +1,9 @@
+import json
 from datetime import date, time
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import patch
+
+import stripe
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -13,7 +15,11 @@ from .models import Order, Product
 
 
 def intent(amount, user_id, status='succeeded', currency='eur'):
-    return SimpleNamespace(status=status, amount=amount, currency=currency, metadata={'user_id': str(user_id)})
+    # Vrai StripeObject (et non un dict) : c'est ce que renvoie PaymentIntent.retrieve().
+    return stripe.StripeObject.construct_from(
+        {'status': status, 'amount': amount, 'currency': currency, 'metadata': {'user_id': str(user_id)}},
+        'sk_test_x',
+    )
 
 
 class SyncThread:
@@ -220,3 +226,15 @@ class ReservationFlowRegressionTests(TestCase):
 
         self.assertEqual(Notification.objects.get().type, 'rdv')
         self.assertEqual(publish.call_args.args[0], 'new_reservation')
+
+
+class ServerErrorHandlerTests(TestCase):
+    def test_500_is_generic_json_without_traceback(self):
+        from django.conf import settings
+        from django.test import RequestFactory
+        from config.urls import handler500
+
+        self.assertFalse(settings.DEBUG)
+        response = handler500(RequestFactory().get('/'))
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(json.loads(response.content), {'error': 'Internal server error'})
