@@ -8,10 +8,11 @@ import * as WebBrowser from 'expo-web-browser';
 import * as XLSX from 'xlsx';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
-import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon } from '@/components/coiffeur/Icons';
+import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon, BagIcon, ChevronRightIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
+import { coiffeurBoutiqueApi } from '@/services/api';
 
 // jsPDF s'appuie sur des API navigateur indisponibles sur iOS/Android natif
 // (Expo Go) — un import statique fait planter l'app au chargement du module,
@@ -416,6 +417,25 @@ function useDashboardData() {
   };
 }
 
+// KPI « Commandes du jour » : rechargé à chaque commande payée / statut modifié (SSE).
+function useTodayOrders() {
+  const { ordersVersion } = useCoiffeurNotifications();
+  const [todayOrders, setTodayOrders] = useState<{ count: number; total: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    coiffeurBoutiqueApi.orders('today')
+      .then((orders) => {
+        if (cancelled) return;
+        setTodayOrders({ count: orders.length, total: orders.reduce((sum, o) => sum + parseFloat(o.total), 0) });
+      })
+      .catch((e) => console.log('ERREUR COMMANDES DU JOUR — GET:', e));
+    return () => { cancelled = true; };
+  }, [ordersVersion]);
+
+  return todayOrders;
+}
+
 function useProductStock() {
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [products, setProducts] = useState<ApiProduct[]>([]);
@@ -757,6 +777,7 @@ export default function CoiffeurDashboardScreen() {
     exportServices,
   } = useDashboardData();
   const { products, loadingProducts, updatingProductId, ajusterStock } = useProductStock();
+  const todayOrders = useTodayOrders();
 
   const periodData = caData[period];
   const maxValue = Math.max(...periodData.bars.map((b) => b.v), 1);
@@ -840,6 +861,25 @@ export default function CoiffeurDashboardScreen() {
           <Text style={styles.statValue}>{loading ? '--' : stats.rdvCount}</Text>
         </View>
       </View>
+
+      <TouchableOpacity
+        style={styles.ordersKpi}
+        onPress={() => router.push('/coiffeur/commandes')}
+        activeOpacity={0.8}
+        testID="kpi-commandes-du-jour"
+      >
+        <View style={styles.ordersKpiIcon}>
+          <BagIcon color={CC.goldDark} size={18} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.statLabel}>Commandes boutique du jour</Text>
+          <Text style={styles.ordersKpiSub}>
+            {todayOrders ? `${fmtEuro(todayOrders.total)} encaissés` : '—'}
+          </Text>
+        </View>
+        <Text style={styles.statValue}>{todayOrders ? todayOrders.count : '--'}</Text>
+        <ChevronRightIcon color={CC.grayText} />
+      </TouchableOpacity>
 
       <View style={isTablet && styles.twoColRow}>
         <View style={[styles.card, isTablet && styles.cardHalf]}>
@@ -1082,6 +1122,30 @@ const styles = StyleSheet.create({
   },
   statCardDark: {
     backgroundColor: CC.cardBlack,
+  },
+  ordersKpi: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: CC.white,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  ordersKpiIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(201,168,76,0.15)',
+  },
+  ordersKpiSub: {
+    fontSize: 12,
+    color: CC.goldDark,
+    fontWeight: '600',
+    marginTop: 2,
   },
   statLabel: {
     fontSize: 12.5,

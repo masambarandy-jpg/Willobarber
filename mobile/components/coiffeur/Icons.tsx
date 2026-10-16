@@ -287,6 +287,16 @@ export function CardIcon({ color = '#1a1208', size = 18 }: IconProps) {
   );
 }
 
+export function BagIcon({ color = '#1a1208', size = 18 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...base}>
+      <Path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+      <Line x1="3" y1="6" x2="21" y2="6" />
+      <Path d="M16 10a4 4 0 0 1-8 0" />
+    </Svg>
+  );
+}
+
 export function HelpIcon({ color = '#FFFFFF', size = 20 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...base}>

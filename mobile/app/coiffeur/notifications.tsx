@@ -3,14 +3,15 @@ import { View, Text, TouchableOpacity, Modal, Linking, StyleSheet } from 'react-
 import { router } from 'expo-router';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
-import { CalendarIcon, StarIcon, CardIcon, XCircleIcon, BellIcon } from '@/components/coiffeur/Icons';
+import { CalendarIcon, StarIcon, CardIcon, XCircleIcon, BellIcon, BagIcon } from '@/components/coiffeur/Icons';
+import BoutiqueOrderDetailModal from '@/components/BoutiqueOrderDetailModal';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useCoiffeurNotifications, type Notif, type NotifType, type Section } from '@/contexts/CoiffeurNotificationsContext';
 
-type IconKind = 'calendar' | 'star' | 'card' | 'x' | 'bell';
+type IconKind = 'calendar' | 'star' | 'card' | 'x' | 'bell' | 'bag';
 
 const SECTION_ORDER: Section[] = ["AUJOURD'HUI", 'HIER'];
-const TABS = ['Toutes', 'Non lues', 'Rendez-vous', 'Avis', 'Paiements'] as const;
+const TABS = ['Toutes', 'Non lues', 'Rendez-vous', 'Commandes', 'Avis', 'Paiements'] as const;
 
 const ICON_BY_TYPE: Record<NotifType, IconKind> = {
   rdv: 'calendar',
@@ -18,6 +19,7 @@ const ICON_BY_TYPE: Record<NotifType, IconKind> = {
   rappel: 'bell',
   avis: 'star',
   paiement: 'card',
+  boutique_order: 'bag',
 };
 
 const ICON_BG_BY_TYPE: Record<NotifType, string> = {
@@ -26,6 +28,7 @@ const ICON_BG_BY_TYPE: Record<NotifType, string> = {
   rappel: 'rgba(58,106,138,0.15)',
   avis: 'rgba(201,168,76,0.15)',
   paiement: CC.grayBg,
+  boutique_order: 'rgba(201,168,76,0.15)',
 };
 
 function renderIcon(kind: IconKind, size = 18) {
@@ -33,6 +36,7 @@ function renderIcon(kind: IconKind, size = 18) {
   if (kind === 'star') return <StarIcon color={CC.gold} size={size} />;
   if (kind === 'card') return <CardIcon color={CC.grayText} size={size} />;
   if (kind === 'x') return <XCircleIcon color="#C0392B" size={size} />;
+  if (kind === 'bag') return <BagIcon color={CC.goldDark} size={size} />;
   return <BellIcon color="#3a6a8a" size={size} />;
 }
 
@@ -51,6 +55,7 @@ function matchesTab(n: Notif, tab: (typeof TABS)[number]) {
   if (tab === 'Toutes') return true;
   if (tab === 'Non lues') return n.unread === true;
   if (tab === 'Rendez-vous') return n.type === 'rdv' || n.type === 'annulation' || n.type === 'rappel';
+  if (tab === 'Commandes') return n.type === 'boutique_order';
   if (tab === 'Avis') return n.type === 'avis';
   if (tab === 'Paiements') return n.type === 'paiement';
   return true;
@@ -94,11 +99,17 @@ export default function CoiffeurNotificationsScreen() {
   const { notifications, unreadCount, marquerLue } = useCoiffeurNotifications();
   const [selectedNotif, setSelectedNotif] = useState<Notif | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
+  const [orderNotif, setOrderNotif] = useState<Notif | null>(null);
 
   const ouvrirDetail = (notif: Notif) => {
+    marquerLue(notif.id);
+    // Commande boutique : modale dédiée (statut, facture…).
+    if (notif.type === 'boutique_order' && notif.order?.order_id != null) {
+      setOrderNotif(notif);
+      return;
+    }
     setSelectedNotif(notif);
     setDetailVisible(true);
-    marquerLue(notif.id);
   };
 
   const fermerDetail = () => {
@@ -300,6 +311,12 @@ export default function CoiffeurNotificationsScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <BoutiqueOrderDetailModal
+        orderId={orderNotif?.order?.order_id ?? null}
+        initial={orderNotif?.order}
+        onClose={() => setOrderNotif(null)}
+      />
     </>
   );
 }

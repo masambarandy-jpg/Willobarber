@@ -232,6 +232,9 @@ class Notification(models.Model):
         ('recommendation', 'Recommandation'),
         ('seasonal_reminder', 'Rappel de visite'),
         ('invoice', 'Facture'),
+        ('boutique_invoice', 'Facture boutique'),
+        # Notification coiffeur (user NULL) : commande boutique payée.
+        ('boutique_order', 'Commande boutique'),
     ]
 
     # user NULL = notification du coiffeur/gérant (dashboard IsStaffRole, comportement

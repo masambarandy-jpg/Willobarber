@@ -17,6 +17,7 @@ import {
   PersonIcon,
   StarIcon,
   BellIcon,
+  BagIcon,
   GearIcon,
   HelpIcon,
 } from './Icons';
@@ -32,6 +33,7 @@ const NAV_ITEMS: { key: CoiffeurRoute; label: string; icon: (color: string) => R
   { key: 'prestations', label: 'Prestations', icon: (c) => <ScissorsIcon color={c ?? '#000000'} /> },
   { key: 'clients', label: 'Clients', icon: (c) => <UsersIcon color={c ?? '#000000'} /> },
   { key: 'equipe', label: 'Équipe', icon: (c) => <PersonIcon color={c} /> },
+  { key: 'commandes', label: 'Commandes', icon: (c) => <BagIcon color={c} /> },
   { key: 'avis', label: 'Avis clients', icon: (c) => <StarIcon color={c} filled={false} /> },
   { key: 'notifications', label: 'Notifications', icon: (c) => <BellIcon color={c} /> },
   { key: 'parametres', label: 'Paramètres', icon: (c) => <GearIcon color={c} /> },
