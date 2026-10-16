@@ -14,7 +14,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Fonts } from '@/constants';
-import type { StaticService } from '@/components/booking/data';
+import { serviceSlugFromName, type StaticService } from '@/components/booking/data';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
@@ -158,16 +158,17 @@ export default function CatalogueScreen() {
     [services, activeFilter]
   );
 
-  const svcName = (svc: StaticService) => {
-    const key = `services.svc.${svc.id}.name` as TranslationKey;
+  // Les services viennent de l'API (id numérique, nom/description en français
+  // uniquement) : on retrouve leur slug statique pour afficher la traduction,
+  // et on ne retombe sur le texte de la base que pour un service inconnu.
+  const svcText = (svc: StaticService, field: 'name' | 'desc', fallback: string) => {
+    const slug = serviceSlugFromName(svc.name) ?? svc.id;
+    const key = `services.svc.${slug}.${field}` as TranslationKey;
     const translated = t(key);
-    return translated === key ? svc.name : translated;
+    return translated === key ? fallback : translated;
   };
-  const svcDesc = (svc: StaticService) => {
-    const key = `services.svc.${svc.id}.desc` as TranslationKey;
-    const translated = t(key);
-    return translated === key ? svc.desc : translated;
-  };
+  const svcName = (svc: StaticService) => svcText(svc, 'name', svc.name);
+  const svcDesc = (svc: StaticService) => svcText(svc, 'desc', svc.desc);
   const svcCat  = (svc: StaticService) => t(`services.cat.${svc.cat}` as TranslationKey);
 
   const handleReserve = (svc: StaticService) => {
