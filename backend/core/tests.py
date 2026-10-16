@@ -388,10 +388,21 @@ class BarberAgendaTests(TestCase):
         self.assertEqual(data['barbers']['Malik']['days'][0]['state'], 'closed')  # lundi
         self.assertEqual(data['barbers']['Malik']['week_rdv'], 2)
 
-    def test_seed_demo_reservations_for_malik_and_idris(self, _mail):
+    def test_seed_demo_reservations_per_barber(self, _mail):
         from django.core.management import call_command
+        from core.recommendations import salon_now
+        today = salon_now().date()
+        saturday = today - timedelta(days=today.weekday()) + timedelta(days=5)
+        # Vrai RDV sur un créneau prévu par le seed : conservé, le seed se décale.
+        real = Reservation.objects.create(
+            user=self.client_user, service=self.service, barber='Willo', date=saturday, time=time(11, 0), status='confirmed',
+        )
+        Notification.objects.all().delete()  # notif du vrai RDV ci-dessus
         call_command('seed_demo_reservations_barbers', stdout=StringIO())
         call_command('seed_demo_reservations_barbers', stdout=StringIO())  # idempotent
-        for barber in ('Malik', 'Idris'):
-            self.assertTrue(5 <= Reservation.objects.filter(barber=barber, user__username='demo_regular').count() <= 10)
+        demo = Reservation.objects.filter(user__email='demo_regular@willobarber.test')
+        self.assertEqual({b: demo.filter(barber=b).count() for b in ('Willo', 'Malik', 'Idris')},
+                         {'Willo': 18, 'Malik': 6, 'Idris': 7})
+        self.assertEqual(demo.filter(barber='Willo', date=saturday).count(), 8)
+        self.assertTrue(Reservation.objects.filter(pk=real.pk, user=self.client_user).exists())
         self.assertFalse(Notification.objects.filter(type='rdv').exists())  # bulk_create : pas de notif coiffeur
