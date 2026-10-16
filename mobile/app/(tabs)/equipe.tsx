@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { goBackOr } from '@/services/navigation';
 
 const GOLD = '#C9A84C';
 const GREY = '#6B6560';
@@ -56,7 +57,7 @@ export default function EquipeScreen() {
     <View style={styles.root}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBackOr('/(tabs)')} style={styles.backBtn}>
           <Text style={styles.backText}>{t('common.back')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.headerCenter} onPress={() => router.push('/(tabs)' as any)} activeOpacity={0.7}>

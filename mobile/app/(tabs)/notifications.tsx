@@ -17,6 +17,7 @@ import { Fonts } from '@/constants';
 import { useClientNotifications } from '@/contexts/ClientNotificationsContext';
 import { RecommendationModal } from '@/components/RecommendationModal';
 import type { ClientNotification, ClientNotificationType } from '@/types';
+import { goBackOr } from '@/services/navigation';
 
 const GOLD = '#C9A84C';
 const GREY = '#6B6560';
@@ -59,7 +60,7 @@ export default function ClientNotificationsScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
+        <TouchableOpacity onPress={() => goBackOr('/(tabs)')} hitSlop={10}>
           <Feather name="arrow-left" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
