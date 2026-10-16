@@ -39,6 +39,9 @@ import { reviewsApi, loyaltyApi } from '@/services/api';
 // inset horizontal local plutôt qu'hérité de tabletContainer — cf. usage plus bas.
 const TABLET_CONTAINER_PADDING_H = 20;
 
+// Statuts qui ne comptent pas comme une visite (stats VISITES / DERNIÈRE VISITE).
+const NOT_A_VISIT_STATUSES: string[] = ['cancelled', 'cancelled_client', 'no_show'];
+
 const PRICE_BY_SERVICE_NAME: Record<string, number> = {
   'Signature WilloBarber': 45,
   "Taille & rasage à l'ancienne": 28,
@@ -53,6 +56,21 @@ const PRICE_BY_SERVICE_NAME: Record<string, number> = {
 function parseApiDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
+}
+
+// Dernière visite en langage naturel (« Hier », « Il y a 3 mois »…) ;
+// null = aucune visite passée.
+function formatLastVisit(daysAgo: number | null, t: (key: TranslationKey) => string): string {
+  if (daysAgo === null) return t('reservations.lastVisit.none');
+  if (daysAgo <= 0) return t('reservations.lastVisit.today');
+  if (daysAgo === 1) return t('reservations.lastVisit.yesterday');
+  if (daysAgo < 30) return t('reservations.lastVisit.daysAgo').replace('{n}', String(daysAgo));
+  if (daysAgo < 60) return t('reservations.lastVisit.monthAgo');
+  if (daysAgo < 365) return t('reservations.lastVisit.monthsAgo').replace('{n}', String(Math.floor(daysAgo / 30)));
+  const years = Math.floor(daysAgo / 365);
+  return years === 1
+    ? t('reservations.lastVisit.yearAgo')
+    : t('reservations.lastVisit.yearsAgo').replace('{n}', String(years));
 }
 
 function formatHmm(timeStr: string): string {
@@ -263,7 +281,8 @@ export default function ReservationsScreen() {
   // réservation créée depuis l'écran "book" n'apparaît pas tant que l'app n'est pas relancée.
   useFocusEffect(useCallback(() => {
     refetch();
-  }, [refetch]));
+    refreshUser().catch(() => {});
+  }, [refetch, refreshUser]));
   const [histFilter, setHistFilter] = useState('Tous');
   // null = aucun RDV sélectionné — le panneau de détail (tablette) affiche alors un
   // message de sélection par défaut plutôt que le premier élément de la liste.
@@ -300,6 +319,9 @@ export default function ReservationsScreen() {
   const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
   const pastList = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
   const hasHistory = pastList.length > 0;
+  // Visites réellement honorées : les stats ignorent annulations et no-shows,
+  // contrairement à l'historique qui affiche tout.
+  const visitList = pastList.filter((r) => !NOT_A_VISIT_STATUSES.includes(r.status));
 
   // Sync loyaltyPoints avec le user du contexte auth. Utilise [user] comme
   // dep (pas [user?.loyalty_points]) pour que l'effet re-tourne à chaque
@@ -316,12 +338,15 @@ export default function ReservationsScreen() {
     `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
   );
 
-  // pastSorted[0] est le RDV passé le plus récent (tri décroissant ci-dessus) —
-  // parseApiDate() plutôt que `new Date(string)` pour éviter le décalage de
-  // fuseau horaire d'un parsing UTC sur une date "YYYY-MM-DD".
-  const lastVisitDays = pastSorted.length === 0
+  // Visite la plus récente, en jours calendaires (minuit à minuit, arrondi pour
+  // absorber le changement d'heure) — parseApiDate() plutôt que `new Date(string)`
+  // pour éviter le décalage de fuseau horaire d'un parsing UTC sur "YYYY-MM-DD".
+  const lastVisitDate = visitList.reduce<string | null>((max, r) => (max === null || r.date > max ? r.date : max), null);
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const lastVisitDays = lastVisitDate === null
     ? null
-    : Math.floor((Date.now() - parseApiDate(pastSorted[0].date).getTime()) / (1000 * 60 * 60 * 24));
+    : Math.round((todayMidnight.getTime() - parseApiDate(lastVisitDate).getTime()) / (1000 * 60 * 60 * 24));
+  const lastVisitLabel = formatLastVisit(lastVisitDays, t);
 
   const [myReviews, setMyReviews] = useState<Review[]>([]);
   useEffect(() => {
@@ -513,6 +538,8 @@ export default function ReservationsScreen() {
       console.log(`[ANNULATION] POST /reservations/${cancelTarget.id}/cancel/ — reason:`, reason);
       await cancel(cancelTarget.id, reason);
       setCancelTarget(null);
+      // L'annulation retire les points gagnés à la réservation.
+      refreshUser().catch(() => {});
     } catch (err: any) {
       const status = err?.response?.status;
       const data = err?.response?.data;
@@ -768,14 +795,11 @@ export default function ReservationsScreen() {
               {/* Stats */}
               <View style={styles.statsGrid}>
                 <View style={styles.statCard}>
-                  <Text style={styles.statNum}>{pastList.length}</Text>
+                  <Text style={styles.statNum}>{visitList.length}</Text>
                   <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
                 </View>
                 <View style={styles.statCard}>
-                  <Text style={styles.statNum}>{lastVisitDays === null ? '—' : lastVisitDays}</Text>
-                  {lastVisitDays !== null && (
-                    <Text style={styles.statNumSub}>{t('reservations.stats.days')}</Text>
-                  )}
+                  <Text style={styles.statText} numberOfLines={2} adjustsFontSizeToFit>{lastVisitLabel}</Text>
                   <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
                 </View>
                 <View style={styles.statCard}>
@@ -1180,14 +1204,11 @@ export default function ReservationsScreen() {
         {/* ── 2. GRILLE STATS ───────────────────────────────────────── */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Text style={styles.statNum}>{pastList.length}</Text>
+            <Text style={styles.statNum}>{visitList.length}</Text>
             <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNum}>{lastVisitDays === null ? '—' : lastVisitDays}</Text>
-            {lastVisitDays !== null && (
-              <Text style={styles.statNumSub}>{t('reservations.stats.days')}</Text>
-            )}
+            <Text style={styles.statText} numberOfLines={2} adjustsFontSizeToFit>{lastVisitLabel}</Text>
             <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
           </View>
           <View style={styles.statCard}>
@@ -1688,6 +1709,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
     lineHeight: 40,
+  },
+  // Valeur texte (« Il y a 3 mois ») : plus petite que statNum pour tenir dans la carte.
+  statText: {
+    fontFamily: Fonts.bold,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    lineHeight: 24,
+    textAlign: 'center',
+    minHeight: 40,
+    textAlignVertical: 'center',
   },
   statNumSub: {
     fontSize: 12,

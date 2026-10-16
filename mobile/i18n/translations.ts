@@ -227,7 +227,14 @@ const fr = {
   'reservations.dayAbbr.6': 'SAM.',
 
   'reservations.stats.visits': 'VISITES',
-  'reservations.stats.days': 'jours',
+  'reservations.lastVisit.today': "Aujourd'hui",
+  'reservations.lastVisit.yesterday': 'Hier',
+  'reservations.lastVisit.daysAgo': 'Il y a {n} jours',
+  'reservations.lastVisit.monthAgo': 'Il y a 1 mois',
+  'reservations.lastVisit.monthsAgo': 'Il y a {n} mois',
+  'reservations.lastVisit.yearAgo': 'Il y a 1 an',
+  'reservations.lastVisit.yearsAgo': 'Il y a {n} ans',
+  'reservations.lastVisit.none': 'Aucune visite',
   'reservations.stats.lastVisit': 'DERNIÈRE VISITE',
   'reservations.stats.loyaltyPoints': 'POINTS FIDÉLITÉ',
 
@@ -824,7 +831,14 @@ const nl: Record<TranslationKey, string> = {
   'reservations.dayAbbr.6': 'ZAT.',
 
   'reservations.stats.visits': 'BEZOEKEN',
-  'reservations.stats.days': 'dagen',
+  'reservations.lastVisit.today': 'Vandaag',
+  'reservations.lastVisit.yesterday': 'Gisteren',
+  'reservations.lastVisit.daysAgo': '{n} dagen geleden',
+  'reservations.lastVisit.monthAgo': '1 maand geleden',
+  'reservations.lastVisit.monthsAgo': '{n} maanden geleden',
+  'reservations.lastVisit.yearAgo': '1 jaar geleden',
+  'reservations.lastVisit.yearsAgo': '{n} jaar geleden',
+  'reservations.lastVisit.none': 'Geen bezoek',
   'reservations.stats.lastVisit': 'LAATSTE BEZOEK',
   'reservations.stats.loyaltyPoints': 'SPAARPUNTEN',
 
@@ -1418,7 +1432,14 @@ const en: Record<TranslationKey, string> = {
   'reservations.dayAbbr.6': 'SAT.',
 
   'reservations.stats.visits': 'VISITS',
-  'reservations.stats.days': 'days',
+  'reservations.lastVisit.today': 'Today',
+  'reservations.lastVisit.yesterday': 'Yesterday',
+  'reservations.lastVisit.daysAgo': '{n} days ago',
+  'reservations.lastVisit.monthAgo': '1 month ago',
+  'reservations.lastVisit.monthsAgo': '{n} months ago',
+  'reservations.lastVisit.yearAgo': '1 year ago',
+  'reservations.lastVisit.yearsAgo': '{n} years ago',
+  'reservations.lastVisit.none': 'No visits yet',
   'reservations.stats.lastVisit': 'LAST VISIT',
   'reservations.stats.loyaltyPoints': 'LOYALTY POINTS',
 
