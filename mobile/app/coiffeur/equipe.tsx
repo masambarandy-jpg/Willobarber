@@ -98,7 +98,6 @@ const LOCAL_STATS_BY_NAME: Record<string, LocalStats> = {
 const DEFAULT_STATS: LocalStats = { rating: '—', exp: '—' };
 
 function mapApiBarber(b: ApiBarber): TeamMember {
-  console.log('ÉQUIPE — nom barbier reçu de l\'API:', b.name);
   const stats = LOCAL_STATS_BY_NAME[b.name] ?? DEFAULT_STATS;
   const isWillo = (b.name ?? '').toLowerCase().includes('willo');
 
@@ -125,10 +124,12 @@ function trierFondateurEnPremier(members: TeamMember[]): TeamMember[] {
   });
 }
 
-// Clé de l'agenda (Reservation.barber) : prénom du barbier (« Malik Haddad » → Malik).
+// Clé de l'agenda (Reservation.barber) : prénom du barbier en tête du nom
+// (« Malik Haddad » → Malik). Préfixe et non mot exact : la fiche de Willo
+// s'appelle « WilloBarber » en prod.
 function barberKey(name: string): BarberName | null {
-  const first = (name ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? '';
-  return (['Willo', 'Malik', 'Idris'] as const).find((b) => b.toLowerCase() === first) ?? null;
+  const normalized = (name ?? '').trim().toLowerCase();
+  return (['Willo', 'Malik', 'Idris'] as const).find((b) => normalized.startsWith(b.toLowerCase())) ?? null;
 }
 
 // Moins de 30 % de créneaux libres : « presque complet ».
