@@ -113,6 +113,27 @@ class BoutiqueOrderPaymentTests(TestCase):
         self.assertEqual(order.total, Decimal('70.95'))
         self.assertEqual(order.delivery_address, 'Rue Neuve 1, 1000 Bruxelles')
 
+    @patch('boutique.views.notify_coiffeur_new_order', side_effect=RuntimeError('boom'))
+    @patch('stripe.PaymentIntent.retrieve')
+    def test_coiffeur_notification_failure_never_cancels_paid_order(self, retrieve, _notify, publish, publish_to_client, send_email):
+        retrieve.return_value = intent(6600, self.client_user.id)
+        with self.assertLogs('boutique.views', level='ERROR'):
+            response = self.post(self.order_body())
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(Order.objects.exists())
+        send_email.assert_called_once()  # la facture client part quand même
+
+    @patch('stripe.PaymentIntent.retrieve')
+    def test_sse_publish_failure_is_logged_not_raised(self, retrieve, publish, *_):
+        retrieve.return_value = intent(6600, self.client_user.id)
+        publish.side_effect = RuntimeError('broker down')
+        with self.assertLogs('boutique.invoices', level='ERROR'):
+            response = self.post(self.order_body())
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(Notification.objects.filter(type='boutique_order').exists())
+
     def test_payment_is_required(self, publish, *_):
         response = self.post(self.order_body(payment_intent_id=''))
         self.assertEqual(response.status_code, 400)

@@ -1,3 +1,4 @@
+import logging
 import threading
 from datetime import timedelta
 from decimal import Decimal
@@ -21,6 +22,8 @@ from .invoices import (
 )
 from .models import Product, Order, OrderItem
 from .serializers import ProductSerializer, OrderSerializer, StaffOrderSerializer
+
+logger = logging.getLogger(__name__)
 
 # Même montant que l'option « Livraison à domicile » du panier (cart.tsx).
 DELIVERY_FEE = Decimal('4.95')
@@ -181,7 +184,13 @@ class OrderListCreateView(APIView):
                 )
                 Product.objects.filter(pk=vi['product'].pk).update(stock=F('stock') - vi['quantite'])
 
-            notify_coiffeur_new_order(order, site_root)
+            # Savepoint : un échec de la notif coiffeur ne doit jamais annuler
+            # une commande déjà payée par le client.
+            try:
+                with transaction.atomic():
+                    notify_coiffeur_new_order(order, site_root)
+            except Exception:
+                logger.exception("Notification coiffeur non créée (commande %s)", order.numero)
             transaction.on_commit(lambda: threading.Thread(
                 target=send_boutique_invoice,
                 args=(order.id, site_root),

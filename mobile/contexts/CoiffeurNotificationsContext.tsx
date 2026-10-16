@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { API_BASE_URL } from '@/constants';
 import { useSSE } from '@/hooks/useSSE';
+import { coiffeurAuthFetch } from '@/services/api';
 import type { BoutiqueOrderNotificationData, CoiffeurSseEvent, ReservationNotificationData } from '@/types';
 
 const SSE_EVENTS: readonly CoiffeurSseEvent[] = [
@@ -277,9 +278,10 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
       return;
     }
     try {
-      const response = await fetch(`${API_BASE_URL}/notifications/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await coiffeurAuthFetch('/notifications/');
+      // Token rafraîchi par coiffeurAuthFetch → le flux SSE se rouvre avec le nouveau.
+      const latest = await AsyncStorage.getItem('coiffeur_token');
+      if (latest !== token) setToken(latest);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data: ApiNotif[] = await response.json();
       const mapped = data.map(mapApiNotif);
@@ -348,11 +350,8 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
     // est déjà à jour ci-dessus, qu'importe le résultat de cet appel.
     (async () => {
       try {
-        const token = await AsyncStorage.getItem('coiffeur_token');
-        if (!token) return;
-        await fetch(`${API_BASE_URL}/notifications/${id}/`, {
+        await coiffeurAuthFetch(`/notifications/${id}/`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ is_read: true }),
         });
       } catch (error) {

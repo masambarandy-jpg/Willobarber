@@ -9,7 +9,7 @@ import BoutiqueOrderDetailModal, {
   fmtEur,
 } from '@/components/BoutiqueOrderDetailModal';
 import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
-import { coiffeurBoutiqueApi } from '@/services/api';
+import { CoiffeurApiError, coiffeurBoutiqueApi } from '@/services/api';
 import type { StaffBoutiqueOrder } from '@/types';
 
 const PERIODS = [
@@ -32,16 +32,21 @@ export default function CoiffeurCommandesScreen() {
   const [period, setPeriod] = useState<PeriodKey>('today');
   const [orders, setOrders] = useState<StaffBoutiqueOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<StaffBoutiqueOrder | null>(null);
 
   const load = useCallback(async () => {
     try {
       setOrders(await coiffeurBoutiqueApi.orders(period));
-      setError(false);
+      setError(null);
     } catch (e) {
       console.log('ERREUR COMMANDES — GET:', e);
-      setError(true);
+      const httpStatus = e instanceof CoiffeurApiError ? e.status : null;
+      setError(
+        httpStatus === 401 ? 'Session expirée — reconnectez-vous.'
+        : httpStatus === 403 ? "Ce compte n'a pas les droits gérant."
+        : `Impossible de charger les commandes${httpStatus ? ` (erreur ${httpStatus})` : ''}.`,
+      );
     } finally {
       setLoading(false);
     }
@@ -83,7 +88,7 @@ export default function CoiffeurCommandesScreen() {
         {loading ? (
           <ActivityIndicator color={CC.gold} style={{ marginTop: 30 }} />
         ) : error ? (
-          <Text style={styles.empty}>Impossible de charger les commandes.</Text>
+          <Text style={styles.empty}>{error}</Text>
         ) : orders.length === 0 ? (
           <View style={styles.emptyWrap}>
             <BagIcon color={CC.grayText} size={30} />

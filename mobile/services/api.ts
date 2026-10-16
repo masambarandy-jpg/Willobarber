@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'ax
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 import { API_BASE_URL } from '@/constants';
 import type {
   AuthResponse,
@@ -374,17 +375,72 @@ export const boutiqueApi = {
   products: () => http.get<BoutiqueProduct[]>('/boutique/produits/').then((r) => r.data),
 };
 
-// ─── Commandes boutique — espace coiffeur ────────────────────────────────────
-// Token coiffeur dédié (rôle admin requis), comme mediaApi.upload.
+// ─── Session coiffeur (token dédié 'coiffeur_token') ─────────────────────────
+// L'access token expire (7 j) et devient invalide si SECRET_KEY change : sans
+// refresh, tous les appels coiffeur renvoyaient 401 en silence (notifications
+// factices, onglet Commandes en erreur, SSE refusé).
+
+export class CoiffeurApiError extends Error {
+  constructor(public status: number) {
+    super(`HTTP ${status}`);
+  }
+}
+
+// Une seule requête de refresh à la fois : avec ROTATE_REFRESH_TOKENS +
+// BLACKLIST_AFTER_ROTATION, un 2e refresh parallèle utiliserait un refresh
+// token déjà blacklisté et déconnecterait le coiffeur.
+let coiffeurRefreshInFlight: Promise<string | null> | null = null;
+
+function refreshCoiffeurToken(): Promise<string | null> {
+  coiffeurRefreshInFlight ??= (async () => {
+    try {
+      const refresh = await AsyncStorage.getItem('coiffeur_refresh');
+      if (!refresh) return null;
+      const res = await fetch(`${API_BASE_URL}/auth/token/refresh/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh }),
+      });
+      if (!res.ok) return null;
+      const data: { access: string; refresh?: string } = await res.json();
+      await AsyncStorage.setItem('coiffeur_token', data.access);
+      if (data.refresh) await AsyncStorage.setItem('coiffeur_refresh', data.refresh);
+      return data.access;
+    } catch {
+      return null;
+    } finally {
+      coiffeurRefreshInFlight = null;
+    }
+  })();
+  return coiffeurRefreshInFlight;
+}
+
+// fetch authentifié coiffeur : sur 401, refresh puis un seul nouvel essai. Si
+// la session est irrécupérable, retour à l'écran de connexion gérant.
+export async function coiffeurAuthFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const send = (token: string | null) =>
+    fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...init.headers },
+    });
+
+  const token = await AsyncStorage.getItem('coiffeur_token');
+  if (!token) throw new CoiffeurApiError(401);
+  let res = await send(token);
+  if (res.status === 401) {
+    const fresh = await refreshCoiffeurToken();
+    if (fresh) res = await send(fresh);
+    if (!fresh || res.status === 401) {
+      await AsyncStorage.multiRemove(['coiffeur_token', 'coiffeur_refresh']);
+      router.replace('/coiffeur');
+    }
+  }
+  return res;
+}
 
 async function coiffeurFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await AsyncStorage.getItem('coiffeur_token');
-  if (!token) throw new Error('Session coiffeur absente');
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...init.headers },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const res = await coiffeurAuthFetch(path, init);
+  if (!res.ok) throw new CoiffeurApiError(res.status);
   return res.json() as Promise<T>;
 }
 
