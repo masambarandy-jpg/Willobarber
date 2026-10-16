@@ -41,6 +41,7 @@ import {
   type StaticBarber,
   type StaticService,
 } from '@/components/booking/data';
+import { goBackOr } from '@/services/navigation';
 
 const GOLD = '#C9A84C';
 
@@ -399,11 +400,11 @@ export default function BookScreen() {
   const handleBack = () => {
     // Service et barbier sont verrouillés en mode reprogrammation — il n'y a
     // pas d'étape 1/2 à revisiter, "Retour" quitte simplement le wizard.
-    if (isRescheduleMode) { router.back(); return; }
+    if (isRescheduleMode) { goBackOr('/(tabs)/reservations'); return; }
     // Idem en mode reprise rapide, mais seulement jusqu'à l'étape de départ :
     // l'étape 1 (Prestation), sautée puisque déjà pré-remplie, n'existe pas
     // dans ce flux — "Retour" depuis l'étape d'entrée quitte le wizard.
-    if (isFastbook && step <= (fastbookStartStep ?? 1)) { router.back(); return; }
+    if (isFastbook && step <= (fastbookStartStep ?? 1)) { goBackOr('/(tabs)'); return; }
     if (step === 1) router.replace('/(tabs)');
     else setStep(s => s - 1);
   };
@@ -434,10 +435,10 @@ export default function BookScreen() {
     setIsPaying(false);
     if (Platform.OS === 'web') {
       window.alert(t('book.rescheduleSuccessMsg'));
-      router.back();
+      goBackOr('/(tabs)/reservations');
     } else {
       Alert.alert(t('book.rescheduleSuccessTitle'), t('book.rescheduleSuccessMsg'), [
-        { text: t('common.ok'), onPress: () => router.back() },
+        { text: t('common.ok'), onPress: () => goBackOr('/(tabs)/reservations') },
       ]);
     }
   };
@@ -667,7 +668,7 @@ export default function BookScreen() {
       {isRescheduleMode && (
         <TouchableOpacity
           style={styles.topBackBtn}
-          onPress={() => router.back()}
+          onPress={() => goBackOr('/(tabs)/reservations')}
           activeOpacity={0.8}
         >
           <Text style={styles.topBackBtnText}>{t('book.backBtn')}</Text>

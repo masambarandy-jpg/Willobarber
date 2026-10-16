@@ -20,6 +20,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { CartPaymentSection, type CartPaymentHandle } from '@/components/boutique/CartPaymentSection';
+import { goBackOr } from '@/services/navigation';
 
 export default function CartScreen() {
   const router = useRouter();
@@ -213,7 +214,7 @@ export default function CartScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBackOr('/(tabs)')} style={styles.backBtn}>
           <Text style={styles.backText}>{t('common.back')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.headerCenter} onPress={() => router.push('/(tabs)' as any)} activeOpacity={0.7}>

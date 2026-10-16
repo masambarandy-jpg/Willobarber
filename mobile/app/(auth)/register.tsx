@@ -11,11 +11,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/hooks/useAuth';
 import { Fonts } from '@/constants';
 import { LegalModal, LegalModalType } from '@/components/LegalModal';
+import { goBackOr } from '@/services/navigation';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -76,7 +76,6 @@ function FieldInput({
 }
 
 export default function RegisterScreen() {
-  const router = useRouter();
   const { register } = useAuth();
 
   const [firstName, setFirstName] = useState('');
@@ -236,7 +235,7 @@ export default function RegisterScreen() {
 
           <View style={styles.loginRow}>
             <Text style={styles.loginText}>Déjà un compte ?</Text>
-            <Pressable onPress={() => router.back()}>
+            <Pressable onPress={() => goBackOr('/(tabs)/profile')}>
               <Text style={styles.loginLink}> Se connecter</Text>
             </Pressable>
           </View>
