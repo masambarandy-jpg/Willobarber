@@ -222,3 +222,112 @@ class SavedPaymentMethodTests(TestCase):
             self.assertEqual(self.client.delete('/api/auth/me/payment-methods/pm_new/').status_code, 204)
             self.assertEqual(self.client.delete('/api/auth/me/payment-methods/pm_unknown/').status_code, 404)
         self.assertEqual([c.args[0] for c in detach.call_args_list], ['pm_new', 'pm_old'])
+
+
+class SyncThread:
+    """Remplace threading.Thread : exécute la cible tout de suite."""
+
+    def __init__(self, target, args=(), kwargs=None, daemon=None):
+        self.target, self.args, self.kwargs = target, args, kwargs or {}
+
+    def start(self):
+        self.target(*self.args, **self.kwargs)
+
+
+@override_settings(SENDGRID_API_KEY='SG.test', SENDGRID_FROM_EMAIL='contact@willobarber.be', APP_URL='https://app.willobarber.be/')
+@patch('core.emails.threading.Thread', SyncThread)
+@patch('core.emails.sendgrid.SendGridAPIClient')
+class ReservationEmailTests(TestCase):
+    def setUp(self):
+        owner = User.objects.create_user('owner', role='admin')
+        shop = Barbershop.objects.create(name='WB', address='x', phone='x', owner=owner)
+        self.service = Service.objects.create(name='Signature', price=45, duration=45, barbershop=shop)
+        self.staff = owner
+        self.client_user = User.objects.create_user('randy', email='randy@example.com', first_name='Randy')
+        self.api = APIClient()
+        self.api.force_authenticate(self.client_user)
+
+    def sent(self, sg):
+        return [c.args[0].get() for c in sg.return_value.send.call_args_list]
+
+    def book(self, **extra):
+        body = {'service': self.service.id, 'date': '2026-11-20', 'time': '15:30',
+                'payment_intent_id': 'pi_1', 'amount_paid': 5, **extra}
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.api.post('/api/reservations/', body, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        return Reservation.objects.get(pk=response.data['id'])
+
+    def patch_resa(self, reservation, data, as_user=None):
+        self.api.force_authenticate(as_user or self.client_user)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.api.patch(f'/api/reservations/{reservation.id}/', data, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+
+    @patch('core.views.send_online_payment_invoice')
+    def test_confirmation_email_sent_on_booking(self, _invoice, sg):
+        self.book()
+        [mail] = self.sent(sg)
+        self.assertEqual(mail['subject'], 'Votre rendez-vous WilloBarber est confirmé 💈')
+        self.assertEqual(mail['from']['email'], 'contact@willobarber.be')
+        self.assertEqual(mail['personalizations'][0]['to'][0]['email'], 'randy@example.com')
+        html = mail['content'][0]['value']
+        for text in ('Bonjour Randy', 'Signature', 'Willo', 'Vendredi 20 novembre 2026', '15h30',
+                     'Rue Auguste Van Zande 78', 'Un acompte de 5 € a été payé via Stripe',
+                     'Le solde de 40 € est à régler au salon', '24h', 'https://app.willobarber.be/'):
+            self.assertIn(text, html)
+
+    @patch('core.views.send_online_payment_invoice')
+    def test_secondary_child_bookings_send_no_duplicate(self, _invoice, sg):
+        self.book(child_count=2, amount_paid=10)
+        self.book(time='16:00', payment_intent_id='', amount_paid=0, child_count=1)
+        [mail] = self.sent(sg)
+        self.assertIn('Signature × 2', mail['content'][0]['value'])
+
+    @patch('core.views.send_online_payment_invoice')
+    def test_sendgrid_failure_never_blocks_booking(self, _invoice, sg):
+        sg.return_value.send.side_effect = RuntimeError('403 sender not verified')
+        with self.assertLogs('core.emails', level='ERROR') as logs:
+            reservation = self.book()
+        self.assertTrue(Reservation.objects.filter(pk=reservation.pk).exists())
+        self.assertIn('403 sender not verified', '\n'.join(logs.output))
+
+    @patch('core.views.send_online_payment_invoice')
+    def test_reschedule_email_shows_old_and_new_slot(self, _invoice, sg):
+        reservation = self.book()
+        self.patch_resa(reservation, {'date': '2026-11-27', 'time': '10:00'})
+        mail = self.sent(sg)[-1]
+        self.assertEqual(mail['subject'], 'Votre rendez-vous WilloBarber a été reprogrammé 💈')
+        html = mail['content'][0]['value']
+        self.assertIn('Vendredi 20 novembre 2026 · 15h30', html)  # ancien créneau (barré)
+        self.assertIn('Vendredi 27 novembre 2026', html)
+        self.assertIn('10h00', html)
+
+    @patch('core.views.send_online_payment_invoice')
+    def test_cancellation_more_than_24h_mentions_refund(self, _invoice, sg):
+        reservation = self.book()
+        self.patch_resa(reservation, {'status': 'cancelled_client'})
+        mail = self.sent(sg)[-1]
+        self.assertEqual(mail['subject'], 'Votre rendez-vous WilloBarber a été annulé')
+        self.assertIn('vous sera intégralement remboursé', mail['content'][0]['value'])
+
+    @patch('core.views.send_online_payment_invoice')
+    def test_late_cancellation_keeps_deposit(self, _invoice, sg):
+        tomorrow = (datetime.now(SALON_TZ) + timedelta(hours=3))
+        reservation = self.book(date=tomorrow.date().isoformat(), time=tomorrow.strftime('%H:00'))
+        self.patch_resa(reservation, {'status': 'cancelled_client'})
+        self.assertIn("l'acompte de 5 € est conservé", self.sent(sg)[-1]['content'][0]['value'])
+
+    @patch('core.views.send_online_payment_invoice')
+    def test_salon_cancellation_apologises_and_refunds(self, _invoice, sg):
+        reservation = self.book()
+        self.patch_resa(reservation, {'status': 'cancelled'}, as_user=self.staff)
+        html = self.sent(sg)[-1]['content'][0]['value']
+        self.assertIn('Le salon a dû annuler', html)
+        self.assertIn('intégralement remboursé', html)
+
+    @patch('core.views.send_online_payment_invoice')
+    def test_staff_payment_update_sends_nothing(self, _invoice, sg):
+        reservation = self.book()
+        self.patch_resa(reservation, {'payment_status': 'paid_onsite'}, as_user=self.staff)
+        self.assertEqual(len(self.sent(sg)), 1)  # seulement la confirmation

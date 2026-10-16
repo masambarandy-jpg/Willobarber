@@ -155,6 +155,20 @@ AUTH_USER_MODEL = 'core.User'
 
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
 
+# ─── Emails (SendGrid) ───────────────────────────────────────────────────────
+SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+# IMPORTANT : SendGrid refuse (HTTP 403) tout expéditeur non vérifié dans le
+# compte SendGrid (Settings → Sender Authentication : « Single Sender
+# Verification » de l'adresse, ou « Domain Authentication » de willobarber.be).
+# Sans vérification, AUCUN email ne part. Valeur par défaut = l'expéditeur déjà
+# utilisé (et donc vérifié) jusqu'ici ; pour passer à contact@willobarber.be,
+# le vérifier dans SendGrid PUIS définir SENDGRID_FROM_EMAIL sur Railway.
+SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL') or 'masamba.randy@gmail.com'
+SENDGRID_FROM_NAME = os.environ.get('SENDGRID_FROM_NAME') or 'WilloBarber'
+# Lien du bouton « Voir mon RDV » des emails ; à défaut, la racine du site
+# (landing page) de la requête qui a déclenché l'email.
+APP_URL = os.environ.get('APP_URL', '')
+
 # Secret partagé avec cron-job.org (header X-CRON-TOKEN de /tasks/run-recommendations/).
 CRON_TOKEN = os.environ.get('CRON_TOKEN')
 

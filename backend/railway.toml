@@ -7,4 +7,6 @@ builder = "nixpacks"
 # permanence, un worker sync unique bloquerait toutes les autres requêtes.
 # collectstatic : le stockage Manifest de whitenoise exige le manifeste dès que
 # DEBUG=False, sinon toute page avec {% static %} (admin, landing) renvoie 500.
-startCommand = "python manage.py migrate && python manage.py collectstatic --noinput && python manage.py seed_jours_feries && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 32"
+# PYTHONUNBUFFERED : sans lui, les print() (stdout non-TTY = bufferisé) n'arrivent
+# dans les logs Railway que par paquets de 8 Ko, voire jamais.
+startCommand = "python manage.py migrate && python manage.py collectstatic --noinput && python manage.py seed_jours_feries && PYTHONUNBUFFERED=1 gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 32"
