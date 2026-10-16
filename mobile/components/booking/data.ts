@@ -198,6 +198,25 @@ export const DEFAULT_CLOSING_MINUTES = 21 * 60;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Slug statique (clé `services.svc.<slug>.*` des traductions) d'un service
+ *  Django, déduit de son nom (seul champ commun, cf. GET /api/services/). */
+export function serviceSlugFromName(rawName: string): string | null {
+  const name = rawName.toLowerCase();
+  if (name.includes('signature')) return 'signature';
+  if (name.includes('taille')) return 'barbe';
+  if (name.includes('rituel')) return 'rituel';
+  if (name.includes('express')) return 'express';
+  if (name.includes('camouflage')) return 'camouflage';
+  if (name.includes('soin')) return 'soin';
+  if (name.includes('enfant')) {
+    if (name.includes('−15') || name.includes('-15') || name.includes('moins')) return 'enfant-15';
+    if (name.includes('+15') || name.includes('plus')) return 'enfant+15';
+    // Ancienne clé générique pour compatibilité.
+    return 'enfant';
+  }
+  return null;
+}
+
 const JOURS_FR   = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const MOIS_FR    = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const MOIS_SHORT = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc'];

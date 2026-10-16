@@ -38,6 +38,7 @@ import {
   type PaymentMethod,
   SERVICES,
   consecutiveSlots,
+  serviceSlugFromName,
   type StaticBarber,
   type StaticService,
 } from '@/components/booking/data';
@@ -301,27 +302,8 @@ export default function BookScreen() {
     servicesApi.list().then(services => {
       const map: Record<string, number> = {};
       services.forEach((s: any) => {
-        const name = s.name.toLowerCase();
-        if (name.includes('signature')) map['signature'] = s.id;
-        if (name.includes('taille')) map['barbe'] = s.id;
-        if (name.includes('rituel')) map['rituel'] = s.id;
-        if (name.includes('express')) map['express'] = s.id;
-        if (name.includes('camouflage')) map['camouflage'] = s.id;
-        if (name.includes('soin')) map['soin'] = s.id;
-        // Les 2 services enfants doivent avoir des clés distinctes qui
-        // correspondent aux ids statiques définis dans data.ts :
-        // 'enfant-15' et 'enfant+15'. Détection par la présence du signe
-        // dans le nom ("Coupe enfant −15 ans" / "Coupe enfant +15 ans").
-        if (name.includes('enfant')) {
-          if (name.includes('−15') || name.includes('-15') || name.includes('moins')) {
-            map['enfant-15'] = s.id;
-          } else if (name.includes('+15') || name.includes('plus')) {
-            map['enfant+15'] = s.id;
-          } else {
-            // Fallback : ancienne clé générique pour compatibilité
-            map['enfant'] = s.id;
-          }
-        }
+        const slug = serviceSlugFromName(s.name);
+        if (slug) map[slug] = s.id;
       });
       setServiceIdMap(map);
     }).catch(() => {}); // silencieux si pas connecté
