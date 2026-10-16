@@ -21,8 +21,10 @@ import { ClientNotificationsProvider } from '@/contexts/ClientNotificationsConte
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { StripeWrapper } from '@/components/booking/StripeWrapper';
 import { Colors } from '@/constants';
+import { injectWebGlobalCss } from '@/constants/webGlobalCss';
 
 SplashScreen.preventAutoHideAsync();
+injectWebGlobalCss();
 
 function RootNavigation() {
   const { isLoading } = useAuth();
