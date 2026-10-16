@@ -64,6 +64,7 @@ type ApiReservation = {
   time: string;
   status: string;
   payment_status?: string;
+  barber?: string; // agenda par barbier ; absent d'un backend antérieur → Willo
 };
 
 // Réel : /api/services/ → contient bien price et duration (minutes)
@@ -257,7 +258,7 @@ function useDashboardData() {
             letter: (r.client_display_name?.charAt(0) ?? 'W').toUpperCase(),
             name: formatDisplayName(r.client_display_name),
             service: r.service_name,
-            barber: 'Willo',
+            barber: r.barber ?? 'Willo',
             time: r.time.slice(0, 5),
           }));
 
@@ -329,16 +330,15 @@ function useDashboardData() {
         const bestDayEntry = Object.entries(revenueByDay).sort((a, b) => b[1] - a[1])[0];
         const bestDay = bestDayEntry ? { label: bestDayEntry[0], total: bestDayEntry[1] } : null;
 
-        // ── Barbier top performer ──
-        // Pas de champ barbier côté API (cf. commentaire fallback dans planning.tsx) :
-        // chaque réservation est rattachée au barbier par défaut 'Willo'.
-        const topBarber = activeReservations.length > 0
-          ? {
-              name: 'Willo',
-              count: activeReservations.length,
-              revenue: activeReservations.reduce((sum, r) => sum + (priceByServiceName[r.service_name] ?? 0), 0),
-            }
-          : null;
+        // ── Barbier top performer (agenda par barbier : Reservation.barber) ──
+        const statsByBarber: Record<string, { count: number; revenue: number }> = {};
+        activeReservations.forEach((r) => {
+          const entry = (statsByBarber[r.barber ?? 'Willo'] ??= { count: 0, revenue: 0 });
+          entry.count += 1;
+          entry.revenue += priceByServiceName[r.service_name] ?? 0;
+        });
+        const topBarberEntry = Object.entries(statsByBarber).sort((a, b) => b[1].count - a[1].count)[0];
+        const topBarber = topBarberEntry ? { name: topBarberEntry[0], ...topBarberEntry[1] } : null;
 
         // ── Client le plus fidèle (nombre de réservations) ──
         const countByClient: Record<string, number> = {};

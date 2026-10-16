@@ -38,7 +38,6 @@ def format_heure_fr(time):
 # commit de la réservation, échec journalisé sans jamais bloquer la résa.
 
 
-SALON_BARBER_NAME = 'Willo'
 SALON_ADDRESS = 'Rue Auguste Van Zande 78, 1082 Bruxelles'
 SALON_PHONE = '+32 2 555 04 04'
 SALON_EMAIL = 'contact@willobarber.be'
@@ -135,14 +134,14 @@ def render_reservation_email(reservation, kind, app_url, previous=None, late=Fal
         subject = 'Votre rendez-vous WilloBarber est confirmé 💈'
         kicker, title = 'RÉSERVATION CONFIRMÉE', 'Votre rendez-vous est confirmé.'
         intro = 'Merci pour votre réservation, nous avons hâte de vous accueillir.'
-        rows = [_row('Prestation', service), _row('Barbier', SALON_BARBER_NAME),
+        rows = [_row('Prestation', service), _row('Barbier', escape(reservation.barber)),
                 _row('Date', date_fr), _row('Heure', heure_fr), _row('Adresse', SALON_ADDRESS)]
         note = _payment_sentence(reservation)
     elif kind == 'rescheduled':
         subject = 'Votre rendez-vous WilloBarber a été reprogrammé 💈'
         kicker, title = 'RENDEZ-VOUS REPROGRAMMÉ', 'Votre rendez-vous a été déplacé.'
         intro = 'Voici votre nouveau créneau. Votre paiement reste associé à ce rendez-vous.'
-        rows = [_row('Prestation', service), _row('Barbier', SALON_BARBER_NAME)]
+        rows = [_row('Prestation', service), _row('Barbier', escape(reservation.barber))]
         if previous:
             rows.append(_row('Ancien créneau', f"{format_date_fr(previous['date'])} · {format_heure_fr(previous['time'])}", strike=True))
         rows += [_row('Nouvelle date', date_fr), _row('Nouvelle heure', heure_fr), _row('Adresse', SALON_ADDRESS)]

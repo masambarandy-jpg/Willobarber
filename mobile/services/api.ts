@@ -25,6 +25,7 @@ import type {
   CoiffeurClient,
   StaffBoutiqueOrder,
   BoutiqueOrderStatus,
+  BarberName,
 } from '@/types';
 
 const SECURE_KEY_ACCESS = 'wb_access_token';
@@ -198,16 +199,17 @@ export const servicesApi = {
 // ─── Slots API ───────────────────────────────────────────────────────────────
 
 export const slotsApi = {
-  available: (barberId: number, date: string) =>
+  // Agenda du barbier (prénom, ex. 'Malik') : un créneau pris chez Willo reste libre chez Malik.
+  available: (barber: BarberName, date: string) =>
     http
-      .get<AvailableSlotsResponse>('/slots/available/', { params: { barber_id: barberId, date } })
+      .get<AvailableSlotsResponse>('/slots/available/', { params: { barber, date } })
       .then((r) => r.data),
 
-  lock: (barberId: number, date: string, startTime: string) =>
-    http.post('/slots/lock/', { barber_id: barberId, date, start_time: startTime }).then((r) => r.data),
+  lock: (barber: BarberName, date: string, startTime: string) =>
+    http.post('/slots/lock/', { barber, date, start_time: startTime }).then((r) => r.data),
 
-  unlock: (barberId: number, date: string, startTime: string) =>
-    http.delete('/slots/unlock/', { data: { barber_id: barberId, date, start_time: startTime } }),
+  unlock: (barber: BarberName, date: string, startTime: string) =>
+    http.delete('/slots/unlock/', { data: { barber, date, start_time: startTime } }),
 };
 
 // ─── Reservations API ────────────────────────────────────────────────────────
@@ -443,6 +445,25 @@ async function coiffeurFetch<T>(path: string, init: RequestInit = {}): Promise<T
   if (!res.ok) throw new CoiffeurApiError(res.status);
   return res.json() as Promise<T>;
 }
+
+// GET /api/barbers/availability/ (barbers_week_availability côté backend).
+export type BarberDayAvailability = {
+  date: string; // YYYY-MM-DD
+  state: 'open' | 'closed' | 'leave' | 'past';
+  free: number;
+  booked: number;
+  total: number;
+  reason?: string;
+};
+
+export type WeekAvailability = {
+  week_start: string;
+  barbers: Record<BarberName, { total_rdv: number; week_rdv: number; days: BarberDayAvailability[] }>;
+};
+
+export const coiffeurTeamApi = {
+  weekAvailability: () => coiffeurFetch<WeekAvailability>('/barbers/availability/'),
+};
 
 export const coiffeurBoutiqueApi = {
   orders: (period: 'today' | 'week' | 'all' = 'week') =>

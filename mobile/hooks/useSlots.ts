@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { slotsApi } from '@/services/api';
-import type { TimeSlot } from '@/types';
+import type { BarberName, TimeSlot } from '@/types';
 
-export function useSlots(barberId: number | null, date: string | null) {
+export function useSlots(barber: BarberName | null, date: string | null) {
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!barberId || !date) {
+    if (!barber || !date) {
       setSlots([]);
       return;
     }
     setIsLoading(true);
     setError(null);
     try {
-      const data = await slotsApi.available(barberId, date);
+      const data = await slotsApi.available(barber, date);
       setSlots(data.slots);
     } catch (err: unknown) {
       const msg =
@@ -26,7 +26,7 @@ export function useSlots(barberId: number | null, date: string | null) {
     } finally {
       setIsLoading(false);
     }
-  }, [barberId, date]);
+  }, [barber, date]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -34,18 +34,18 @@ export function useSlots(barberId: number | null, date: string | null) {
 
   const lock = useCallback(
     async (startTime: string) => {
-      if (!barberId || !date) return;
-      await slotsApi.lock(barberId, date, startTime);
+      if (!barber || !date) return;
+      await slotsApi.lock(barber, date, startTime);
     },
-    [barberId, date],
+    [barber, date],
   );
 
   const unlock = useCallback(
     async (startTime: string) => {
-      if (!barberId || !date) return;
-      await slotsApi.unlock(barberId, date, startTime);
+      if (!barber || !date) return;
+      await slotsApi.unlock(barber, date, startTime);
     },
-    [barberId, date],
+    [barber, date],
   );
 
   return { slots, available, isLoading, error, refetch: fetch, lock, unlock };

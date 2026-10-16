@@ -5,7 +5,7 @@ import logging
 import os
 import random
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import cloudinary.uploader
 import openpyxl
@@ -46,6 +46,7 @@ from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from .models import (
+    BARBER_CHOICES, DEFAULT_BARBER,
     Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, Review, WaitingList,
     BarberLeave, Notification, NotificationPreference, PaymentCard, UserSession,
 )
@@ -53,8 +54,8 @@ from .emails import (
     format_date_fr, format_date_fr_short, format_heure_fr, is_late_cancellation, queue_reservation_email,
 )
 from .permissions import IsStaffRole
-from .recommendations import build_recommendation, create_client_notification, run_daily_recommendations
-from .slots import SLOT_TIMES
+from .recommendations import SALON_TZ, build_recommendation, create_client_notification, run_daily_recommendations
+from .slots import CLOSED_WEEKDAYS, SLOT_TIMES
 from .sms import send_reminders_for_tomorrow
 from .serializers import (
     BarbershopSerializer, BarberSerializer, ServiceSerializer, ReservationSerializer,
@@ -214,20 +215,80 @@ def available_slots(request):
     except ValueError:
         return Response({'error': 'Format de date invalide (YYYY-MM-DD attendu).'}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Agenda du barbier choisi (prénom, cf. BARBER_CHOICES) ; sans paramètre,
+    # celui du barbier par défaut (anciennes versions de l'app).
+    barber = request.query_params.get('barber') or DEFAULT_BARBER
+    if barber not in dict(BARBER_CHOICES):
+        return Response({'error': 'Barbier inconnu.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    on_leave = BarberLeave.objects.filter(
+        barber=barber, start_date__lte=requested_date, end_date__gte=requested_date,
+    ).exists()
     booked_hhmm = {
         t.strftime('%H:%M')
         for t in Reservation.objects
-            .filter(date=requested_date)
+            .filter(barber=barber, date=requested_date)
             .exclude(status__in=['cancelled', 'cancelled_client'])
             .values_list('time', flat=True)
     }
 
     slots = [
-        {'start_time': slot, 'end_time': slot, 'is_available': slot not in booked_hhmm}
+        {'start_time': slot, 'end_time': slot, 'is_available': not on_leave and slot not in booked_hhmm}
         for slot in SLOT_TIMES
     ]
 
-    return Response({'date': date_str, 'slots': slots})
+    return Response({'date': date_str, 'barber': barber, 'slots': slots})
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def barbers_week_availability(request):
+    """Créneaux encore libres par barbier et par jour, sur une semaine
+    (?week_start=YYYY-MM-DD, lundi de la semaine en cours par défaut).
+
+    État d'un jour : 'closed' (lundi, fermeture salon), 'leave' (congé du
+    barbier), 'past' (jour écoulé) ou 'open'. Aujourd'hui, seuls les créneaux
+    pas encore commencés comptent comme libres."""
+    now = timezone.localtime(timezone.now(), SALON_TZ)
+    today = now.date()
+    try:
+        week_start = datetime.strptime(request.query_params['week_start'], '%Y-%m-%d').date()
+    except (KeyError, ValueError):
+        week_start = today - timedelta(days=today.weekday())
+    days = [week_start + timedelta(days=i) for i in range(7)]
+
+    closed_periods = list(ClosedPeriod.objects.filter(start_date__lte=days[-1], end_date__gte=days[0]))
+    leaves = list(BarberLeave.objects.filter(start_date__lte=days[-1], end_date__gte=days[0]))
+    active = Reservation.objects.exclude(status__in=CANCELLED_STATUSES)
+    booked = {}
+    for barber, d, t in active.filter(date__range=(days[0], days[-1])).values_list('barber', 'date', 'time'):
+        booked.setdefault((barber, d), set()).add(t.strftime('%H:%M'))
+    totals = dict(active.values_list('barber').annotate(n=Count('id')).values_list('barber', 'n'))
+
+    def day_state(barber, d):
+        taken = booked.get((barber, d), set())
+        info = {'date': d.isoformat(), 'total': len(SLOT_TIMES), 'booked': len(taken), 'free': 0}
+        period = next((p for p in closed_periods if p.start_date <= d <= p.end_date), None)
+        if d.weekday() in CLOSED_WEEKDAYS or period:
+            return {**info, 'state': 'closed', 'reason': period.reason if period else 'Fermé'}
+        if any(l.barber == barber and l.start_date <= d <= l.end_date for l in leaves):
+            return {**info, 'state': 'leave', 'reason': 'Congé'}
+        if d < today:
+            return {**info, 'state': 'past'}
+        upcoming = [s for s in SLOT_TIMES if d > today or s > now.strftime('%H:%M')]
+        return {**info, 'state': 'open', 'free': sum(s not in taken for s in upcoming)}
+
+    return Response({
+        'week_start': week_start.isoformat(),
+        'barbers': {
+            barber: {
+                'total_rdv': totals.get(barber, 0),
+                'week_rdv': sum(len(booked.get((barber, d), ())) for d in days),
+                'days': [day_state(barber, d) for d in days],
+            }
+            for barber, _ in BARBER_CHOICES
+        },
+    })
 
 
 password_reset_token_generator = PasswordResetTokenGenerator()
@@ -465,6 +526,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
             # ce second cas : deux requêtes simultanées sur un créneau libre
             # provoquent un IntegrityError pour l'une des deux, rattrapé plus bas.
             conflict = Reservation.objects.select_for_update().filter(
+                barber=request.data.get('barber') or DEFAULT_BARBER,
                 date=date,
                 time=time,
                 status__in=['pending', 'confirmed'],

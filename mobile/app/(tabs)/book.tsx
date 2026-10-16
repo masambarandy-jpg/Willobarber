@@ -42,6 +42,7 @@ import {
   type StaticService,
 } from '@/components/booking/data';
 import { goBackOr } from '@/services/navigation';
+import type { BarberName } from '@/types';
 
 const GOLD = '#C9A84C';
 
@@ -504,6 +505,7 @@ export default function BookScreen() {
           const noteSuffix = isCounter && count > 1 ? ` (Enfant ${i + 1}/${count})` : '';
           const created = await reservationsApi.create({
             service: serviceIdMap[booking.service?.id ?? ''] ?? undefined as any,
+            barber: (booking.barber?.name ?? 'Willo') as BarberName,
             date: dateStr,
             time: slotTimes[i],
             notes: `Barbier: ${booking.barber?.name || 'Willo'}${noteSuffix}`,

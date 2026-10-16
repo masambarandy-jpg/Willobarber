@@ -12,7 +12,7 @@ import {
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { closedPeriodsApi, slotsApi, waitingListApi } from '@/services/api';
-import type { ClosedPeriod } from '@/types';
+import type { BarberName, ClosedPeriod } from '@/types';
 import { SLOT_GROUPS, isSlotAvailable, type BookingState } from './data';
 import type { TranslationKey } from '@/i18n/translations';
 
@@ -235,6 +235,8 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
   ref
 ) {
   const { date: selectedDate, time: selectedTime, service } = booking;
+  // Prénom du barbier choisi à l'étape 2 (BARBERS : 'Willo' | 'Malik' | 'Idris').
+  const barberName = (booking.barber?.name ?? 'Willo') as BarberName;
   const { t } = useLanguage();
 
   const [closedPeriods, setClosedPeriods] = useState<ClosedPeriod[]>([]);
@@ -251,13 +253,12 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
     return () => { cancelled = true; };
   }, []);
 
-  // Le salon n'a qu'un seul barbier ("Willo") — /slots/available/ n'utilise pas
-  // barber_id côté backend, mais la signature de l'API l'exige encore.
+  // Créneaux de l'agenda du barbier choisi.
   const fetchSlots = useCallback((date: Date) => {
     setJoinedWaitlist(false);
     setLoadingSlots(true);
     let cancelled = false;
-    slotsApi.available(1, toIsoDate(date))
+    slotsApi.available(barberName, toIsoDate(date))
       .then((res) => {
         if (cancelled) return;
         const taken = new Set(res.slots.filter((s) => !s.is_available).map((s) => s.start_time));
@@ -266,7 +267,7 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
       .catch(() => { if (!cancelled) setBookedTimes(new Set()); })
       .finally(() => { if (!cancelled) setLoadingSlots(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [barberName]);
 
   useEffect(() => {
     if (!selectedDate) {

@@ -363,7 +363,7 @@ export default function ReservationsScreen() {
       service: nextReservation.service_name,
       time: nextReservation.time.slice(0, 5),
       timeLabel: formatHmm(nextReservation.time),
-      barbier: 'Willo',
+      barbier: nextReservation.barber ?? 'Willo',
       dateLabel: `${d.getDate()} ${t(`step3.month.${d.getMonth()}` as TranslationKey)} ${d.getFullYear()}`,
       dateShort: `${d.getDate()} ${moisAbbr}`,
       daysLabel,
@@ -566,9 +566,9 @@ export default function ReservationsScreen() {
         reschedule: 'true',
         reservationId: String(nextReservation.id),
         serviceId: String(nextReservation.service),
-        // Le salon n'a qu'un seul barbier ("Willo") — aucun champ barbier
-        // n'existe sur Reservation côté backend (cf. services/api.ts).
-        barberId: 'willo',
+        // Même barbier : la reprogrammation ne change que la date/l'heure
+        // (ids de BARBERS = prénom en minuscules).
+        barberId: (nextReservation.barber ?? 'Willo').toLowerCase(),
       },
     });
     const goService = () => router.push('/(tabs)/book');

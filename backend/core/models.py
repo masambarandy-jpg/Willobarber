@@ -95,6 +95,19 @@ class Barber(models.Model):
         return f"{self.name} ({self.role})"
 
 
+# Les barbiers ne sont pas des User Django (aucun rôle 'barber' n'existe sur
+# User) : partout dans l'app (planning coiffeur, réservations, congés), le
+# barbier est identifié par ce prénom.
+BARBER_CHOICES = [
+    ('Willo', 'Willo'),
+    ('Malik', 'Malik'),
+    ('Idris', 'Idris'),
+]
+# Barbier par défaut : réservations antérieures à l'agenda par barbier et
+# versions de l'app qui n'envoient pas encore de barbier.
+DEFAULT_BARBER = 'Willo'
+
+
 class Reservation(models.Model):
     STATUS_CHOICES = [
         ('pending', 'En attente'),
@@ -125,6 +138,7 @@ class Reservation(models.Model):
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True, default='')
     amount_paid = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     child_count = models.PositiveSmallIntegerField(default=1)
+    barber = models.CharField(max_length=20, choices=BARBER_CHOICES, default=DEFAULT_BARBER)
     qr_code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     checked_in = models.BooleanField(default=False)
     checked_in_at = models.DateTimeField(null=True, blank=True)
@@ -135,10 +149,11 @@ class Reservation(models.Model):
         # même agenda côté backend (cf. fallback "Willo" dans planning.tsx).
         # cancelled/no_show ne comptent pas : le créneau redevient réservable.
         constraints = [
+            # Un agenda par barbier : un seul RDV actif par barbier et par créneau.
             models.UniqueConstraint(
-                fields=['date', 'time'],
+                fields=['barber', 'date', 'time'],
                 condition=models.Q(status__in=['pending', 'confirmed']),
-                name='unique_active_reservation_slot',
+                name='unique_active_reservation_slot_per_barber',
             ),
         ]
 
@@ -161,14 +176,7 @@ class WaitingList(models.Model):
 
 
 class BarberLeave(models.Model):
-    # Les barbiers ne sont pas des User Django (aucun rôle 'barber' n'existe sur
-    # User — cf. ROLE_CHOICES ci-dessus) : partout ailleurs dans l'app (planning
-    # coiffeur, réservations), le barbier est ce type statique à 3 valeurs.
-    BARBER_CHOICES = [
-        ('Willo', 'Willo'),
-        ('Malik', 'Malik'),
-        ('Idris', 'Idris'),
-    ]
+    BARBER_CHOICES = BARBER_CHOICES
 
     barber = models.CharField(max_length=20, choices=BARBER_CHOICES)
     start_date = models.DateField()

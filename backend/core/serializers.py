@@ -76,6 +76,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             'payment_method',
             'amount_paid',
             'child_count',
+            'barber',
             'qr_code',
             'checked_in',
             'checked_in_at',

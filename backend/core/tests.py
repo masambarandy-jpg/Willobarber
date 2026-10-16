@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -7,7 +8,8 @@ import stripe
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import Barbershop, ClosedPeriod, Notification, Reservation, Service, User
+from .models import Barbershop, BarberLeave, ClosedPeriod, Notification, Reservation, Service, User
+from .slots import SLOT_TIMES
 from .recommendations import (
     SALON_TZ, get_client_habits, process_user, should_send_seasonal_reminder, suggest_slots,
 )
@@ -331,3 +333,65 @@ class ReservationEmailTests(TestCase):
         reservation = self.book()
         self.patch_resa(reservation, {'payment_status': 'paid_onsite'}, as_user=self.staff)
         self.assertEqual(len(self.sent(sg)), 1)  # seulement la confirmation
+
+
+@patch('core.views.queue_reservation_email')
+class BarberAgendaTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user('owner', role='admin')
+        shop = Barbershop.objects.create(name='WB', address='x', phone='x', owner=self.staff)
+        self.service = Service.objects.create(name='Signature', price=45, duration=45, barbershop=shop)
+        self.client_user = User.objects.create_user('randy', email='randy@example.com')
+        self.api = APIClient()
+        self.api.force_authenticate(self.client_user)
+        self.day = '2026-11-20'  # vendredi
+
+    def book(self, barber=None, hhmm='15:30'):
+        body = {'service': self.service.id, 'date': self.day, 'time': hhmm}
+        if barber:
+            body['barber'] = barber
+        return self.api.post('/api/reservations/', body, format='json')
+
+    def test_two_barbers_can_take_the_same_slot(self, _mail):
+        self.assertEqual(self.book('Willo').status_code, 201)
+        self.assertEqual(self.book('Malik').status_code, 201)
+        self.assertEqual(self.book('Malik').status_code, 409)
+
+    def test_missing_barber_defaults_to_willo(self, _mail):
+        response = self.book()
+        self.assertEqual(response.data['barber'], 'Willo')
+
+    def test_available_slots_are_per_barber_and_respect_leave(self, _mail):
+        self.book('Malik')
+        BarberLeave.objects.create(barber='Idris', start_date=date(2026, 11, 20), end_date=date(2026, 11, 20))
+
+        def free(barber):
+            slots = self.api.get('/api/slots/available/', {'date': self.day, 'barber': barber}).data['slots']
+            return {s['start_time'] for s in slots if s['is_available']}
+
+        self.assertNotIn('15:30', free('Malik'))
+        self.assertIn('15:30', free('Willo'))
+        self.assertEqual(free('Idris'), set())
+        self.assertEqual(self.api.get('/api/slots/available/', {'date': self.day, 'barber': 'Bob'}).status_code, 400)
+
+    def test_week_availability_counts_free_slots_per_barber(self, _mail):
+        self.book('Malik', '15:30')
+        self.book('Malik', '16:00')
+        self.api.force_authenticate(self.client_user)
+        self.assertEqual(self.api.get('/api/barbers/availability/').status_code, 403)
+
+        self.api.force_authenticate(self.staff)
+        data = self.api.get('/api/barbers/availability/', {'week_start': '2026-11-16'}).data
+        friday = data['barbers']['Malik']['days'][4]
+        self.assertEqual((friday['state'], friday['booked'], friday['free']), ('open', 2, len(SLOT_TIMES) - 2))
+        self.assertEqual(data['barbers']['Willo']['days'][4]['free'], len(SLOT_TIMES))
+        self.assertEqual(data['barbers']['Malik']['days'][0]['state'], 'closed')  # lundi
+        self.assertEqual(data['barbers']['Malik']['week_rdv'], 2)
+
+    def test_seed_demo_reservations_for_malik_and_idris(self, _mail):
+        from django.core.management import call_command
+        call_command('seed_demo_reservations_barbers', stdout=StringIO())
+        call_command('seed_demo_reservations_barbers', stdout=StringIO())  # idempotent
+        for barber in ('Malik', 'Idris'):
+            self.assertTrue(5 <= Reservation.objects.filter(barber=barber, user__username='demo_regular').count() <= 10)
+        self.assertFalse(Notification.objects.filter(type='rdv').exists())  # bulk_create : pas de notif coiffeur
