@@ -25,22 +25,32 @@ type ApiService = {
   name: string;
   price: string;
   duration: number;
+  category?: string;
 };
 
-// Le modèle Service côté backend n'a que name/price/duration — pas de description,
-// catégorie ou statut. On garde ces valeurs cosmétiques par nom pour les prestations
-// historiques connues ; toute prestation absente de cette table retombe sur des valeurs
-// par défaut. Ces champs ne sont donc jamais envoyés au backend (ils ne persisteraient
-// pas) — seuls name/price/duration sont réellement sauvegardés sur Railway.
-const SERVICE_COSMETICS: Record<string, { description: string; category: Category; status: Status }> = {
-  'Signature WilloBarber': { description: 'Coupe ciseaux & finition rasoir', category: 'Coupe', status: 'Actif' },
-  'Taille & rasage à l’ancienne': { description: 'Serviette chaude, rasoir droit', category: 'Rasage', status: 'Actif' },
-  'Le Rituel': { description: 'Coupe + barbe + soin', category: 'Pack', status: 'Actif' },
-  'Coupe express': { description: 'Version concentrée', category: 'Coupe', status: 'Actif' },
-  'Camouflage gris': { description: 'Pigmentation sans ammoniaque', category: 'Soin', status: 'Brouillon' },
-  'Soin du visage': { description: 'Gommage & masque argile', category: 'Soin', status: 'Actif' },
+// Catégorie : celle du backend (Service.category), regroupée dans les 4 onglets
+// de l'écran. Coloration → Soin et Enfant → Coupe faute d'onglet dédié.
+const API_CATEGORY_TO_TAB: Record<string, Category> = {
+  coupe_homme: 'Coupe',
+  enfant: 'Coupe',
+  barbe: 'Rasage',
+  package: 'Pack',
+  soin: 'Soin',
+  coloration: 'Soin',
 };
-const DEFAULT_COSMETICS = { description: '', category: 'Coupe' as Category, status: 'Actif' as Status };
+
+// Description et statut n'existent pas côté backend : valeurs cosmétiques par
+// nom pour les prestations connues, jamais envoyées au backend (seuls
+// name/price/duration sont sauvegardés sur Railway).
+const SERVICE_COSMETICS: Record<string, { description: string; status: Status }> = {
+  'Signature WilloBarber': { description: 'Coupe ciseaux & finition rasoir', status: 'Actif' },
+  'Taille & rasage': { description: 'Serviette chaude, rasoir droit', status: 'Actif' },
+  'Le Rituel': { description: 'Coupe + barbe + soin', status: 'Actif' },
+  'Coupe express': { description: 'Version concentrée', status: 'Actif' },
+  'Camouflage gris': { description: 'Pigmentation sans ammoniaque', status: 'Brouillon' },
+  'Soin visage': { description: 'Gommage & masque argile', status: 'Actif' },
+};
+const DEFAULT_COSMETICS = { description: '', status: 'Actif' as Status };
 
 function formatPriceDisplay(price: number): string {
   return `${Math.round(price)}€`;
@@ -77,7 +87,7 @@ function mapApiService(s: ApiService): Service {
     id: s.id,
     name: s.name,
     description: cosmetics.description,
-    category: cosmetics.category,
+    category: API_CATEGORY_TO_TAB[s.category ?? ''] ?? 'Coupe',
     status: cosmetics.status,
     duration: formatDurationDisplay(s.duration),
     price: formatPriceDisplay(parseFloat(s.price)),
