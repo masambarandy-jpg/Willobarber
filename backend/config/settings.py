@@ -22,10 +22,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-vqet(&x!h%gi*jxihz+amfbp(%$(f3_&k!_%p&@2u0yt#*cl^k'
+# La valeur par défaut est publique (versionnée) : définir SECRET_KEY sur Railway.
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-vqet(&x!h%gi*jxihz+amfbp(%$(f3_&k!_%p&@2u0yt#*cl^k')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Désactivé par défaut (prod) : en local, lancer avec DEBUG=True dans l'environnement.
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
@@ -167,3 +169,16 @@ cloudinary.config(
     api_secret=os.environ.get('CLOUDINARY_API_SECRET'),
     secure=True,
 )
+
+# Avec DEBUG=False, Django n'écrit plus les tracebacks des erreurs 500 sur la
+# console : on les garde dans les logs Railway (jamais dans la réponse HTTP).
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+    },
+    'loggers': {
+        'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+    },
+}

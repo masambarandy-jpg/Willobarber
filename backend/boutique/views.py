@@ -32,6 +32,13 @@ STAFF_STATUSES = {
 }
 
 
+def _intent_user_id(intent):
+    # metadata est un StripeObject : pas de .get() (ce n'est plus un dict
+    # depuis stripe-python 8), et il reste truthy même vide.
+    metadata = intent.metadata.to_dict() if intent.metadata else {}
+    return str(metadata.get('user_id'))
+
+
 def _check_payment_intent(payment_intent_id, total, user):
     """Message d'erreur si le PaymentIntent ne règle pas exactement cette
     commande pour ce client, None sinon."""
@@ -47,7 +54,7 @@ def _check_payment_intent(payment_intent_id, total, user):
         return "Le paiement n'a pas abouti."
     if intent.amount != int(round(total * 100)) or intent.currency != 'eur':
         return 'Le montant payé ne correspond pas à la commande.'
-    if str((intent.metadata or {}).get('user_id')) != str(user.id):
+    if _intent_user_id(intent) != str(user.id):
         return 'Ce paiement ne vous appartient pas.'
     return None
 
@@ -67,7 +74,7 @@ def _refund(payment_intent_id, user):
     stripe.api_key = settings.STRIPE_SECRET_KEY
     try:
         intent = stripe.PaymentIntent.retrieve(payment_intent_id)
-        if intent.status == 'succeeded' and str((intent.metadata or {}).get('user_id')) == str(user.id):
+        if intent.status == 'succeeded' and _intent_user_id(intent) == str(user.id):
             stripe.Refund.create(payment_intent=payment_intent_id)
             print(f"[BOUTIQUE] PaymentIntent {payment_intent_id} remboursé (commande refusée)")
     except stripe.error.StripeError as e:
