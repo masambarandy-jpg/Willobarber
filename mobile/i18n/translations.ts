@@ -6,6 +6,7 @@ const fr = {
   'nav.services': 'Services',
   'nav.book': 'Réserver',
   'nav.mySpace': 'Mon espace',
+  'nav.mySpaceShort': 'Espace',
   'nav.profile': 'Profil',
 
   // ── Common ───────────────────────────────────────────────────────────────
@@ -617,6 +618,7 @@ const nl: Record<TranslationKey, string> = {
   'nav.services': 'Diensten',
   'nav.book': 'Boeken',
   'nav.mySpace': 'Mijn ruimte',
+  'nav.mySpaceShort': 'Ruimte',
   'nav.profile': 'Profiel',
 
   'common.bookNow': 'Nu boeken',
@@ -1218,6 +1220,7 @@ const en: Record<TranslationKey, string> = {
   'nav.services': 'Services',
   'nav.book': 'Book',
   'nav.mySpace': 'My space',
+  'nav.mySpaceShort': 'My space',
   'nav.profile': 'Profile',
 
   'common.bookNow': 'Book now',
