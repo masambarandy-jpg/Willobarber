@@ -1301,7 +1301,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 14,
     color: CC.black,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   searchEmptyText: {
     fontSize: 14,
