@@ -325,7 +325,6 @@ const fr = {
   'reservations.upcomingOthers': 'Mes autres RDV à venir',
   'reservations.viewAllUpcoming': 'Voir tous mes RDV à venir ({n})',
   'reservations.hideUpcoming': 'Masquer mes RDV à venir',
-  'reservations.cancelUpcoming': 'Annuler',
   'reservations.cancelledToast': 'RDV annulé',
 
   'reservations.loyalty.programTitle': 'PROGRAMME FIDÉLITÉ',
@@ -980,7 +979,6 @@ const nl: Record<TranslationKey, string> = {
   'reservations.upcomingOthers': 'Mijn andere komende afspraken',
   'reservations.viewAllUpcoming': 'Al mijn komende afspraken bekijken ({n})',
   'reservations.hideUpcoming': 'Mijn komende afspraken verbergen',
-  'reservations.cancelUpcoming': 'Annuleren',
   'reservations.cancelledToast': 'Afspraak geannuleerd',
 
   'reservations.loyalty.programTitle': 'SPAARPROGRAMMA',
@@ -1632,7 +1630,6 @@ const en: Record<TranslationKey, string> = {
   'reservations.upcomingOthers': 'My other upcoming appointments',
   'reservations.viewAllUpcoming': 'View all my upcoming appointments ({n})',
   'reservations.hideUpcoming': 'Hide my upcoming appointments',
-  'reservations.cancelUpcoming': 'Cancel',
   'reservations.cancelledToast': 'Appointment cancelled',
 
   'reservations.loyalty.programTitle': 'LOYALTY PROGRAMME',
