@@ -8,10 +8,12 @@ import * as WebBrowser from 'expo-web-browser';
 import * as XLSX from 'xlsx';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
-import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon, BagIcon, ChevronRightIcon } from '@/components/coiffeur/Icons';
+import { DownloadIcon, UsersIcon, ListIcon, PersonIcon, CalendarIcon, ChevronDownIcon, BagIcon, ChevronRightIcon, QrIcon } from '@/components/coiffeur/Icons';
+import ClientScanModal from '@/components/coiffeur/ClientScanModal';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { coiffeurBoutiqueApi } from '@/services/api';
 
 // jsPDF s'appuie sur des API navigateur indisponibles sur iOS/Android natif
@@ -761,6 +763,8 @@ async function genererExcel(data: ExcelData) {
 
 export default function CoiffeurDashboardScreen() {
   const isTablet = useIsTablet();
+  const { t } = useLanguage();
+  const [scanOpen, setScanOpen] = useState(false);
   const [period, setPeriod] = useState<Period>('mois');
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -838,6 +842,21 @@ export default function CoiffeurDashboardScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      <TouchableOpacity
+        style={styles.scanBtn}
+        onPress={() => setScanOpen(true)}
+        activeOpacity={0.85}
+        testID="btn-scan-client"
+        accessibilityRole="button"
+      >
+        <View style={styles.scanBtnIcon}>
+          <QrIcon color={CC.black} size={22} />
+        </View>
+        <Text style={styles.scanBtnText}>{t('coiffeur.scanClient')}</Text>
+        <ChevronRightIcon color={CC.gold} />
+      </TouchableOpacity>
+      <ClientScanModal visible={scanOpen} onClose={() => setScanOpen(false)} />
 
       <View style={styles.statsGrid}>
         <View style={[styles.statCard, styles.statCardDark, isTablet && styles.statCardTablet]}>
@@ -1102,6 +1121,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: CC.black,
+  },
+  scanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: CC.cardBlack,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: CC.gold,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  scanBtnIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: CC.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scanBtnText: {
+    flex: 1,
+    fontFamily: SERIF,
+    fontSize: 20,
+    fontWeight: '600',
+    color: CC.white,
   },
   statsGrid: {
     flexDirection: 'row',

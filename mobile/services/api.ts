@@ -282,6 +282,33 @@ export interface CheckinResponse {
   date: string;
   time: string;
   checked_in_at: string;
+  reservation: CheckinReservation;
+  client_profile: CheckinClientProfile;
+}
+
+export interface CheckinReservation {
+  reservation_id: number;
+  client_name: string;
+  service_name: string;
+  barber: string;
+  status: string;
+  date: string;
+  time: string;
+  checked_in: boolean;
+  checked_in_at: string | null;
+}
+
+export interface CheckinClientProfile {
+  id: number;
+  first_name: string;
+  last_name: string;
+  profile_picture: string | null;
+  loyalty_points: number;
+  total_visits: number;
+  member_since: string;
+  last_visit: string | null;
+  favorite_services: string[];
+  favorite_barber: string | null;
 }
 
 export const checkinApi = {
@@ -515,6 +542,15 @@ export type BarberDayAvailability = {
 export type WeekAvailability = {
   week_start: string;
   barbers: Record<BarberName, { total_rdv: number; week_rdv: number; days: BarberDayAvailability[] }>;
+};
+
+// Scan du QR client depuis le dashboard : preview() affiche la fiche sans
+// marquer l'arrivée, checkIn() la confirme. Erreurs : CoiffeurApiError(404)
+// pour un QR inconnu, 403 hors staff.
+export const coiffeurCheckinApi = {
+  preview: (qrCode: string) => coiffeurFetch<CheckinResponse>(`/checkin/${encodeURIComponent(qrCode)}/`),
+  checkIn: (qrCode: string) =>
+    coiffeurFetch<CheckinResponse>(`/checkin/${encodeURIComponent(qrCode)}/`, { method: 'POST' }),
 };
 
 export const coiffeurTeamApi = {

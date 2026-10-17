@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router, useLocalSearchParams } from 'expo-router';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { API_BASE_URL } from '@/constants';
@@ -124,6 +125,9 @@ function confirmer(title: string, message: string, confirmLabel: string): Promis
 
 export default function CoiffeurClientsScreen() {
   const isTablet = useIsTablet();
+  // ?clientId=… : ouverture directe d'une fiche (« Voir l'historique complet »
+  // depuis le scan QR du dashboard).
+  const { clientId } = useLocalSearchParams<{ clientId?: string }>();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
   const [searchQuery, setSearchQuery] = useState('');
   const [clients, setClients] = useState<Client[]>([]);
@@ -335,6 +339,15 @@ export default function CoiffeurClientsScreen() {
     setPanelEditing(false);
     if (!isTablet) setDetailModalVisible(true);
   };
+
+  useEffect(() => {
+    if (!clientId || clients.length === 0) return;
+    const target = clients.find((c) => String(c.id) === clientId);
+    if (target) selectClient(target);
+    router.setParams({ clientId: undefined });
+    // selectClient est recréé à chaque rendu : on ne réagit qu'au paramètre et au chargement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, clients]);
 
   const ouvrirStatut = (client: Client) => {
     setSelectedStatus(client.status);
