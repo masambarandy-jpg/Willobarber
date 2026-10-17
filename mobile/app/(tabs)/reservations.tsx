@@ -898,6 +898,7 @@ export default function ReservationsScreen() {
               style={styles.miniCard}
               onPress={() => setDetailTarget(r)}
               accessibilityRole="button"
+              accessibilityLabel={`${v.dateShort} · ${v.timeLabel} — ${v.service} · ${v.barbier}`}
             >
               <Ionicons name="calendar-outline" size={20} color="#C9A84C" />
               <View style={{ flex: 1, gap: 3 }}>
@@ -906,15 +907,9 @@ export default function ReservationsScreen() {
                   {v.service} · {v.barbier} · {fmtPrice(servicePrice(r))}
                 </Text>
               </View>
-              <TouchableOpacity
-                testID={`btn-cancel-upcoming-${r.id}`}
-                style={styles.miniCardCancel}
-                onPress={() => setCancelTarget(r)}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-              >
-                <Text style={styles.miniCardCancelText}>{t('reservations.cancelUpcoming')}</Text>
-              </TouchableOpacity>
+              {/* Pas de bouton dans la carte (déjà un bouton → <button> imbriqué
+                  sur web) : l'annulation se fait depuis la modale détail. */}
+              <Ionicons name="chevron-forward" size={18} color="rgba(201,168,76,0.7)" />
             </Pressable>
           );
         })}
@@ -2117,14 +2112,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
   },
-  miniCardCancel: {
-    borderWidth: 0.5,
-    borderColor: 'rgba(192,57,43,0.6)',
-    borderRadius: 100,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  miniCardCancelText: { color: '#E57368', fontSize: 12.5, fontWeight: '600' },
 
   // Avatar
   avatar:     { backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 1.5, borderColor: '#C9A84C', alignItems: 'center', justifyContent: 'center' },
