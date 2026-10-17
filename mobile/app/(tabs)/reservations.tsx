@@ -30,7 +30,7 @@ import { useIsTablet } from '@/components/client/useIsTablet';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useClientNotifications } from '@/contexts/ClientNotificationsContext';
 import type { TranslationKey } from '@/i18n/translations';
-import { fmtPrice } from '@/components/booking/data';
+import { ACOMPTE_FIXE, SERVICES, fmtPrice } from '@/components/booking/data';
 import { useClientMedia } from '@/hooks/useClientMedia';
 import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 import ReservationComment from '@/components/client/ReservationComment';
@@ -57,6 +57,15 @@ const PRICE_BY_SERVICE_NAME: Record<string, number> = {
   'Coupe enfant −15 ans': 15,
   'Coupe enfant +15 ans': 20,
 };
+
+// Shape réel de /reservations/ (core/serializers.py) : 'time', 'service_price'
+// et 'amount_paid' (montant encaissé en ligne, en euros) sont absents du type partagé.
+type ApiReservation = Reservation & { time: string; service_price?: string; amount_paid?: string | null };
+
+function servicePrice(r: ApiReservation): number {
+  const fromApi = Number(r.service_price);
+  return Number.isFinite(fromApi) && fromApi > 0 ? fromApi : PRICE_BY_SERVICE_NAME[r.service_name] ?? 0;
+}
 
 function parseApiDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -87,11 +96,6 @@ function formatDateLong(dateStr: string, t: (key: TranslationKey) => string): st
   return `${d.getDate()} ${t(`step3.month.${d.getMonth()}` as TranslationKey)} ${d.getFullYear()}`;
 }
 
-const MOCK_LOYALTY = {
-  points: 0,
-  total_earned: 0,
-};
-
 const TIERS_META = [
   { labelKey: 'reservations.loyalty.tier.bronze' as TranslationKey, min: 0,   threshold: '0',   color: '#8B6914' },
   { labelKey: 'reservations.loyalty.tier.argent' as TranslationKey, min: 200, threshold: '200', color: '#6B6560' },
@@ -99,11 +103,6 @@ const TIERS_META = [
 ];
 
 const BARBER_HIST_COLORS: Record<string, string> = { Willo: '#C9A84C', Malik: '#7A3B1E', Idris: '#1A6B4A' };
-
-const FAVORIS_META = [
-  { nomKey: 'reservations.hist.signature' as TranslationKey, dur: '45 min', prix: '45€', count: '8×', day: '12', moisIdx: 3 },
-  { nomKey: 'reservations.hist.taille' as TranslationKey,    dur: '30 min', prix: '28€', count: '5×', day: '2',  moisIdx: 2 },
-];
 
 const SALON_ADDRESS = 'Rue Auguste Van Zande 78';
 
@@ -262,7 +261,7 @@ export default function ReservationsScreen() {
   // rechargement échoue alors que des réservations sont déjà affichées (refetch
   // au focus), on garde ces vraies données plutôt que de les masquer.
   const loadFailed = !!error && reservations.length === 0;
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   // Recharge les réservations à chaque prise de focus de l'onglet — sans ça, une
   // réservation créée depuis l'écran "book" n'apparaît pas tant que l'app n'est pas relancée.
@@ -303,17 +302,16 @@ export default function ReservationsScreen() {
   // L'API /reservations/ retourne un champ 'time', absent du type Reservation partagé
   // (utilisé ailleurs avec un shape différent) — on type le réel localement ici.
   // Le scoping par client connecté est géré côté backend (ReservationViewSet.get_queryset).
-  const allReservations = reservations as (Reservation & { time: string })[];
+  const allReservations = reservations as ApiReservation[];
   if (__DEV__ && allReservations[0]) {
     console.log('[RESERVATIONS] Réservation brute reçue de l\'API:', JSON.stringify(allReservations[0]));
   }
-  const upcomingList = upcoming as (Reservation & { time: string })[];
+  const upcomingList = upcoming as ApiReservation[];
   // L'historique doit montrer tout RDV dont la date est passée, quel que soit son statut
   // (pending/confirmed oubliés, completed, cancelled...) — pas seulement status === 'completed'.
   const now = new Date();
   const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
   const pastList = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
-  const hasHistory = pastList.length > 0;
   // Visites réellement honorées : les stats ignorent annulations et no-shows,
   // contrairement à l'historique qui affiche tout.
   const visitList = pastList.filter((r) => !NOT_A_VISIT_STATUSES.includes(r.status));
@@ -398,6 +396,16 @@ export default function ReservationsScreen() {
 
   const rdv = nextRdvView;
 
+  // Solde à régler au salon = prix de la prestation − montant déjà payé en ligne
+  // (acompte fixe si l'API ne renvoie pas de montant). 0 → ligne masquée.
+  const nextRdvBalance = nextReservation
+    ? Math.max(0, servicePrice(nextReservation) - (nextReservation.amount_paid != null ? Number(nextReservation.amount_paid) || 0 : ACOMPTE_FIXE))
+    : 0;
+  const nextRdvBalanceLabel = t('reservations.balanceAtSalon').replace(
+    '{amount}',
+    language === 'en' ? `€${nextRdvBalance.toFixed(2)}` : `${nextRdvBalance.toFixed(2).replace('.', ',')} €`,
+  );
+
   // Historique des points : un gain par RDV non annulé (points attribués dès la
   // réservation, cf. core/loyalty.py). Les enfants d'un même groupe (même
   // prestation enfant, même jour) sont regroupés : « Coupe enfant × 3 · +30 pts ».
@@ -454,11 +462,46 @@ export default function ReservationsScreen() {
     };
   });
 
-  const FAVORIS = FAVORIS_META.map(f => ({
-    ...f,
-    nom: t(f.nomKey),
-    date: `${f.day} ${t(`reservations.monthAbbr.${f.moisIdx}` as TranslationKey)}`,
-  }));
+  // Prestations les plus réservées parmi les visites honorées (à égalité de
+  // count, la plus récente gagne). Les enfants d'un même groupe (même
+  // prestation, même jour) comptent pour une seule visite.
+  const FAVORIS = (() => {
+    const byService = new Map<string, { visits: Set<string>; last: ApiReservation; barbers: Map<string, number> }>();
+    [...visitList]
+      .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`))
+      .forEach((r) => {
+        const fav = byService.get(r.service_name) ?? { visits: new Set<string>(), last: r, barbers: new Map<string, number>() };
+        const visitKey = r.service_category === 'enfant' ? `kids:${r.date}` : `rdv:${r.id}`;
+        if (!fav.visits.has(visitKey)) {
+          fav.visits.add(visitKey);
+          const barber = r.barber || 'Willo';
+          fav.barbers.set(barber, (fav.barbers.get(barber) ?? 0) + 1);
+        }
+        byService.set(r.service_name, fav);
+      });
+    return [...byService.entries()]
+      .map(([nom, { visits, last, barbers }]) => {
+        const d = parseApiDate(last.date);
+        // Barbier le plus associé à la prestation (Map remplie du plus récent au
+        // plus ancien → à égalité, le barbier le plus récent gagne).
+        const barbier = [...barbers.entries()].reduce((best, cur) => (cur[1] > best[1] ? cur : best))[0];
+        return {
+          nom,
+          count: visits.size,
+          lastKey: `${last.date}T${last.time}`,
+          date: `${d.getDate()} ${t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey)}`,
+          dur: SERVICES.find((s) => s.name === nom)?.dur ?? '',
+          prix: fmtPrice(servicePrice(last)),
+          barbier,
+        };
+      })
+      .sort((a, b) => b.count - a.count || b.lastKey.localeCompare(a.lastKey))
+      .slice(0, 2);
+  })();
+  // Section masquée tant que l'historique ne compte pas 2 prestations distinctes.
+  const showFavoris = FAVORIS.length >= 2;
+  // "Reprenez là où vous en étiez" = prestation favorite + son barbier habituel.
+  const resumeFav = FAVORIS[0] ?? null;
 
   // Ouverture directe d'un RDV (toast / notification « Votre barbier vous a
   // répondu ») : /reservations?reservationId=X → panneau de détail (tablette)
@@ -746,8 +789,8 @@ export default function ReservationsScreen() {
     pathname: '/(tabs)/book',
     params: {
       fastbook: 'true',
-      prestation: 'Signature WilloBarber',
-      barbier: 'Willo',
+      prestation: resumeFav?.nom ?? '',
+      barbier: resumeFav?.barbier ?? '',
     },
   });
 
@@ -755,7 +798,7 @@ export default function ReservationsScreen() {
     pathname: '/(tabs)/book',
     params: {
       fastbook: 'true',
-      prestation: 'Signature WilloBarber',
+      prestation: resumeFav?.nom ?? '',
     },
   });
 
@@ -897,9 +940,11 @@ export default function ReservationsScreen() {
                       </View>
                     </View>
 
-                    <View style={styles.soldePill}>
-                      <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
-                    </View>
+                    {nextRdvBalance > 0 && (
+                      <View testID="next-rdv-balance" style={styles.soldePill}>
+                        <Text style={styles.soldeText}>{nextRdvBalanceLabel}</Text>
+                      </View>
+                    )}
 
                     <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
                       <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
@@ -939,21 +984,26 @@ export default function ReservationsScreen() {
               )}
 
               {/* Resume card — masqué pour un nouveau client sans historique */}
-              {hasHistory && !loadFailed && (
+              {resumeFav && !loadFailed && (
                 <>
                   <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
 
                   <View style={styles.resumeCard}>
                     <View style={styles.resumeBadge}>
-                      <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge')}</Text>
+                      <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge').replace('{n}', String(resumeFav.count))}</Text>
                     </View>
                     <View style={styles.resumeRow}>
                       <View style={styles.scissorsBox}>
                         <Text style={{ fontSize: 22 }}>✂️</Text>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.resumeServiceName}>{t('reservations.hist.signature')}</Text>
-                        <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
+                        <Text style={styles.resumeServiceName}>{resumeFav.nom}</Text>
+                        <Text style={styles.resumeServiceMeta}>
+                  {t('reservations.resumeServiceMeta')
+                    .replace('{dur}', resumeFav.dur)
+                    .replace('{barber}', resumeFav.barbier)
+                    .replace('{price}', resumeFav.prix)}
+                </Text>
                       </View>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 16 }}>
@@ -972,25 +1022,25 @@ export default function ReservationsScreen() {
                 </>
               )}
 
-              {/* Vos favoris */}
+              {/* Vos favoris — masqué tant que l'historique n'a pas 2 prestations distinctes */}
+              {showFavoris && (
+              <>
               <Text style={styles.sectionTitle}>{t('reservations.favoritesTitle')}</Text>
 
-              {!hasHistory ? (
-                <Text style={styles.emptyHist}>{t('reservations.favoritesEmpty')}</Text>
-              ) : (
               <View style={styles.favGrid}>
-                {FAVORIS.map((fav, i) => (
-                  <View key={i} style={[styles.favCard, styles.favCardTablet]}>
+                {FAVORIS.map((fav) => (
+                  <View key={fav.nom} style={[styles.favCard, styles.favCardTablet]}>
                     <Text style={styles.favStar}>★</Text>
                     <Text style={styles.favName}>{fav.nom}</Text>
                     <Text style={styles.favMeta}>
-                      {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
+                      {fav.dur ? `${fav.dur} · ` : ''}<Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
                     </Text>
                     <View style={styles.favDivider} />
-                    <Text style={styles.favCount}>{fav.count} · {t('reservations.favLastPrefix')} {fav.date}</Text>
+                    <Text style={styles.favCount}>{fav.count}× · {t('reservations.favLastPrefix')} {fav.date}</Text>
                   </View>
                 ))}
               </View>
+              </>
               )}
             </ScrollView>
 
@@ -1297,9 +1347,11 @@ export default function ReservationsScreen() {
                 </View>
               </View>
 
-              <View style={styles.soldePill}>
-                <Text style={styles.soldeText}>{t('reservations.mockRdv.soldePrefix')} {t('reservations.mockRdv.soldeSuffix')}</Text>
-              </View>
+              {nextRdvBalance > 0 && (
+                <View testID="next-rdv-balance" style={styles.soldePill}>
+                  <Text style={styles.soldeText}>{nextRdvBalanceLabel}</Text>
+                </View>
+              )}
 
               <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
                 <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
@@ -1339,21 +1391,26 @@ export default function ReservationsScreen() {
         )}
 
         {/* ── 4. REPRENEZ LÀ OÙ VOUS EN ÉTIEZ ── masqué pour un nouveau client sans historique */}
-        {hasHistory && !loadFailed && (
+        {resumeFav && !loadFailed && (
           <>
             <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
 
             <View style={styles.resumeCard}>
               <View style={styles.resumeBadge}>
-                <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge')}</Text>
+                <Text style={styles.resumeBadgeText}>{t('reservations.resumeBadge').replace('{n}', String(resumeFav.count))}</Text>
               </View>
               <View style={styles.resumeRow}>
                 <View style={styles.scissorsBox}>
                   <Text style={{ fontSize: 22 }}>✂️</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.resumeServiceName}>{t('reservations.hist.signature')}</Text>
-                  <Text style={styles.resumeServiceMeta}>{t('reservations.resumeServiceMeta')}</Text>
+                  <Text style={styles.resumeServiceName}>{resumeFav.nom}</Text>
+                  <Text style={styles.resumeServiceMeta}>
+                  {t('reservations.resumeServiceMeta')
+                    .replace('{dur}', resumeFav.dur)
+                    .replace('{barber}', resumeFav.barbier)
+                    .replace('{price}', resumeFav.prix)}
+                </Text>
                 </View>
               </View>
               <View style={{ flexDirection: 'row', gap: 16 }}>
@@ -1372,22 +1429,22 @@ export default function ReservationsScreen() {
           </>
         )}
 
-        {/* ── 5. VOS FAVORIS ────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>{t('reservations.favoritesTitle')}</Text>
+        {/* ── 5. VOS FAVORIS ── masqué tant que l'historique n'a pas 2 prestations distinctes */}
+        {showFavoris && (
+          <Text style={styles.sectionTitle}>{t('reservations.favoritesTitle')}</Text>
+        )}
 
-        {!hasHistory ? (
-          <Text style={styles.emptyHist}>{t('reservations.favoritesEmpty')}</Text>
-        ) : isTablet ? (
+        {!showFavoris ? null : isTablet ? (
           <View style={styles.favGrid}>
-            {FAVORIS.map((fav, i) => (
-              <View key={i} style={[styles.favCard, styles.favCardTablet]}>
+            {FAVORIS.map((fav) => (
+              <View key={fav.nom} style={[styles.favCard, styles.favCardTablet]}>
                 <Text style={styles.favStar}>★</Text>
                 <Text style={styles.favName}>{fav.nom}</Text>
                 <Text style={styles.favMeta}>
-                  {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
+                  {fav.dur ? `${fav.dur} · ` : ''}<Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
                 </Text>
                 <View style={styles.favDivider} />
-                <Text style={styles.favCount}>{fav.count} · {t('reservations.favLastPrefix')} {fav.date}</Text>
+                <Text style={styles.favCount}>{fav.count}× · {t('reservations.favLastPrefix')} {fav.date}</Text>
               </View>
             ))}
           </View>
@@ -1397,15 +1454,15 @@ export default function ReservationsScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 12, paddingRight: 4, marginBottom: 24 }}
           >
-            {FAVORIS.map((fav, i) => (
-              <View key={i} style={styles.favCard}>
+            {FAVORIS.map((fav) => (
+              <View key={fav.nom} style={styles.favCard}>
                 <Text style={styles.favStar}>★</Text>
                 <Text style={styles.favName}>{fav.nom}</Text>
                 <Text style={styles.favMeta}>
-                  {fav.dur} · <Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
+                  {fav.dur ? `${fav.dur} · ` : ''}<Text style={{ color: '#C9A84C' }}>{fav.prix}</Text>
                 </Text>
                 <View style={styles.favDivider} />
-                <Text style={styles.favCount}>{fav.count} · {t('reservations.favLastPrefix')} {fav.date}</Text>
+                <Text style={styles.favCount}>{fav.count}× · {t('reservations.favLastPrefix')} {fav.date}</Text>
               </View>
             ))}
           </ScrollView>
