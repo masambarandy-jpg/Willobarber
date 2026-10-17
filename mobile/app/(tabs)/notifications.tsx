@@ -14,7 +14,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { Fonts } from '@/constants';
-import { useClientNotifications } from '@/contexts/ClientNotificationsContext';
+import { reservationHref, useClientNotifications } from '@/contexts/ClientNotificationsContext';
 import { RecommendationModal } from '@/components/RecommendationModal';
 import type { ClientNotification, ClientNotificationType } from '@/types';
 import { goBackOr } from '@/services/navigation';
@@ -28,6 +28,7 @@ const ICONS: Record<ClientNotificationType, React.ComponentProps<typeof Feather>
   invoice: 'file-text',
   boutique_invoice: 'package',
   order_status: 'truck',
+  comment_reply: 'message-circle',
 };
 
 // Factures RDV et boutique : même bouton « Télécharger la facture » (lien signé).
@@ -51,6 +52,7 @@ export default function ClientNotificationsScreen() {
     if (n.unread) markRead(n.id);
     if (n.type === 'recommendation') setRecoNotif(n);
     else if (n.type === 'seasonal_reminder') router.push('/(tabs)/book');
+    else if (n.type === 'comment_reply' && n.data.reservation_id) router.push(reservationHref(n.data.reservation_id) as never);
   };
 
   const downloadInvoice = (n: ClientNotification) => {

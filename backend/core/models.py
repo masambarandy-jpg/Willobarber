@@ -268,6 +268,7 @@ class Notification(models.Model):
         ('invoice', 'Facture'),
         ('boutique_invoice', 'Facture boutique'),
         ('order_status', 'Suivi de commande'),
+        ('comment_reply', 'Réponse du barbier'),
         # Notification coiffeur (user NULL) : commande boutique payée.
         ('boutique_order', 'Commande boutique'),
     ]
@@ -297,9 +298,11 @@ class Notification(models.Model):
 class Review(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reviews')
     reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='review')
-    rating = models.IntegerField()
+    # Note facultative : le client peut laisser un simple mot sans étoiles.
+    rating = models.IntegerField(null=True, blank=True)
     comment = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     reply = models.TextField(blank=True, null=True)
     replied_at = models.DateTimeField(null=True, blank=True)
 

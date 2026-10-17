@@ -79,15 +79,35 @@ def notify_on_reservation_change(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Review)
 def notify_on_new_review(sender, instance, created, **kwargs):
+    """Nouveau commentaire client → notification coiffeur + SSE new_comment
+    (toast « Nouveau message de … »). Les modifications ne renotifient pas."""
     if not created:
         return
 
+    reservation = instance.reservation
     client_name = f"{instance.user.first_name} {instance.user.last_name}".strip() or instance.user.username
-    service_name = instance.reservation.service.name
+    service_name = reservation.service.name
     rating = instance.rating
-
-    Notification.objects.create(
+    data = {
+        'review_id': instance.id,
+        'reservation_id': reservation.id,
+        'client_name': client_name,
+        'service_name': service_name,
+        'date': reservation.date.isoformat(),
+        'time': reservation.time.strftime('%H:%M'),
+        'rating': rating,
+        'comment': instance.comment or '',
+    }
+    notification = Notification.objects.create(
         type='avis',
-        title=f"Nouvel avis {'⭐' * rating}",
-        desc=f"{client_name} · {service_name} · {rating}★",
+        title=f"Nouveau message de {client_name}",
+        desc=f"{client_name} · {service_name}" + (f" · {rating}★" if rating else ''),
+        data=data,
     )
+    payload = {**data, 'notification': NotificationSerializer(notification).data}
+
+    def publish():
+        sse.publish('new_comment', payload)
+        print(f"[SSE] new_comment → coiffeurs: review {instance.id} de {client_name}")
+
+    transaction.on_commit(publish)

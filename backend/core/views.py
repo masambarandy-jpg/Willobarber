@@ -46,6 +46,8 @@ from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from boutique.pricing import OrderPricingError, price_order, to_cents
+from .comments import CommentError, check_commentable, clean_rating, clean_text, save_reply
+from .loyalty import reservation_points
 from .models import (
     BARBER_CHOICES, DEFAULT_BARBER,
     Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitingList,
@@ -556,7 +558,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
         # Retirer les points gagnés à la création pour éviter le farming
         # (annulation par le client ou par le salon, une seule fois).
         if previous_status in ('pending', 'confirmed') and reservation.status in ('cancelled', 'cancelled_client'):
-            points_to_refund = int(round(reservation.service.price * 2))
+            points_to_refund = reservation_points(reservation)
             client = reservation.user
             client.loyalty_points = max(0, (client.loyalty_points or 0) - points_to_refund)
             client.save(update_fields=['loyalty_points'])
@@ -631,8 +633,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
                 daemon=True,
             ).start())
 
-        # Attribution automatique des points fidélité : 2 pts par euro du service
-        points_earned = int(round(reservation.service.price * 2))
+        # Points fidélité : 2 pts/€ (adultes) ou 10 pts par coupe enfant.
+        points_earned = reservation_points(reservation)
         user = self.request.user
         user.loyalty_points = (user.loyalty_points or 0) + points_earned
         user.save(update_fields=['loyalty_points'])
@@ -1975,7 +1977,8 @@ def send_reminders(request):
 
 
 class ReviewListCreateView(APIView):
-    """GET (Willo) liste tous les avis · POST (client) soumet un avis sur son RDV terminé."""
+    """GET (Willo) liste tous les avis · POST (client) soumet un avis sur son RDV passé.
+    Conservé pour les versions de l'app antérieures à /reservations/<id>/comment/."""
 
     def get_permissions(self):
         if self.request.method == 'POST':
@@ -1983,8 +1986,7 @@ class ReviewListCreateView(APIView):
         return [IsStaffRole()]
 
     def get(self, request):
-        reviews = Review.objects.select_related('user', 'reservation__service').all()
-        return Response(ReviewSerializer(reviews, many=True).data)
+        return coiffeur_comments_response()
 
     def post(self, request):
         reservation_id = request.data.get('reservation')
@@ -1996,12 +1998,6 @@ class ReviewListCreateView(APIView):
         if reservation.user_id != request.user.id:
             return Response({'error': "Cette réservation ne vous appartient pas."}, status=status.HTTP_403_FORBIDDEN)
 
-        if reservation.status != 'completed':
-            return Response(
-                {'error': 'Seule une réservation terminée peut être notée.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         if Review.objects.filter(reservation=reservation).exists():
             return Response(
                 {'error': 'Un avis a déjà été soumis pour cette réservation.'},
@@ -2009,19 +2005,80 @@ class ReviewListCreateView(APIView):
             )
 
         try:
-            rating = int(request.data.get('rating'))
-        except (TypeError, ValueError):
-            return Response({'error': 'Note invalide.'}, status=status.HTTP_400_BAD_REQUEST)
-        if rating < 1 or rating > 5:
-            return Response({'error': 'La note doit être comprise entre 1 et 5.'}, status=status.HTTP_400_BAD_REQUEST)
+            check_commentable(reservation)
+            rating = clean_rating(request.data.get('rating'), required=True)
+            comment = clean_text(request.data.get('comment'), required=False)
+        except CommentError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        review = Review.objects.create(
-            user=request.user,
-            reservation=reservation,
-            rating=rating,
-            comment=request.data.get('comment') or '',
-        )
+        review = Review.objects.create(user=request.user, reservation=reservation, rating=rating, comment=comment)
         return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+
+
+def coiffeur_comments_response():
+    reviews = Review.objects.select_related('user', 'reservation__service').order_by('-created_at')
+    return Response(ReviewSerializer(reviews, many=True).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def coiffeur_comments(request):
+    """GET /api/coiffeur/comments/ — commentaires reçus, du plus récent au plus ancien."""
+    return coiffeur_comments_response()
+
+
+class ReservationCommentView(APIView):
+    """Commentaire du client sur l'un de ses RDV passés :
+    POST crée · PATCH édite (texte et/ou note) · DELETE supprime (réponse comprise)."""
+    permission_classes = [IsAuthenticated]
+
+    def _reservation(self, request, pk):
+        return Reservation.objects.select_related('service').filter(pk=pk, user=request.user).first()
+
+    def post(self, request, pk):
+        reservation = self._reservation(request, pk)
+        if reservation is None:
+            return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        if Review.objects.filter(reservation=reservation).exists():
+            return Response({'error': 'Vous avez déjà commenté ce rendez-vous.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            check_commentable(reservation)
+            text = clean_text(request.data.get('text'))
+            rating = clean_rating(request.data.get('rating'))
+        except CommentError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        review = Review.objects.create(user=request.user, reservation=reservation, comment=text, rating=rating)
+        return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+
+    def patch(self, request, pk):
+        review = Review.objects.filter(reservation_id=pk, user=request.user).first()
+        if review is None:
+            return Response({'error': 'Commentaire introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            if 'text' in request.data:
+                review.comment = clean_text(request.data.get('text'))
+            if 'rating' in request.data:
+                review.rating = clean_rating(request.data.get('rating'))
+        except CommentError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        review.save()
+        return Response(ReviewSerializer(review).data)
+
+    def delete(self, request, pk):
+        deleted, _ = Review.objects.filter(reservation_id=pk, user=request.user).delete()
+        if not deleted:
+            return Response({'error': 'Commentaire introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+@permission_classes([IsStaffRole])
+def reply_to_reservation_comment(request, pk):
+    """POST /api/reservations/<id>/comment/reply/ — réponse du barbier."""
+    review = Review.objects.select_related('reservation__service').filter(reservation_id=pk).first()
+    if review is None:
+        return Response({'error': 'Commentaire introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+    return _reply(review, request)
 
 
 @api_view(['GET'])
@@ -2034,20 +2091,19 @@ def my_reviews(request):
 @api_view(['POST'])
 @permission_classes([IsStaffRole])
 def reply_to_review(request, pk):
-    try:
-        review = Review.objects.get(pk=pk)
-    except Review.DoesNotExist:
+    review = Review.objects.select_related('reservation__service').filter(pk=pk).first()
+    if review is None:
         return Response({'error': 'Avis introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+    return _reply(review, request)
 
-    reply_text = (request.data.get('reply') or '').strip()
-    if not reply_text:
-        return Response({'error': 'La réponse ne peut pas être vide.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    review.reply = reply_text
-    review.replied_at = timezone.now()
-    review.save(update_fields=['reply', 'replied_at'])
-
-    return Response(ReviewSerializer(review).data)
+def _reply(review, request):
+    # 'reply' : ancien écran coiffeur ; 'text' : nouvel endpoint.
+    try:
+        text = clean_text(request.data.get('text', request.data.get('reply')))
+    except CommentError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(save_reply(review, text))
 
 
 def landing_page(request):

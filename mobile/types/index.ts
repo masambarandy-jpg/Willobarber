@@ -135,6 +135,10 @@ export interface Reservation {
   qr_code?: string;
   checked_in?: boolean;
   checked_in_at?: string | null;
+  // Points fidélité gagnés avec ce RDV (10 par coupe enfant, sinon 2 pts/€).
+  loyalty_points?: number;
+  service_category?: string;
+  child_count?: number;
 }
 
 export type BarberName = 'Willo' | 'Malik' | 'Idris';
@@ -152,16 +156,18 @@ export interface CreateReservationPayload {
 
 // ─── Review ──────────────────────────────────────────────────────────────────
 
+// Commentaire client sur un RDV passé (note facultative) + réponse du barbier.
 export interface Review {
   id: number;
-  user: number;
   client_name: string;
   reservation: number;
   service_name: string;
   reservation_date: string;
-  rating: 1 | 2 | 3 | 4 | 5;
+  barber_name: BarberName;
+  rating: 1 | 2 | 3 | 4 | 5 | null;
   comment: string;
   created_at: string;
+  updated_at: string;
   reply?: string | null;
   replied_at?: string | null;
 }
@@ -252,6 +258,10 @@ export interface ReservationNotificationData {
   time?: string; // HH:MM
   price?: number;
   status?: string;
+  // Notification 'avis' / événement new_comment (core/signals.py).
+  review_id?: number;
+  rating?: number | null;
+  comment?: string;
 }
 
 // Événements poussés par GET /api/sse/coiffeur/<id>/ (backend/core/sse.py).
@@ -260,7 +270,8 @@ export type CoiffeurSseEvent =
   | 'reservation_cancelled'
   | 'reservation_updated'
   | 'new_boutique_order'
-  | 'boutique_order_updated';
+  | 'boutique_order_updated'
+  | 'new_comment';
 
 // ─── Commandes boutique côté coiffeur (backend/boutique) ─────────────────────
 
@@ -363,7 +374,19 @@ export interface OrderStatusEvent {
   notification_id: number;
 }
 
-export type ClientNotificationType = 'recommendation' | 'seasonal_reminder' | 'invoice' | 'boutique_invoice' | 'order_status';
+// Événement SSE client new_comment_reply (core/comments.py).
+export interface CommentReplyEvent {
+  type: 'new_comment_reply';
+  reservation_id: number;
+  review_id: number;
+  barber_name: BarberName;
+  reply: string;
+  message: string;
+  notification_id: number;
+}
+
+export type ClientNotificationType =
+  'recommendation' | 'seasonal_reminder' | 'invoice' | 'boutique_invoice' | 'order_status' | 'comment_reply';
 
 export interface ClientNotification {
   id: number;

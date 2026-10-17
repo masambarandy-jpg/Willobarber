@@ -1,15 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { router } from 'expo-router';
-import { OrderStatusToast } from '@/components/OrderStatusToast';
+import { ORDER_STATUS_COLORS } from '@/components/BoutiqueOrderDetailModal';
+import { NotificationToast, type ToastData } from '@/components/NotificationToast';
 import { API_BASE_URL } from '@/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSSE } from '@/hooks/useSSE';
 import { clientNotificationsApi, TokenStorage } from '@/services/api';
-import type { ClientNotification, OrderStatusEvent } from '@/types';
+import type { ClientNotification, CommentReplyEvent, OrderStatusEvent } from '@/types';
 
-// notification : nouvelle entrée de la 🔔 ; order_status_changed : toast quand
-// le coiffeur fait avancer une commande boutique (la notif cloche arrive à part).
-const SSE_EVENTS = ['notification', 'order_status_changed'] as const;
+// notification : nouvelle entrée de la 🔔. Toasts (la notif cloche arrive à part) :
+// order_status_changed quand le coiffeur fait avancer une commande boutique,
+// new_comment_reply quand le barbier répond à un commentaire de RDV.
+const SSE_EVENTS = ['notification', 'order_status_changed', 'new_comment_reply'] as const;
 // Repli si le flux SSE ne passe pas (cf. useSSE) : les notifications client ne
 // sont pas critiques à la seconde près, un rechargement toutes les 30 s suffit.
 const FALLBACK_POLLING_MS = 30000;
@@ -20,6 +23,9 @@ type ClientNotificationsContextType = {
   loading: boolean;
   refresh: () => Promise<void>;
   markRead: (id: number) => void;
+  // Incrémenté à chaque réponse du barbier reçue en temps réel : l'historique
+  // des RDV recharge alors les commentaires du client.
+  commentReplyVersion: number;
 };
 
 const ClientNotificationsContext = createContext<ClientNotificationsContextType>({
@@ -28,16 +34,19 @@ const ClientNotificationsContext = createContext<ClientNotificationsContextType>
   loading: false,
   refresh: async () => {},
   markRead: () => {},
+  commentReplyVersion: 0,
 });
 
 export function ClientNotificationsProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const [notifications, setNotifications] = useState<ClientNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
-  const [orderToast, setOrderToast] = useState<OrderStatusEvent | null>(null);
-  const hideOrderToast = useCallback(() => setOrderToast(null), []);
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const hideToast = useCallback(() => setToast(null), []);
+  const [commentReplyVersion, setCommentReplyVersion] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -71,7 +80,27 @@ export function ClientNotificationsProvider({ children }: { children: React.Reac
     onEvent: (event, data) => {
       if (event === 'order_status_changed') {
         const payload = data as OrderStatusEvent | null;
-        if (payload?.order_id) setOrderToast(payload);
+        if (!payload?.order_id) return;
+        setToast({
+          message: payload.message,
+          subtitle: `Commande ${payload.order_number}`,
+          // Pastille : or = en préparation, bleu = en route / prête, vert = terminée.
+          color: ORDER_STATUS_COLORS[payload.status]?.text,
+          href: '/(tabs)/notifications',
+          testID: 'order-status-toast',
+        });
+        return;
+      }
+      if (event === 'new_comment_reply') {
+        const payload = data as CommentReplyEvent | null;
+        if (!payload?.reservation_id) return;
+        setCommentReplyVersion((v) => v + 1);
+        setToast({
+          message: t('comment.replyToast'),
+          subtitle: `${payload.barber_name} : « ${payload.reply} »`,
+          href: reservationHref(payload.reservation_id),
+          testID: 'comment-reply-toast',
+        });
         return;
       }
       const notif = data as ClientNotification | null;
@@ -99,18 +128,24 @@ export function ClientNotificationsProvider({ children }: { children: React.Reac
   const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
-    <ClientNotificationsContext.Provider value={{ notifications, unreadCount, loading, refresh, markRead }}>
+    <ClientNotificationsContext.Provider value={{ notifications, unreadCount, loading, refresh, markRead, commentReplyVersion }}>
       {children}
-      <OrderStatusToast
-        event={orderToast}
-        onHide={hideOrderToast}
-        onPress={() => {
-          setOrderToast(null);
-          router.push('/(tabs)/notifications');
+      <NotificationToast
+        toast={toast}
+        onHide={hideToast}
+        onPress={({ href }) => {
+          setToast(null);
+          router.push(href as never);
         }}
       />
     </ClientNotificationsContext.Provider>
   );
+}
+
+// Fiche du RDV dans l'historique (cf. reservations.tsx) ; `at` permet de
+// rouvrir le même RDV depuis une notification suivante.
+export function reservationHref(reservationId: number): string {
+  return `/(tabs)/reservations?reservationId=${reservationId}&at=${Date.now()}`;
 }
 
 export function useClientNotifications(): ClientNotificationsContextType {

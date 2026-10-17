@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import CoiffeurScreen from '@/components/coiffeur/CoiffeurScreen';
 import Avatar from '@/components/coiffeur/Avatar';
 import { StarIcon } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
-import { API_BASE_URL } from '@/constants';
+import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
+import { coiffeurCommentsApi } from '@/services/api';
 import type { Review } from '@/types';
 
 const TABS = ['Tous', '5★', '4★', '3★ et -'] as const;
@@ -21,7 +21,8 @@ function avatarLetterFor(name: string): string {
 }
 
 function formatReviewDate(iso: string): string {
-  const d = new Date(iso);
+  // reservation_date est une date seule (YYYY-MM-DD) : minuit local, pas UTC.
+  const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 }
@@ -29,6 +30,8 @@ function formatReviewDate(iso: string): string {
 export default function CoiffeurAvisScreen() {
   const isTablet = useIsTablet();
   const { reviewId } = useLocalSearchParams<{ reviewId?: string }>();
+  // Nouveau commentaire reçu en temps réel (SSE new_comment) → rechargement.
+  const { commentsVersion } = useCoiffeurNotifications();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Tous');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,43 +48,19 @@ export default function CoiffeurAvisScreen() {
 
   useEffect(() => {
     let cancelled = false;
-
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        // Le token du gérant est stocké sous 'coiffeur_token' (cf. app/coiffeur/index.tsx) —
-        // distinct du JWT client géré par l'instance axios `http` (TokenStorage).
-        const token = await AsyncStorage.getItem('coiffeur_token');
-        if (!token) {
-          console.log('[AVIS] aucun coiffeur_token en AsyncStorage');
-          if (!cancelled) setError('Impossible de charger les avis.');
-          return;
-        }
-
-        const url = `${API_BASE_URL}/reviews/`;
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await response.json();
-        console.log('[AVIS] GET', url, '→', response.status, JSON.stringify(data));
-
-        if (!response.ok) {
-          if (!cancelled) setError('Impossible de charger les avis.');
-          return;
-        }
-        if (!cancelled) setReviews(data as Review[]);
-      } catch (err) {
-        console.log('[AVIS] erreur fetch avis:', err);
+    // Loader plein écran seulement au premier chargement : un rechargement
+    // temps réel ne doit pas faire clignoter la liste.
+    if (commentsVersion === 0) setIsLoading(true);
+    setError(null);
+    coiffeurCommentsApi.list()
+      .then((data) => { if (!cancelled) setReviews(data); })
+      .catch((err) => {
+        console.log('[AVIS] erreur chargement commentaires:', err);
         if (!cancelled) setError('Impossible de charger les avis.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    load();
+      })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [commentsVersion]);
 
   const ouvrirReponse = (reviewId: number) => {
     setActiveReplyId(reviewId);
@@ -119,32 +98,14 @@ export default function CoiffeurAvisScreen() {
     setReplyError(null);
   };
 
-  const envoyerReponse = async (reviewId: number) => {
+  const envoyerReponse = async (review: Review) => {
     const text = replyText.trim();
     if (!text) return;
-    setSubmittingReplyId(reviewId);
+    setSubmittingReplyId(review.id);
     setReplyError(null);
     try {
-      const token = await AsyncStorage.getItem('coiffeur_token');
-      const res = await fetch(`${API_BASE_URL}/reviews/${reviewId}/reply/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ reply: text }),
-      });
-      const data = await res.json().catch(() => null);
-      console.log('[AVIS] POST reply status:', res.status, 'réponse serveur:', JSON.stringify(data));
-      if (!res.ok) throw new Error(data?.error || `Erreur ${res.status}`);
-      if (!data || !data.reply) throw new Error('Réponse serveur invalide (champ reply manquant).');
-
-      setReviews((prev) => prev.map((r) => {
-        if (r.id !== reviewId) return r;
-        const updated = { ...r, reply: data.reply, replied_at: data.replied_at };
-        console.log('[AVIS] avis mis à jour dans le state:', JSON.stringify(updated));
-        return updated;
-      }));
+      const updated = await coiffeurCommentsApi.reply(review.reservation, text);
+      setReviews((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setActiveReplyId(null);
       setReplyText('');
     } catch (err) {
@@ -159,13 +120,15 @@ export default function CoiffeurAvisScreen() {
     if (activeTab === 'Tous') return true;
     if (activeTab === '5★') return r.rating === 5;
     if (activeTab === '4★') return r.rating === 4;
-    if (activeTab === '3★ et -') return r.rating <= 3;
+    if (activeTab === '3★ et -') return r.rating != null && r.rating <= 3;
     return true;
   });
 
+  // La note est facultative : moyenne et répartition sur les seuls avis notés.
   const totalReviews = reviews.length;
-  const avgRating = totalReviews > 0
-    ? reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews
+  const rated = reviews.filter((r): r is Review & { rating: number } => r.rating != null);
+  const avgRating = rated.length > 0
+    ? rated.reduce((sum, r) => sum + r.rating, 0) / rated.length
     : 0;
 
   const distribution = [5, 4, 3, 2, 1].map((stars) => ({
@@ -183,7 +146,7 @@ export default function CoiffeurAvisScreen() {
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <View style={styles.summaryLeft}>
-                <Text style={styles.ratingBig}>{totalReviews > 0 ? avgRating.toFixed(1).replace('.', ',') : '—'}</Text>
+                <Text style={styles.ratingBig}>{rated.length > 0 ? avgRating.toFixed(1).replace('.', ',') : '—'}</Text>
                 <View style={styles.starsRow}>
                   {[0, 1, 2, 3, 4].map((i) => (
                     <StarIcon key={i} filled={i < Math.round(avgRating)} />
@@ -237,22 +200,27 @@ export default function CoiffeurAvisScreen() {
                   <View style={styles.reviewIdentity}>
                     <Text style={styles.reviewName}>{r.client_name}</Text>
                     <Text style={styles.reviewMeta}>
-                      {formatReviewDate(r.created_at)} · {r.service_name}
+                      RDV du {formatReviewDate(r.reservation_date)} · {r.service_name}
                     </Text>
                   </View>
                 </View>
 
-                <View style={styles.starsRow}>
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <StarIcon key={i} filled={i < r.rating} />
-                  ))}
-                </View>
+                {r.rating != null && (
+                  <View style={styles.starsRow}>
+                    {Array.from({ length: 5 }, (_, i) => (
+                      <StarIcon key={i} filled={i < (r.rating ?? 0)} />
+                    ))}
+                  </View>
+                )}
 
                 {!!r.comment && <Text style={styles.reviewText}>{r.comment}</Text>}
 
                 {r.reply ? (
-                  <View style={styles.replyBlock}>
-                    <Text style={styles.replyLabel}>Réponse de Willo :</Text>
+                  <View style={styles.replyBlock} testID={`review-reply-${r.id}`}>
+                    <View style={styles.replyHeader}>
+                      <Avatar letter={r.barber_name.charAt(0)} size={24} />
+                      <Text style={styles.replyLabel}>Réponse de {r.barber_name}</Text>
+                    </View>
                     <Text style={styles.replyText}>{r.reply}</Text>
                   </View>
                 ) : activeReplyId === r.id ? (
@@ -263,6 +231,7 @@ export default function CoiffeurAvisScreen() {
                       value={replyText}
                       onChangeText={setReplyText}
                       placeholder="Votre réponse..."
+                      testID={`input-reply-${r.id}`}
                       placeholderTextColor={CC.textSecondary}
                       multiline
                       editable={submittingReplyId !== r.id}
@@ -278,7 +247,8 @@ export default function CoiffeurAvisScreen() {
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.replySendBtn, submittingReplyId === r.id && styles.replyBtnDisabled]}
-                        onPress={() => envoyerReponse(r.id)}
+                        onPress={() => envoyerReponse(r)}
+                        testID={`btn-send-reply-${r.id}`}
                         disabled={submittingReplyId === r.id}
                       >
                         <Text style={styles.replySendBtnText}>
@@ -288,7 +258,7 @@ export default function CoiffeurAvisScreen() {
                     </View>
                   </View>
                 ) : (
-                  <TouchableOpacity style={styles.replyBtn} onPress={() => ouvrirReponse(r.id)}>
+                  <TouchableOpacity style={styles.replyBtn} onPress={() => ouvrirReponse(r.id)} testID={`btn-reply-${r.id}`}>
                     <Text style={styles.replyBtnText}>💬 Répondre</Text>
                   </TouchableOpacity>
                 )}
@@ -468,13 +438,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
   },
+  replyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
   replyLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: CC.gold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 4,
   },
   replyText: {
     fontSize: 13,

@@ -20,7 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useReservations } from '@/hooks/useReservations';
@@ -28,11 +28,12 @@ import type { Reservation, Review } from '@/types';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useClientNotifications } from '@/contexts/ClientNotificationsContext';
 import type { TranslationKey } from '@/i18n/translations';
 import { fmtPrice } from '@/components/booking/data';
 import { useClientMedia } from '@/hooks/useClientMedia';
 import ClientMediaGrid from '@/components/media/ClientMediaGrid';
-import ReviewCard from '@/components/client/ReviewCard';
+import ReservationComment from '@/components/client/ReservationComment';
 import { reviewsApi, loyaltyApi } from '@/services/api';
 
 // Réutilisé par le ScrollView de l'onglet "Mes coupes" (tablette/web) pour rendre son
@@ -100,6 +101,9 @@ const TIERS_META = [
   { labelKey: 'reservations.loyalty.tier.argent' as TranslationKey, min: 200, threshold: '200', color: '#6B6560' },
   { labelKey: 'reservations.loyalty.tier.or' as TranslationKey,     min: 500, threshold: '500', color: '#C9A84C' },
 ];
+
+// Mêmes couleurs que les données de démonstration ci-dessous.
+const BARBER_HIST_COLORS: Record<string, string> = { Willo: '#C9A84C', Malik: '#7A3B1E', Idris: '#1A6B4A' };
 
 const HISTORIQUE_META = [
   { jour: '12', moisIdx: 3,  serviceKey: 'reservations.hist.signature' as TranslationKey, barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '45€', annee: '2026' },
@@ -191,11 +195,12 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
 
 interface ReviewModalProps {
   target: { id: number; service: string } | null;
+  review: Review | null;
   onClose: () => void;
-  onSubmitted: (review: Review) => void;
+  onChange: (reservationId: number, review: Review | null) => void;
 }
 
-function ReviewModal({ target, onClose, onSubmitted }: ReviewModalProps) {
+function ReviewModal({ target, review, onClose, onChange }: ReviewModalProps) {
   const isTablet = useIsTablet();
   const { t } = useLanguage();
   return (
@@ -206,12 +211,7 @@ function ReviewModal({ target, onClose, onSubmitted }: ReviewModalProps) {
             <View pointerEvents="box-none" style={{ flexShrink: 1 }}>
               <ScrollView keyboardShouldPersistTaps="always" showsVerticalScrollIndicator={false}>
                 {target && (
-                  <ReviewCard
-                    reservationId={target.id}
-                    serviceName={target.service}
-                    existingReview={null}
-                    onSubmitted={(review) => { onSubmitted(review); onClose(); }}
-                  />
+                  <ReservationComment reservationId={target.id} review={review} onChange={onChange} />
                 )}
               </ScrollView>
             </View>
@@ -348,23 +348,29 @@ export default function ReservationsScreen() {
     : Math.round((todayMidnight.getTime() - parseApiDate(lastVisitDate).getTime()) / (1000 * 60 * 60 * 24));
   const lastVisitLabel = formatLastVisit(lastVisitDays, t);
 
+  // Commentaires du client, rechargés quand le barbier répond (SSE new_comment_reply).
+  const { commentReplyVersion } = useClientNotifications();
   const [myReviews, setMyReviews] = useState<Review[]>([]);
   useEffect(() => {
     if (!isAuthenticated) return;
     reviewsApi.mine().then(setMyReviews).catch(() => {});
-  }, [isAuthenticated]);
+  }, [isAuthenticated, commentReplyVersion]);
 
   const reviewForReservation = (reservationId: number) =>
     myReviews.find((rv) => rv.reservation === reservationId) ?? null;
 
-  const handleReviewSubmitted = (review: Review) => {
-    setMyReviews((prev) => [...prev, review]);
+  const handleCommentChange = (reservationId: number, review: Review | null) => {
+    setMyReviews((prev) => [...prev.filter((rv) => rv.reservation !== reservationId), ...(review ? [review] : [])]);
   };
 
-  // Dernier RDV passé et terminé — sert à proposer "Laisser un avis" directement
+  // Seul un RDV passé et honoré se commente (même règle que le backend,
+  // core/comments.py) — annulations et no-shows exclus.
+  const isCommentable = (h: { id: number | null; status: string | null }) =>
+    h.id != null && h.status != null && !NOT_A_VISIT_STATUSES.includes(h.status);
+
+  // Dernière visite honorée — sert à proposer "Laisser un avis" directement
   // sur la carte du prochain RDV, sans que le client doive scroller l'historique.
-  const lastCompletedReservation = (past as (Reservation & { time: string })[])
-    .filter((r) => r.status === 'completed')
+  const lastCompletedReservation = [...visitList]
     .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`))[0] ?? null;
   const pendingReviewTarget =
     lastCompletedReservation && lastCompletedReservation.id != null && !reviewForReservation(lastCompletedReservation.id)
@@ -408,13 +414,46 @@ export default function ReservationsScreen() {
     daysLabel: `${t('reservations.nextRdvIn')} 4 ${t('reservations.nextRdvDaysWord')}`,
   };
 
-  const TRANSACTIONS = TRANSACTIONS_META.map(tx => ({
-    ...tx,
-    date: tx.dateKey
-      ? t(tx.dateKey)
-      : `${tx.day} ${t(`reservations.monthAbbr.${tx.moisIdx}` as TranslationKey)} ${tx.annee}`,
-    reason: t(tx.reasonKey),
-  }));
+  // Historique des points : un gain par RDV non annulé (points attribués dès la
+  // réservation, cf. core/loyalty.py). Les enfants d'un même groupe (même
+  // prestation enfant, même jour) sont regroupés : « Coupe enfant × 3 · +30 pts ».
+  // Données fictives seulement si l'API est injoignable, comme l'historique.
+  const TRANSACTIONS: { id: string | number; date: string; reason: string; points: number; type: string }[] = error
+    ? TRANSACTIONS_META.map(tx => ({
+        ...tx,
+        date: tx.dateKey
+          ? t(tx.dateKey)
+          : `${tx.day} ${t(`reservations.monthAbbr.${tx.moisIdx}` as TranslationKey)} ${tx.annee}`,
+        reason: t(tx.reasonKey),
+      }))
+    : (() => {
+        const groups = new Map<string, { r: Reservation & { time: string }; count: number; points: number }>();
+        [...allReservations]
+          .filter((r) => !NOT_A_VISIT_STATUSES.includes(r.status))
+          .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`))
+          .forEach((r) => {
+            const key = r.service_category === 'enfant' ? `kids:${r.date}:${r.service_name}` : `rdv:${r.id}`;
+            const group = groups.get(key);
+            if (group) {
+              group.count += 1;
+              group.points += r.loyalty_points ?? 0;
+            } else {
+              groups.set(key, { r, count: 1, points: r.loyalty_points ?? 0 });
+            }
+          });
+        return [...groups.entries()].map(([key, { r, count, points }]) => {
+          const d = parseApiDate(r.date);
+          const date = `${d.getDate()} ${t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey)} ${d.getFullYear()}`;
+          const isKids = r.service_category === 'enfant';
+          return {
+            id: key,
+            date: isKids ? `${date} · ${t('reservations.tx.perChild')}` : date,
+            reason: count > 1 ? `${r.service_name} × ${count}` : r.service_name,
+            points,
+            type: 'earn',
+          };
+        });
+      })();
 
   const TIERS = TIERS_META.map(tier => ({
     ...tier,
@@ -436,9 +475,11 @@ export default function ReservationsScreen() {
           jour: String(d.getDate()).padStart(2, '0'),
           mois: t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey),
           service: r.service_name,
-          barbier: 'W',
-          barbierNom: 'Willo',
-          couleur: '#C9A84C',
+          // Barbier réel du RDV (agenda par barbier) — c'est aussi lui qui
+          // signe la réponse au commentaire du client.
+          barbier: (r.barber || 'Willo').charAt(0),
+          barbierNom: r.barber || 'Willo',
+          couleur: BARBER_HIST_COLORS[r.barber] ?? '#C9A84C',
           prix: fmtPrice(PRICE_BY_SERVICE_NAME[r.service_name] ?? 0),
           annee: r.date.slice(0, 4),
           id: r.id as number | null,
@@ -453,6 +494,24 @@ export default function ReservationsScreen() {
   }));
 
   const NEXT_RDV_SERVICE_LABEL = `${t('reservations.mockRdv.servicePrefix')} ${t('reservations.mockRdv.serviceGold')}`;
+
+  // Ouverture directe d'un RDV (toast / notification « Votre barbier vous a
+  // répondu ») : /reservations?reservationId=X → panneau de détail (tablette)
+  // ou modale du commentaire (téléphone).
+  // `at` (horodatage) distingue deux ouvertures successives du même RDV.
+  const { reservationId: linkedReservationId, at: linkedAt } = useLocalSearchParams<{ reservationId?: string; at?: string }>();
+  const openedLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    const linkKey = `${linkedReservationId}:${linkedAt}`;
+    if (!linkedReservationId || openedLinkRef.current === linkKey) return;
+    const index = HISTORIQUE.findIndex((h) => String(h.id) === linkedReservationId);
+    if (index === -1) return;
+    openedLinkRef.current = linkKey;
+    setHistFilter('Tous');
+    setShowAllHistory(true);
+    if (isTablet) setSelectedHistIndex(index);
+    else setReviewModalTarget({ id: HISTORIQUE[index].id as number, service: HISTORIQUE[index].service });
+  }, [linkedReservationId, linkedAt, HISTORIQUE, isTablet]);
 
   useEffect(() => {
     Animated.timing(barAnim, {
@@ -985,6 +1044,7 @@ export default function ReservationsScreen() {
                       return (
                         <Pressable
                           key={i}
+                          testID={`hist-row-${i}`}
                           onPress={() => setSelectedHistIndex(i)}
                           style={[styles.histListRow, isSelected && styles.histListRowActive]}
                         >
@@ -1051,13 +1111,13 @@ export default function ReservationsScreen() {
                             <Text style={styles.btnOutlineText}>{t('reservations.receipt')}</Text>
                           </TouchableOpacity>
                         </View>
-                        {h.status === 'completed' && h.id != null && (
+                        {isCommentable(h) && (
                           <View style={{ marginTop: 18 }}>
-                            <ReviewCard
-                              reservationId={h.id}
-                              serviceName={h.service}
-                              existingReview={reviewForReservation(h.id)}
-                              onSubmitted={handleReviewSubmitted}
+                            <ReservationComment
+                              key={h.id}
+                              reservationId={h.id as number}
+                              review={reviewForReservation(h.id as number)}
+                              onChange={handleCommentChange}
                             />
                           </View>
                         )}
@@ -1150,7 +1210,7 @@ export default function ReservationsScreen() {
 
               {/* Historique des points */}
               <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
-              {!hasHistory ? (
+              {TRANSACTIONS.length === 0 ? (
                 <Text style={styles.emptyHist}>{t('reservations.transactionsEmpty')}</Text>
               ) : TRANSACTIONS.map(tx => {
                 const isSpend = tx.type === 'spend';
@@ -1426,14 +1486,16 @@ export default function ReservationsScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-              {h.status === 'completed' && h.id != null && !reviewForReservation(h.id) && (
+              {isCommentable(h) && (
                 <TouchableOpacity
                   testID={`btn-leave-review-${i}`}
                   style={styles.leaveReviewBtn}
                   onPress={() => setReviewModalTarget({ id: h.id as number, service: h.service })}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.leaveReviewBtnText}>{t('reservations.leaveReviewBtn')}</Text>
+                  <Text style={styles.leaveReviewBtnText}>
+                    {t(reviewForReservation(h.id as number) ? 'comment.viewBtn' : 'comment.openBtn')}
+                  </Text>
                 </TouchableOpacity>
               )}
             </React.Fragment>
@@ -1534,7 +1596,7 @@ export default function ReservationsScreen() {
 
         {/* ── 8. HISTORIQUE DES POINTS ──────────────────────────────── */}
         <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
-        {!hasHistory ? (
+        {TRANSACTIONS.length === 0 ? (
           <Text style={styles.emptyHist}>{t('reservations.transactionsEmpty')}</Text>
         ) : TRANSACTIONS.map(tx => {
           const isSpend = tx.type === 'spend';
@@ -1577,8 +1639,9 @@ export default function ReservationsScreen() {
 
       <ReviewModal
         target={reviewModalTarget}
+        review={reviewModalTarget ? reviewForReservation(reviewModalTarget.id) : null}
         onClose={() => setReviewModalTarget(null)}
-        onSubmitted={handleReviewSubmitted}
+        onChange={handleCommentChange}
       />
 
     </View>

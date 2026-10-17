@@ -1,34 +1,43 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ORDER_STATUS_COLORS } from '@/components/BoutiqueOrderDetailModal';
-import type { OrderStatusEvent } from '@/types';
 
 const VISIBLE_MS = 4500;
+const GOLD = '#C9A84C';
 
-type Props = {
-  event: OrderStatusEvent | null;
-  onHide: () => void;
-  onPress: () => void;
+export type ToastData = {
+  message: string;
+  subtitle?: string;
+  // Pastille de couleur (ex. statut de commande) — or par défaut.
+  color?: string;
+  // Route ouverte au toucher du toast.
+  href: string;
+  testID?: string;
 };
 
-// Toast en haut d'écran, affiché par ClientNotificationsProvider à la
-// réception d'un événement SSE order_status_changed.
-export function OrderStatusToast({ event, onHide, onPress }: Props) {
+type Props = {
+  toast: ToastData | null;
+  onHide: () => void;
+  onPress: (toast: ToastData) => void;
+};
+
+// Toast en haut d'écran pour les événements SSE temps réel (statut de
+// commande, réponse du barbier côté client ; nouveau message côté coiffeur).
+export function NotificationToast({ toast, onHide, onPress }: Props) {
   const insets = useSafeAreaInsets();
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!event) return;
+    if (!toast) return;
     anim.setValue(0);
     Animated.timing(anim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
     const timer = setTimeout(() => {
       Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(onHide);
     }, VISIBLE_MS);
     return () => clearTimeout(timer);
-  }, [event, anim, onHide]);
+  }, [toast, anim, onHide]);
 
-  if (!event) return null;
+  if (!toast) return null;
 
   return (
     <Animated.View
@@ -39,12 +48,16 @@ export function OrderStatusToast({ event, onHide, onPress }: Props) {
         { opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] },
       ]}
     >
-      <TouchableOpacity style={styles.toast} onPress={onPress} activeOpacity={0.9} testID="order-status-toast">
-        {/* Pastille : or = en préparation, bleu = en route / prête, vert = terminée (couleurs de l'espace coiffeur). */}
-        <View style={[styles.dot, { backgroundColor: ORDER_STATUS_COLORS[event.status]?.text }]} />
+      <TouchableOpacity
+        style={styles.toast}
+        onPress={() => onPress(toast)}
+        activeOpacity={0.9}
+        testID={toast.testID ?? 'notification-toast'}
+      >
+        <View style={[styles.dot, { backgroundColor: toast.color ?? GOLD }]} />
         <View style={styles.body}>
-          <Text style={styles.message}>{event.message}</Text>
-          <Text style={styles.numero}>Commande {event.order_number}</Text>
+          <Text style={styles.message}>{toast.message}</Text>
+          {!!toast.subtitle && <Text style={styles.subtitle} numberOfLines={2}>{toast.subtitle}</Text>}
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -73,5 +86,5 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5 },
   body: { flex: 1 },
   message: { color: '#fff', fontSize: 14.5, fontWeight: '600' },
-  numero: { color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 3 },
+  subtitle: { color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 3 },
 });

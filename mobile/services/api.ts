@@ -340,8 +340,15 @@ export const reviewsApi = {
 
   mine: () => http.get<Review[]>('/reviews/client/').then((r) => r.data),
 
-  create: (payload: { reservation: number; rating: number; comment?: string }) =>
-    http.post<Review>('/reviews/', payload).then((r) => r.data),
+};
+
+// Commentaire du client sur l'un de ses RDV passés (un seul par RDV).
+export const commentsApi = {
+  create: (reservationId: number, payload: { text: string; rating?: number | null }) =>
+    http.post<Review>(`/reservations/${reservationId}/comment/`, payload).then((r) => r.data),
+  update: (reservationId: number, payload: { text?: string; rating?: number | null }) =>
+    http.patch<Review>(`/reservations/${reservationId}/comment/`, payload).then((r) => r.data),
+  remove: (reservationId: number) => http.delete(`/reservations/${reservationId}/comment/`),
 };
 
 // ─── Loyalty API ───────────────────────────────────────────────────────────────
@@ -524,6 +531,17 @@ export const coiffeurBoutiqueApi = {
     coiffeurFetch<StaffBoutiqueOrder>(`/boutique/gestion/commandes/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    }),
+};
+
+// Commentaires clients sur leurs RDV passés (écran Avis clients).
+export const coiffeurCommentsApi = {
+  list: () => coiffeurFetch<Review[]>('/coiffeur/comments/'),
+
+  reply: (reservationId: number, text: string) =>
+    coiffeurFetch<Review>(`/reservations/${reservationId}/comment/reply/`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
     }),
 };
 
