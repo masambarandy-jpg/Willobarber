@@ -1,8 +1,6 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import {
-  Alert,
   Dimensions,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +10,7 @@ import {
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { NotificationToast, type ToastData } from '@/components/NotificationToast';
-import { closedPeriodsApi, openingHoursApi, slotsApi, waitingListApi, waitlistApi, waitlistErrorCode } from '@/services/api';
+import { closedPeriodsApi, openingHoursApi, slotsApi, waitlistApi, waitlistErrorCode } from '@/services/api';
 import type { BarberName, ClosedPeriod, OpeningHoursDay } from '@/types';
 import {
   DEFAULT_CLOSING_MINUTES,
@@ -230,6 +228,7 @@ function Calendar({ selectedDate, onSelect, closedPeriods, openingHours }: Calen
                 key={col}
                 style={cal.dayCell}
                 onPress={() => handleDay(day, col)}
+                testID={`cal-day-${day}`}
                 disabled={disabled}
                 activeOpacity={0.7}
               >
@@ -260,7 +259,6 @@ interface Props {
   booking: BookingState;
   onDateSelect: (d: Date) => void;
   onTimeSelect: (t: string) => void;
-  serviceId: number | null;
   titleOverride?: string;
   footerHeight?: number;
 }
@@ -271,7 +269,7 @@ export interface Step3DateHandle {
 }
 
 export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
-  { booking, onDateSelect, onTimeSelect, serviceId, titleOverride },
+  { booking, onDateSelect, onTimeSelect, titleOverride },
   ref
 ) {
   const { date: selectedDate, time: selectedTime, service } = booking;
@@ -287,8 +285,6 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
   const [closingMinutes, setClosingMinutes] = useState(DEFAULT_CLOSING_MINUTES);
   const [bookedTimes, setBookedTimes] = useState<Set<string>>(new Set());
   const [loadingSlots, setLoadingSlots] = useState(false);
-  const [joiningWaitlist, setJoiningWaitlist] = useState(false);
-  const [joinedWaitlist, setJoinedWaitlist] = useState(false);
   // Liste d'attente par créneau : créneaux pris par un RDV, et ceux que le
   // client suit déjà (alerte « 🔔 Me prévenir » active).
   const [takenTimes, setTakenTimes] = useState<Set<string>>(new Set());
@@ -310,7 +306,6 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
 
   // Créneaux de l'agenda du barbier choisi.
   const fetchSlots = useCallback((date: Date) => {
-    setJoinedWaitlist(false);
     setLoadingSlots(true);
     let cancelled = false;
     slotsApi.available(barberName, toIsoDate(date))
@@ -350,7 +345,6 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
       setBookedTimes(new Set());
       setDaySlots([]);
       setDayClosed(false);
-      setJoinedWaitlist(false);
       return;
     }
     return fetchSlots(selectedDate);
@@ -431,33 +425,6 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
       setToast({ message: t(key), color: code === 'already_subscribed' ? GOLD : '#C0392B' });
     } finally {
       setNotifyingTime(null);
-    }
-  };
-
-  const handleJoinWaitingList = async () => {
-    if (!selectedDate || !serviceId) return;
-    setJoiningWaitlist(true);
-    try {
-      await waitingListApi.create({
-        service: serviceId,
-        preferred_date: toIsoDate(selectedDate),
-      });
-      setJoinedWaitlist(true);
-      const message = t('step3.waitingListConfirm');
-      if (Platform.OS === 'web') {
-        window.alert(message);
-      } else {
-        Alert.alert(t('step3.waitingListTitle'), message);
-      }
-    } catch {
-      const message = t('step3.waitingListError');
-      if (Platform.OS === 'web') {
-        window.alert(message);
-      } else {
-        Alert.alert(t('common.error'), message);
-      }
-    } finally {
-      setJoiningWaitlist(false);
     }
   };
 
@@ -568,17 +535,16 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
         </View>
       )}
 
-      {dayFull && !joinedWaitlist && (
-        <TouchableOpacity
-          style={{ backgroundColor: '#C9A84C', padding: 16, borderRadius: 12, margin: 16, opacity: joiningWaitlist ? 0.6 : 1 }}
-          onPress={handleJoinWaitingList}
-          disabled={joiningWaitlist || !serviceId}
-          activeOpacity={0.85}
-        >
-          <Text style={{ color: 'white', textAlign: 'center', fontWeight: '600' }}>
-            📋 Rejoindre la liste d'attente
+      {/* Jour complet : on renvoie vers l'alerte 🔔 par créneau (si un créneau
+          pris peut encore être suivi, cf. canWatch). */}
+      {dayFull && (
+        <View style={styles.closedBadge} testID="day-full-info">
+          <Text style={styles.closedBadgeIcon}>🗓️</Text>
+          <Text style={styles.closedBadgeText}>
+            {t('step3.dayFull')}
+            {daySlots.some(canWatch) ? ` ${t('step3.dayFullNotifyHint')}` : ''}
           </Text>
-        </TouchableOpacity>
+        </View>
       )}
     </ScrollView>
     <NotificationToast toast={toast} onHide={hideToast} />

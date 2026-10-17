@@ -161,24 +161,9 @@ class Reservation(models.Model):
         return f"{self.user} - {self.date} {self.time}"
 
 
-class WaitingList(models.Model):
-    client = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='waiting_list')
-    service = models.ForeignKey(Service, on_delete=models.CASCADE)
-    preferred_date = models.DateField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    notified = models.BooleanField(default=False)
-
-    class Meta:
-        ordering = ['created_at']
-
-    def __str__(self):
-        return f"{self.client} - {self.service} ({self.preferred_date})"
-
-
 class WaitlistEntry(models.Model):
     """Alerte « Me prévenir » sur un créneau précis déjà pris (barbier + date +
-    heure). À ne pas confondre avec WaitingList, inscription à la journée sans
-    notification. Une alerte reste active tant que le créneau est à venir et
+    heure). Une alerte reste active tant que le créneau est à venir et
     que le client ne l'a pas réservé (cf. waitlist.py)."""
     client = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='waitlist_entries')
     barber = models.CharField(max_length=20, choices=BARBER_CHOICES)

@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from . import sse, views
 from .views import (
     BarbershopViewSet, BarberViewSet, ServiceViewSet, ReservationViewSet, ClosedPeriodViewSet,
-    WaitingListViewSet, BarberLeaveViewSet, NotificationViewSet, ClientNotificationViewSet,
+    BarberLeaveViewSet, NotificationViewSet, ClientNotificationViewSet,
 )
 
 router = DefaultRouter()
@@ -13,7 +13,6 @@ router.register(r'barbers', BarberViewSet)
 router.register(r'services', ServiceViewSet)
 router.register(r'reservations', ReservationViewSet)
 router.register(r'closed-periods', ClosedPeriodViewSet)
-router.register(r'waiting-list', WaitingListViewSet)
 router.register(r'barber-leaves', BarberLeaveViewSet)
 router.register(r'notifications', NotificationViewSet)
 router.register(r'client-notifications', ClientNotificationViewSet, basename='client-notification')

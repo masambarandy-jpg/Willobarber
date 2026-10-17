@@ -701,7 +701,6 @@ export default function BookScreen() {
           booking={booking}
           onDateSelect={selectDate}
           onTimeSelect={selectTime}
-          serviceId={serviceIdMap[booking.service?.id ?? ''] ?? null}
           titleOverride={isRescheduleMode ? t('book.rescheduleTitle') : undefined}
           footerHeight={footerHeight}
         />
