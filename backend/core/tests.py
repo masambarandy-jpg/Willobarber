@@ -8,9 +8,11 @@ import stripe
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import Barbershop, BarberLeave, ClosedPeriod, Notification, OpeningHours, Reservation, Service, User
+from .models import (
+    Barbershop, BarberLeave, ClosedPeriod, Notification, OpeningHours, Reservation, Service, User, WaitlistEntry,
+)
 from .recommendations import (
-    SALON_TZ, get_client_habits, process_user, should_send_seasonal_reminder, suggest_slots,
+    SALON_TZ, salon_now, get_client_habits, process_user, should_send_seasonal_reminder, suggest_slots,
 )
 
 # Jeudi 15 octobre 2026, 10h à Bruxelles.
@@ -773,3 +775,146 @@ class CheckinClientProfileTests(TestCase):
         self.assertEqual(profile['last_visit'], date(2026, 9, 1))
         self.assertEqual(profile['favorite_services'], ['Dégradé', 'Barbe', 'Signature'])
         self.assertEqual(profile['favorite_barber'], 'Malik')
+
+
+@override_settings(SENDGRID_API_KEY='SG.test', SENDGRID_FROM_EMAIL='contact@willobarber.be', APP_URL='https://app.willobarber.be/')
+@patch('core.emails.threading.Thread', SyncThread)
+@patch('core.sse.publish_to_client')
+@patch('core.emails.sendgrid.SendGridAPIClient')
+class WaitlistTests(TestCase):
+    SLOT = {'barber': 'Willo', 'date': '2026-11-20', 'time': '15:30'}
+
+    def setUp(self):
+        self.staff = User.objects.create_user('owner', role='admin')
+        shop = Barbershop.objects.create(name='WB', address='x', phone='x', owner=self.staff)
+        self.service = Service.objects.create(name='Signature', price=45, duration=45, barbershop=shop)
+        holder = User.objects.create_user('holder', role='client')  # sans email : pas de mail d'annulation
+        self.booked = Reservation.objects.create(
+            user=holder, service=self.service, date=date(2026, 11, 20), time=time(15, 30), barber='Willo',
+            status='confirmed',
+        )
+        self.clients = [
+            User.objects.create_user(f'client{i}', email=f'client{i}@example.com', first_name=f'C{i}', role='client')
+            for i in range(6)
+        ]
+        self.api = APIClient()
+
+    def join(self, user, **body):
+        self.api.force_authenticate(user)
+        return self.api.post('/api/waitlist/', {**self.SLOT, 'service_name': 'Signature', **body}, format='json')
+
+    def cancel(self, reservation):
+        self.api.force_authenticate(self.staff)
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.api.patch(f'/api/reservations/{reservation.id}/', {'status': 'cancelled'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+
+    def waitlist_events(self, publish_to_client):
+        return [(c.args[0], c.args[2]) for c in publish_to_client.call_args_list if c.args[1] == 'waitlist_available']
+
+    def waitlist_mails(self, sg):
+        mails = [c.args[0].get() for c in sg.return_value.send.call_args_list]
+        return [m for m in mails if 'libérer' in m['subject']]
+
+    def test_join_taken_slot_creates_entry(self, *_):
+        r = self.join(self.clients[0])
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data['barber'], r.data['time'], r.data['notified_at']), ('Willo', '15:30:00', None))
+        self.api.force_authenticate(self.clients[0])
+        self.assertEqual([e['id'] for e in self.api.get('/api/waitlist/mine/').data], [r.data['id']])
+
+    def test_join_twice_returns_400(self, *_):
+        self.join(self.clients[0])
+        r = self.join(self.clients[0])
+        self.assertEqual((r.status_code, r.data['code']), (400, 'already_subscribed'))
+
+    def test_sixth_join_returns_409(self, *_):
+        for user in self.clients[:5]:
+            self.assertEqual(self.join(user).status_code, 201)
+        r = self.join(self.clients[5])
+        self.assertEqual((r.status_code, r.data['code']), (409, 'full'))
+        self.assertEqual(WaitlistEntry.objects.count(), 5)
+
+    def test_free_or_past_slot_is_refused(self, *_):
+        self.assertEqual(self.join(self.clients[0], time='16:30').data['code'], 'slot_free')
+        self.assertEqual(self.join(self.clients[0], date='2026-01-05').data['code'], 'slot_past')
+
+    def test_cancellation_notifies_every_subscriber(self, sg, publish_to_client):
+        for user in self.clients[:3]:
+            self.join(user)
+        self.cancel(self.booked)
+
+        events = self.waitlist_events(publish_to_client)
+        self.assertEqual({user_id for user_id, _ in events}, {u.id for u in self.clients[:3]})
+        self.assertEqual(events[0][1]['time'], '15:30')
+        mails = self.waitlist_mails(sg)
+        self.assertEqual(len(mails), 3)
+        self.assertIn('/book?waitlist=true&amp;barbier=Willo&amp;date=2026-11-20&amp;heure=15%3A30', mails[0]['content'][0]['value'])
+        self.assertFalse(WaitlistEntry.objects.filter(notified_at__isnull=True).exists())
+        self.assertEqual(Notification.objects.filter(type='waitlist_available').count(), 3)
+
+        # Re-sauvegarder un RDV déjà annulé ne renotifie pas.
+        publish_to_client.reset_mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.booked.save()
+        self.assertEqual(self.waitlist_events(publish_to_client), [])
+
+    def test_first_to_book_wins_others_get_409_and_keep_their_alert(self, *_):
+        a, b, c = self.clients[:3]
+        for user in (a, b, c):
+            self.join(user)
+        self.cancel(self.booked)
+
+        statuses = []
+        for user in (a, b, c):
+            self.api.force_authenticate(user)
+            with self.captureOnCommitCallbacks(execute=True):
+                r = self.api.post('/api/reservations/', {'service': self.service.id, **self.SLOT}, format='json')
+            statuses.append(r.status_code)
+        self.assertEqual(statuses, [201, 409, 409])
+        remaining = WaitlistEntry.objects.order_by('client_id')
+        self.assertEqual([e.client_id for e in remaining], [b.id, c.id])
+        # Réarmées : elles seront prévenues à la prochaine libération.
+        self.assertTrue(all(e.notified_at is None for e in remaining))
+
+    def test_reschedule_frees_the_old_slot(self, sg, publish_to_client):
+        self.join(self.clients[0])
+        self.api.force_authenticate(self.staff)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.api.patch(f'/api/reservations/{self.booked.id}/', {'time': '16:30'}, format='json')
+        self.assertEqual([uid for uid, _ in self.waitlist_events(publish_to_client)], [self.clients[0].id])
+
+    def test_cancel_alert_removes_entry(self, *_):
+        entry_id = self.join(self.clients[0]).data['id']
+        self.api.force_authenticate(self.clients[1])
+        self.assertEqual(self.api.delete(f'/api/waitlist/{entry_id}/').status_code, 404)
+        self.api.force_authenticate(self.clients[0])
+        self.assertEqual(self.api.delete(f'/api/waitlist/{entry_id}/').status_code, 204)
+        self.assertFalse(WaitlistEntry.objects.exists())
+
+    def test_slot_less_than_two_hours_away_is_not_notified(self, sg, publish_to_client):
+        soon = (salon_now() + timedelta(hours=1)).replace(second=0, microsecond=0)
+        reservation = Reservation.objects.create(
+            user=self.staff, service=self.service, date=soon.date(), time=soon.time(), barber='Malik',
+            status='confirmed',
+        )
+        entry = WaitlistEntry.objects.create(client=self.clients[0], barber='Malik', date=soon.date(), time=soon.time())
+        self.cancel(reservation)
+        self.assertEqual(self.waitlist_events(publish_to_client), [])
+        self.assertEqual(self.waitlist_mails(sg), [])
+        entry.refresh_from_db()
+        self.assertIsNone(entry.notified_at)
+
+    def test_for_slot_is_staff_only(self, *_):
+        self.join(self.clients[0])
+        self.join(self.clients[1])
+        self.api.force_authenticate(self.clients[0])
+        self.assertEqual(self.api.get('/api/waitlist/for-slot/', self.SLOT).status_code, 403)
+
+        self.api.force_authenticate(self.staff)
+        r = self.api.get('/api/waitlist/for-slot/', self.SLOT)
+        self.assertEqual((r.status_code, r.data['count']), (200, 2))
+        self.assertEqual(r.data['entries'][0]['client_name'], 'C0')
+        self.assertEqual(self.api.get('/api/waitlist/for-slot/', {'date': '2026-11-20'}).data['count'], 2)
+        self.assertEqual(self.api.get('/api/waitlist/for-slot/', {**self.SLOT, 'time': '16:30'}).data['count'], 0)
+        self.assertEqual(self.api.get('/api/waitlist/for-slot/', {'date': 'demain'}).status_code, 400)

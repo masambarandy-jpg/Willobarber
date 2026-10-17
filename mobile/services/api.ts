@@ -553,6 +553,22 @@ export const coiffeurCheckinApi = {
     coiffeurFetch<CheckinResponse>(`/checkin/${encodeURIComponent(qrCode)}/`, { method: 'POST' }),
 };
 
+export type SlotWaitlistEntry = {
+  id: number;
+  client_name: string;
+  barber: BarberName;
+  date: string;
+  time: string; // HH:MM
+  created_at: string;
+  notified_at: string | null;
+};
+
+// Badge « N en attente » du planning : toute la journée en une requête.
+export const coiffeurWaitlistApi = {
+  forDay: (date: string) =>
+    coiffeurFetch<{ count: number; entries: SlotWaitlistEntry[] }>(`/waitlist/for-slot/?date=${date}`),
+};
+
 export const coiffeurTeamApi = {
   weekAvailability: () => coiffeurFetch<WeekAvailability>('/barbers/availability/'),
 };
@@ -588,6 +604,33 @@ export const waitingListApi = {
   create: (payload: { service: number; preferred_date: string; barber?: number; preferred_time?: string }) =>
     http.post<WaitingListEntry>('/waiting-list/', payload).then((r) => r.data),
 };
+
+// ─── Liste d'attente par créneau (« 🔔 Me prévenir ») ─────────────────────────
+// Erreurs : 400 code 'already_subscribed' | 'slot_free' | 'slot_past' | 'own_slot',
+// 409 code 'full' (5 inscrits max par créneau).
+
+export type WaitlistErrorCode = 'already_subscribed' | 'slot_free' | 'slot_past' | 'own_slot' | 'full';
+
+export interface WaitlistEntry {
+  id: number;
+  barber: BarberName;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM:SS
+  service_name: string;
+  created_at: string;
+  notified_at: string | null;
+}
+
+export const waitlistApi = {
+  create: (payload: { barber: BarberName; date: string; time: string; service_name?: string }) =>
+    http.post<WaitlistEntry>('/waitlist/', payload).then((r) => r.data),
+  mine: () => http.get<WaitlistEntry[]>('/waitlist/mine/').then((r) => r.data),
+  remove: (id: number) => http.delete(`/waitlist/${id}/`).then(() => undefined),
+};
+
+export function waitlistErrorCode(error: unknown): WaitlistErrorCode | null {
+  return (error as AxiosError<{ code?: WaitlistErrorCode }>)?.response?.data?.code ?? null;
+}
 
 // ─── Client media API (photos/vidéos avant/après) ────────────────────────────
 

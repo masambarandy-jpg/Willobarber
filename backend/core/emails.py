@@ -159,8 +159,21 @@ def render_reservation_email(reservation, kind, app_url, previous=None, late=Fal
     cta_label = 'Reprendre rendez-vous' if kind == 'cancelled' else 'Voir mon RDV'
     policy = ("Annulation ou modification gratuite jusqu'à 24h avant le rendez-vous. "
               "Passé ce délai, l'acompte est conservé.")
+    html = _render_layout(subject, kicker, title, first_name, intro, rows, note, cta_label, app_url, policy)
+    return subject, html
 
-    html = f"""<!doctype html>
+
+def _render_layout(subject, kicker, title, first_name, intro, rows, note, cta_label, cta_url, policy):
+    """Gabarit commun des emails client (en-tête, carte, CTA or, pied de page).
+    Sans cta_url (APP_URL non configurée hors requête HTTP), le bouton est omis."""
+    cta = (
+        f"""<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:26px;"><tr>
+        <td style="background:{GOLD};border-radius:100px;">
+          <a href="{escape(cta_url)}" style="display:inline-block;padding:14px 30px;font-family:{SANS};font-size:15px;font-weight:bold;color:{INK};text-decoration:none;">{cta_label} →</a>
+        </td></tr></table>"""
+        if cta_url else ''
+    )
+    return f"""<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(subject)}</title></head>
 <body style="margin:0;padding:0;background:{CREAM};">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{CREAM};">
@@ -180,10 +193,7 @@ def render_reservation_email(reservation, kind, app_url, previous=None, late=Fal
         {''.join(rows)}
       </table>
       <div style="margin-top:22px;padding:14px 16px;background:{CREAM};border-left:3px solid {GOLD};border-radius:6px;font-family:{SANS};font-size:14px;line-height:1.5;color:{INK};">{note}</div>
-      <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:26px;"><tr>
-        <td style="background:{GOLD};border-radius:100px;">
-          <a href="{escape(app_url)}" style="display:inline-block;padding:14px 30px;font-family:{SANS};font-size:15px;font-weight:bold;color:{INK};text-decoration:none;">{cta_label} →</a>
-        </td></tr></table>
+      {cta}
       <p style="margin:24px 0 0;font-family:{SANS};font-size:12px;line-height:1.5;color:{MUTED};">{policy}</p>
     </td></tr>
     <tr><td align="center" style="padding:24px 8px 0;font-family:{SANS};font-size:12px;line-height:1.6;color:{MUTED};">
@@ -193,7 +203,52 @@ def render_reservation_email(reservation, kind, app_url, previous=None, late=Fal
   </table>
 </td></tr></table>
 </body></html>"""
-    return subject, html
+
+
+def render_waitlist_email(entry, cta_url):
+    """(sujet, html) : un créneau suivi en liste d'attente vient de se libérer."""
+    user = entry.client
+    subject = "Un créneau vient de se libérer chez WilloBarber ✨"
+    rows = [_row('Barbier', escape(entry.barber)), _row('Date', format_date_fr(entry.date)),
+            _row('Heure', format_heure_fr(entry.time))]
+    if entry.service_name:
+        rows.insert(0, _row('Prestation', escape(entry.service_name)))
+    return subject, _render_layout(
+        subject,
+        kicker='LISTE D’ATTENTE',
+        title='Votre créneau s’est libéré.',
+        first_name=escape(user.first_name or user.username),
+        intro="Bonne nouvelle : le créneau que vous suiviez est de nouveau disponible.",
+        rows=rows,
+        note=("Premier arrivé, premier servi : les autres clients en liste d’attente ont "
+              "été prévenus en même temps. Réservez vite pour le garder."),
+        cta_label='Réserver ce créneau',
+        cta_url=cta_url,
+        policy="Vous recevez cet email car vous avez demandé à être prévenu pour ce créneau.",
+    )
+
+
+def send_waitlist_email(entry_id, cta_url):
+    """Cible du thread : relit l'alerte, envoie. Ne lève jamais."""
+    from .models import WaitlistEntry
+    try:
+        entry = WaitlistEntry.objects.select_related('client').get(pk=entry_id)
+        if not entry.client.email:
+            logger.warning("Email liste d'attente non envoyé : client %s sans adresse email", entry.client_id)
+            return
+        subject, html = render_waitlist_email(entry, cta_url)
+        response = send_html_email(entry.client.email, subject, html)
+        logger.info("Email liste d'attente envoyé (alerte %s) — SendGrid status=%s", entry_id, response.status_code)
+    except Exception:
+        logger.exception("Échec email liste d'attente (alerte %s)", entry_id)
+    finally:
+        connection.close()
+
+
+def queue_waitlist_email(entry, cta_url):
+    transaction.on_commit(lambda: threading.Thread(
+        target=send_waitlist_email, args=(entry.id, cta_url), daemon=True,
+    ).start())
 
 
 def send_html_email(to_email, subject, html):

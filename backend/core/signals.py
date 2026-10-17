@@ -2,7 +2,7 @@ from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
-from . import sse
+from . import sse, waitlist
 from .models import Notification, Reservation, Review
 from .serializers import NotificationSerializer
 
@@ -36,14 +36,35 @@ def stash_old_reservation_status(sender, instance, **kwargs):
     # Nécessaire pour distinguer, dans le post_save ci-dessous, une transition
     # vers 'cancelled_client' d'un simple re-save d'une réservation déjà
     # annulée (sinon on créerait une Notification à chaque save() ultérieur).
-    instance._old_status = (
-        Reservation.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
+    # L'ancien créneau sert à la liste d'attente : une reprogrammation libère
+    # l'ancien horaire au même titre qu'une annulation.
+    old = (
+        Reservation.objects.filter(pk=instance.pk).values('status', 'barber', 'date', 'time').first()
         if instance.pk else None
     )
+    instance._old_status = old['status'] if old else None
+    instance._old_slot = (old['barber'], old['date'], old['time']) if old else None
+
+
+def _sync_waitlist(instance, created):
+    active = instance.status in waitlist.ACTIVE_RESERVATION_STATUSES
+    if created:
+        if active:
+            waitlist.slot_booked(instance)
+        return
+    old_status = getattr(instance, '_old_status', None)
+    old_slot = getattr(instance, '_old_slot', None)
+    was_active = old_status in waitlist.ACTIVE_RESERVATION_STATUSES
+    if was_active and not active and instance.status in CANCELLED_STATUSES:
+        waitlist.notify_slot_freed(*old_slot)
+    elif was_active and active and old_slot != (instance.barber, instance.date, instance.time):
+        waitlist.notify_slot_freed(*old_slot)
+        waitlist.slot_booked(instance)
 
 
 @receiver(post_save, sender=Reservation)
 def notify_on_reservation_change(sender, instance, created, **kwargs):
+    _sync_waitlist(instance, created)
     payload = reservation_payload(instance)
     desc = f"{payload['client_name']} · {payload['service_name']} · {payload['time']}"
 

@@ -35,6 +35,7 @@ import { useClientMedia } from '@/hooks/useClientMedia';
 import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 import ReservationComment from '@/components/client/ReservationComment';
 import { HistoryErrorBanner } from '@/components/client/HistoryErrorBanner';
+import { WaitlistAlerts } from '@/components/client/WaitlistAlerts';
 import {
   HISTORY_PREVIEW_COUNT, HistoryToggleButton, useListAccordion, useTrackedScroll,
 } from '@/components/client/HistoryAccordion';
@@ -1259,6 +1260,9 @@ export default function ReservationsScreen() {
                   {pointsToggle}
                 </>
               )}
+
+              {/* Mes alertes (liste d'attente par créneau) */}
+              <WaitlistAlerts titleStyle={[styles.sectionKicker, { marginTop: 28 }]} />
             </ScrollView>
           </View>
           )}
@@ -1634,6 +1638,9 @@ export default function ReservationsScreen() {
             {pointsToggle}
           </>
         )}
+
+        {/* ── 9. MES ALERTES (liste d'attente par créneau) ───────────────── */}
+        <WaitlistAlerts titleStyle={[styles.sectionKicker, { marginTop: 28 }]} />
         </>
         )}
       </ScrollView>

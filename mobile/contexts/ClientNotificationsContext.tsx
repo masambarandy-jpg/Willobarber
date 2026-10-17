@@ -7,12 +7,14 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSSE } from '@/hooks/useSSE';
 import { clientNotificationsApi, TokenStorage } from '@/services/api';
-import type { ClientNotification, CommentReplyEvent, OrderStatusEvent } from '@/types';
+import type { ClientNotification, CommentReplyEvent, OrderStatusEvent, WaitlistAvailableEvent } from '@/types';
 
 // notification : nouvelle entrée de la 🔔. Toasts (la notif cloche arrive à part) :
 // order_status_changed quand le coiffeur fait avancer une commande boutique,
-// new_comment_reply quand le barbier répond à un commentaire de RDV.
-const SSE_EVENTS = ['notification', 'order_status_changed', 'new_comment_reply'] as const;
+// new_comment_reply quand le barbier répond à un commentaire de RDV,
+// waitlist_available quand un créneau suivi en liste d'attente se libère.
+const SSE_EVENTS = ['notification', 'order_status_changed', 'new_comment_reply', 'waitlist_available'] as const;
+const DATE_LOCALES = { fr: 'fr-BE', nl: 'nl-BE', en: 'en-GB' } as const;
 // Repli si le flux SSE ne passe pas (cf. useSSE) : les notifications client ne
 // sont pas critiques à la seconde près, un rechargement toutes les 30 s suffit.
 const FALLBACK_POLLING_MS = 30000;
@@ -39,7 +41,7 @@ const ClientNotificationsContext = createContext<ClientNotificationsContextType>
 
 export function ClientNotificationsProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [notifications, setNotifications] = useState<ClientNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
@@ -103,6 +105,24 @@ export function ClientNotificationsProvider({ children }: { children: React.Reac
         });
         return;
       }
+      if (event === 'waitlist_available') {
+        const payload = data as WaitlistAvailableEvent | null;
+        if (!payload?.date) return;
+        const [y, m, d] = payload.date.split('-').map(Number);
+        const day = new Date(y, m - 1, d).toLocaleDateString(DATE_LOCALES[language], {
+          weekday: 'short', day: 'numeric', month: 'short',
+        });
+        setToast({
+          message: t('waitlist.slotAvailable')
+            .replace('{barber}', payload.barber)
+            .replace('{date}', day)
+            .replace('{time}', payload.time),
+          subtitle: t('waitlist.slotAvailableAction'),
+          href: waitlistBookingHref(payload),
+          testID: 'waitlist-available-toast',
+        });
+        return;
+      }
       const notif = data as ClientNotification | null;
       if (!notif?.id) return;
       setNotifications((prev) => [notif, ...prev.filter((n) => n.id !== notif.id)]);
@@ -146,6 +166,19 @@ export function ClientNotificationsProvider({ children }: { children: React.Reac
 // rouvrir le même RDV depuis une notification suivante.
 export function reservationHref(reservationId: number): string {
   return `/(tabs)/reservations?reservationId=${reservationId}&at=${Date.now()}`;
+}
+
+// Wizard de réservation sur le créneau libéré (cf. mode waitlist de book.tsx).
+export function waitlistBookingHref(slot: { barber: string; date: string; time: string; service_name?: string }): string {
+  const params = new URLSearchParams({
+    waitlist: 'true',
+    barbier: slot.barber,
+    date: slot.date,
+    heure: slot.time.slice(0, 5),
+    at: String(Date.now()),
+  });
+  if (slot.service_name) params.set('prestation', slot.service_name);
+  return `/(tabs)/book?${params.toString()}`;
 }
 
 export function useClientNotifications(): ClientNotificationsContextType {

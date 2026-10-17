@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 from .loyalty import reservation_points
-from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitingList, BarberLeave, Notification, NotificationPreference, PaymentCard
+from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitingList, WaitlistEntry, BarberLeave, Notification, NotificationPreference, PaymentCard
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -175,6 +175,13 @@ class WaitingListSerializer(serializers.ModelSerializer):
         model = WaitingList
         fields = ['id', 'client', 'service', 'service_name', 'preferred_date', 'created_at', 'notified']
         read_only_fields = ['notified']
+
+
+class WaitlistEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WaitlistEntry
+        fields = ['id', 'barber', 'date', 'time', 'service_name', 'created_at', 'notified_at']
+        read_only_fields = ['created_at', 'notified_at']
 
 
 class NotificationSerializer(serializers.ModelSerializer):
