@@ -38,7 +38,6 @@ urlpatterns = [
     path('auth/me/payment-methods/<str:pm_id>/', views.delete_my_payment_method, name='me-payment-method-delete'),
     path('auth/change-password/', views.ChangePasswordView.as_view(), name='change-password'),
     path('auth/delete-account/', views.DeleteAccountView.as_view(), name='delete-account'),
-    path('auth/passwordless-login/', views.PasswordlessLoginView.as_view(), name='passwordless-login'),
     path('auth/password-reset/', views.PasswordResetRequestView.as_view(), name='password-reset'),
     path('auth/password-reset/confirm/', views.PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     path(
