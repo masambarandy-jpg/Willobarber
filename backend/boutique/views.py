@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from core import sse
 from core.models import Reservation
 from core.permissions import IsStaffRole
-from core.recommendations import SALON_TZ
+from core.recommendations import SALON_TZ, create_client_notification
 from .invoices import (
     build_boutique_invoice_pdf, notify_coiffeur_new_order, order_from_invoice_token, send_boutique_invoice,
 )
@@ -30,6 +30,44 @@ STAFF_STATUSES = {
     'domicile': ('preparing', 'shipped', 'delivered'),
     'retrait_salon': ('preparing', 'ready', 'picked_up'),
 }
+
+# Message envoyé au client à chaque changement de statut par le coiffeur.
+STATUS_MESSAGES = {
+    ('domicile', 'preparing'): '📦 Votre commande est en préparation',
+    ('domicile', 'shipped'): '🚚 Votre commande est en route !',
+    ('domicile', 'delivered'): '✅ Votre commande a été livrée. Bon soin !',
+    ('retrait_salon', 'preparing'): '📦 Votre commande est en préparation',
+    ('retrait_salon', 'ready'): '🏪 Votre commande est prête à retirer au salon !',
+    ('retrait_salon', 'picked_up'): '✅ Vous avez retiré votre commande. Merci !',
+}
+
+
+def _notify_client_order_status(order):
+    """Notification cloche (événement SSE 'notification') + événement
+    order_status_changed (toast), uniquement sur le flux du client."""
+    message = STATUS_MESSAGES[(order.delivery_type, order.status)]
+    notification = create_client_notification(
+        order.user, 'order_status', message, f'Commande {order.numero}',
+        {'order_id': order.id, 'order_numero': order.numero, 'status': order.status},
+    )
+    payload = {
+        'type': 'order_status_changed',
+        'order_id': order.id,
+        'order_number': order.numero,
+        'status': order.status,
+        'delivery_type': order.delivery_type,
+        'message': message,
+        'notification_id': notification.id,
+    }
+
+    def publish():
+        try:
+            reached = sse.publish_to_client(order.user_id, 'order_status_changed', payload)
+            print(f"[SSE] order_status_changed → user {order.user_id} ({reached} flux ouvert(s)): {payload}")
+        except Exception:
+            logger.exception("SSE order_status_changed non publié (commande %s)", order.numero)
+
+    transaction.on_commit(publish)
 
 
 def _intent_user_id(intent):
@@ -250,8 +288,15 @@ class StaffOrderDetailView(APIView):
         if new_status not in STAFF_STATUSES[order.delivery_type]:
             return Response({'detail': 'Statut invalide pour ce mode de livraison.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        order.status = new_status
-        order.save(update_fields=['status'])
+        if new_status == order.status:
+            # Re-clic sur le statut courant : rien n'a changé, pas de notification.
+            print(f"[SSE] commande {order.numero} déjà '{new_status}' — aucune notification")
+            return Response(StaffOrderSerializer(order, context={'request': request}).data)
+
+        with transaction.atomic():
+            order.status = new_status
+            order.save(update_fields=['status'])
+            _notify_client_order_status(order)
         # Les autres écrans coiffeur ouverts (liste Commandes, dashboard) se rechargent.
         sse.publish('boutique_order_updated', {'order_id': order.id, 'status': order.status})
         return Response(StaffOrderSerializer(order, context={'request': request}).data)

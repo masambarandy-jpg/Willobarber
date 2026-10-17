@@ -352,7 +352,18 @@ export interface SavedPaymentMethod {
 
 // ─── Notifications client (GET /client-notifications/ + SSE /sse/client/) ────
 
-export type ClientNotificationType = 'recommendation' | 'seasonal_reminder' | 'invoice' | 'boutique_invoice';
+// Événement SSE client order_status_changed (boutique/views.py).
+export interface OrderStatusEvent {
+  type: 'order_status_changed';
+  order_id: number;
+  order_number: string;
+  status: BoutiqueOrderStatus;
+  delivery_type: BoutiqueDeliveryType;
+  message: string;
+  notification_id: number;
+}
+
+export type ClientNotificationType = 'recommendation' | 'seasonal_reminder' | 'invoice' | 'boutique_invoice' | 'order_status';
 
 export interface ClientNotification {
   id: number;
@@ -369,6 +380,7 @@ export interface ClientNotification {
     amount_paid?: number;
     order_id?: number;
     order_numero?: string;
+    status?: BoutiqueOrderStatus;
   };
   unread: boolean;
   created_at: string;

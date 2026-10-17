@@ -27,6 +27,7 @@ const ICONS: Record<ClientNotificationType, React.ComponentProps<typeof Feather>
   seasonal_reminder: 'clock',
   invoice: 'file-text',
   boutique_invoice: 'package',
+  order_status: 'truck',
 };
 
 // Factures RDV et boutique : même bouton « Télécharger la facture » (lien signé).
