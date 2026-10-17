@@ -199,6 +199,8 @@ export default function BookScreen() {
     barberId,
     recoServiceId,
     amount: amountParam,
+    waitlist,
+    at: atParam,
   } = useLocalSearchParams<{
     serviceId?: string;
     quickbook?: string;
@@ -216,6 +218,11 @@ export default function BookScreen() {
     // date ISO (YYYY-MM-DD) et montant choisi ('deposit' | 'full').
     recoServiceId?: string;
     amount?: string;
+    // Créneau libéré (toast SSE waitlist_available, notification 🔔, email) :
+    // barbier + date + heure (+ prestation) pré-sélectionnés ; `at` force la
+    // resynchronisation quand on rouvre l'onglet déjà monté.
+    waitlist?: string;
+    at?: string;
   }>();
   const isQuickbook = quickbook === 'true';
   // Mode "reprise rapide" (bouton "Reprendre la même coupe" / "Adapter" de
@@ -230,8 +237,12 @@ export default function BookScreen() {
   // barbier verrouillés, on démarre directement à l'étape 3 (date/heure) et
   // la confirmation PATCH le RDV au lieu d'en créer un nouveau.
   const isRescheduleMode = reschedule === 'true';
+  // Mode "créneau libéré" : on atterrit à l'étape 3 sur le créneau déjà
+  // choisi, ou à l'étape 1 si la prestation n'est pas connue.
+  const isWaitlist = waitlist === 'true';
+  const waitlistStartStep = SERVICES.some(s => s.name === prestation) ? 3 : 1;
   const reservationIdNum = reservationId ? Number(reservationId) : null;
-  const hasBookingParams = Boolean(serviceId || isQuickbook || isFastbook || isRescheduleMode);
+  const hasBookingParams = Boolean(serviceId || isQuickbook || isFastbook || isRescheduleMode || isWaitlist);
   const { isAuthenticated, user, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
   const { t } = useLanguage();
@@ -260,7 +271,7 @@ export default function BookScreen() {
   // sans ça, useFocusEffect reset confirmed dès le premier affichage.
   const hasSeenConfirmation = useRef(false);
   const [step,          setStep]          = useState(
-    isQuickbook ? 4 : fastbookStartStep ?? (isRescheduleMode ? 3 : 1)
+    isQuickbook ? 4 : isWaitlist ? waitlistStartStep : fastbookStartStep ?? (isRescheduleMode ? 3 : 1)
   );
   const [confirmed,     setConfirmed]     = useState(false);
   // useFocusEffect ci-dessous doit lire la valeur la plus récente de `confirmed`
@@ -268,7 +279,7 @@ export default function BookScreen() {
   // ce ref tenu à jour en parallèle de l'état.
   const confirmedRef = useRef(confirmed);
   const [booking,       setBooking]       = useState<BookingState>(() => {
-    if (isQuickbook) return quickbookState();
+    if (isQuickbook || isWaitlist) return quickbookState();
     if (isFastbook) {
       const service = SERVICES.find(s => s.name === prestation) ?? null;
       const barber  = BARBERS.find(b => b.name === barbierParam) ?? null;
@@ -343,6 +354,16 @@ export default function BookScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isQuickbook, recoServiceId, dateParam, heure, amountParam]);
 
+  useEffect(() => {
+    if (!isWaitlist) return;
+    setBooking(quickbookState());
+    setStep(waitlistStartStep);
+    hasSeenConfirmation.current = false;
+    setConfirmed(false);
+    confirmedRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWaitlist, prestation, barbierParam, dateParam, heure, atParam]);
+
   // Quickbook depuis une recommandation : ID Django → slug statique.
   useEffect(() => {
     if (!isQuickbook || !recoServiceId) return;
@@ -387,6 +408,7 @@ export default function BookScreen() {
     // l'étape 1 (Prestation), sautée puisque déjà pré-remplie, n'existe pas
     // dans ce flux — "Retour" depuis l'étape d'entrée quitte le wizard.
     if (isFastbook && step <= (fastbookStartStep ?? 1)) { goBackOr('/(tabs)'); return; }
+    if (isWaitlist && step <= waitlistStartStep) { goBackOr('/(tabs)'); return; }
     if (step === 1) router.replace('/(tabs)');
     else setStep(s => s - 1);
   };

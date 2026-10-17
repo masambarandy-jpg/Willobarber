@@ -175,6 +175,29 @@ class WaitingList(models.Model):
         return f"{self.client} - {self.service} ({self.preferred_date})"
 
 
+class WaitlistEntry(models.Model):
+    """Alerte « Me prévenir » sur un créneau précis déjà pris (barbier + date +
+    heure). À ne pas confondre avec WaitingList, inscription à la journée sans
+    notification. Une alerte reste active tant que le créneau est à venir et
+    que le client ne l'a pas réservé (cf. waitlist.py)."""
+    client = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='waitlist_entries')
+    barber = models.CharField(max_length=20, choices=BARBER_CHOICES)
+    date = models.DateField()
+    time = models.TimeField()
+    service_name = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    # Remis à NULL quand le créneau est repris par quelqu'un d'autre : l'alerte
+    # se réarme pour la prochaine libération.
+    notified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('client', 'barber', 'date', 'time')
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.client} → {self.barber} {self.date} {self.time}"
+
+
 class BarberLeave(models.Model):
     BARBER_CHOICES = BARBER_CHOICES
 
@@ -269,6 +292,7 @@ class Notification(models.Model):
         ('boutique_invoice', 'Facture boutique'),
         ('order_status', 'Suivi de commande'),
         ('comment_reply', 'Réponse du barbier'),
+        ('waitlist_available', 'Créneau libéré'),
         # Notification coiffeur (user NULL) : commande boutique payée.
         ('boutique_order', 'Commande boutique'),
     ]

@@ -80,6 +80,9 @@ export interface TimeSlot {
   start_time: string;
   end_time: string;
   is_available: boolean;
+  // Pris par un RDV (≠ congé du barbier) : liste d'attente possible. Absent
+  // des réponses d'un backend antérieur.
+  is_booked?: boolean;
 }
 
 export interface AvailableSlotsResponse {
@@ -385,8 +388,20 @@ export interface CommentReplyEvent {
   notification_id: number;
 }
 
+// Événement SSE client waitlist_available (core/waitlist.py) : un créneau suivi
+// en liste d'attente vient de se libérer.
+export interface WaitlistAvailableEvent {
+  entry_id: number;
+  barber: BarberName;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  service_name: string;
+  notification_id: number;
+}
+
 export type ClientNotificationType =
-  'recommendation' | 'seasonal_reminder' | 'invoice' | 'boutique_invoice' | 'order_status' | 'comment_reply';
+  'recommendation' | 'seasonal_reminder' | 'invoice' | 'boutique_invoice' | 'order_status' | 'comment_reply'
+  | 'waitlist_available';
 
 export interface ClientNotification {
   id: number;
@@ -404,6 +419,11 @@ export interface ClientNotification {
     order_id?: number;
     order_numero?: string;
     status?: BoutiqueOrderStatus;
+    // waitlist_available
+    barber?: BarberName;
+    date?: string;
+    time?: string;
+    service_name?: string;
   };
   unread: boolean;
   created_at: string;

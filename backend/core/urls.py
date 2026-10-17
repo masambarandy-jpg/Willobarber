@@ -28,6 +28,10 @@ urlpatterns = [
     path('opening-hours/', views.opening_hours, name='opening-hours'),
     # Avant le router : sinon 'availability' serait pris pour un pk de /barbers/<pk>/.
     path('barbers/availability/', views.barbers_week_availability, name='barbers-week-availability'),
+    path('waitlist/', views.waitlist_create, name='waitlist-create'),
+    path('waitlist/mine/', views.waitlist_mine, name='waitlist-mine'),
+    path('waitlist/for-slot/', views.waitlist_for_slot, name='waitlist-for-slot'),
+    path('waitlist/<int:pk>/', views.waitlist_delete, name='waitlist-delete'),
     path('', include(router.urls)),
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/login/', views.LoginView.as_view(), name='login'),

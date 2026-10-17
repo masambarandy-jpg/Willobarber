@@ -15,6 +15,8 @@ import {
 import { CC, SERIF } from '@/components/coiffeur/theme';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
+import { WaitlistBadge, WaitlistSlotModal, useDayWaitlist, waitlistSlotKey } from '@/components/coiffeur/WaitlistSlotModal';
+import type { SlotWaitlistEntry } from '@/services/api';
 
 const HOUR_HEIGHT = 66;
 const START_HOUR = 11;
@@ -816,6 +818,11 @@ export default function CoiffeurPlanningScreen() {
   const isToday = isSameDay(currentDate, new Date());
   const showNowLine = isToday && new Date().getHours() >= START_HOUR && new Date().getHours() < END_HOUR;
 
+  // Badge « N en attente » (vue Jour) : inscrits de la journée, une requête.
+  const currentIsoDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+  const waitlistBySlot = useDayWaitlist(viewMode === 'Jour' ? currentIsoDate : null, reservationsVersion);
+  const [waitlistModal, setWaitlistModal] = useState<SlotWaitlistEntry[] | null>(null);
+
   const dayEvents = useMemo(
     () => (eventsByDate[dateKey(currentDate)] ?? []).filter((e) => selectedBarbers.includes(e.barber)),
     [eventsByDate, currentDate, selectedBarbers]
@@ -1010,13 +1017,21 @@ export default function CoiffeurPlanningScreen() {
                   </Text>
                   <Text style={styles.eventClient}>{e.client}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.scanQrBtn}
-                  activeOpacity={0.8}
-                  onPress={() => ouvrirScanQr(e)}
-                >
-                  <Text style={styles.scanQrBtnText}>📱 Scanner QR</Text>
-                </TouchableOpacity>
+                <View style={styles.eventActions}>
+                  <TouchableOpacity
+                    style={styles.scanQrBtn}
+                    activeOpacity={0.8}
+                    onPress={() => ouvrirScanQr(e)}
+                  >
+                    <Text style={styles.scanQrBtnText}>📱 Scanner QR</Text>
+                  </TouchableOpacity>
+                  {!!waitlistBySlot[waitlistSlotKey(e.barber, e.time)]?.length && (
+                    <WaitlistBadge
+                      count={waitlistBySlot[waitlistSlotKey(e.barber, e.time)].length}
+                      onPress={() => setWaitlistModal(waitlistBySlot[waitlistSlotKey(e.barber, e.time)])}
+                    />
+                  )}
+                </View>
               </View>
             );
           })}
@@ -1447,6 +1462,7 @@ export default function CoiffeurPlanningScreen() {
         </View>
       </View>
     )}
+    <WaitlistSlotModal entries={waitlistModal} onClose={() => setWaitlistModal(null)} />
     </>
   );
 }
@@ -1693,6 +1709,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.85)',
     marginTop: 2,
+  },
+  eventActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
   },
   scanQrBtn: {
     alignSelf: 'flex-start',

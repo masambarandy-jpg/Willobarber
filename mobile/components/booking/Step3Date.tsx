@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { Fonts } from '@/constants';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { closedPeriodsApi, openingHoursApi, slotsApi, waitingListApi } from '@/services/api';
+import { NotificationToast, type ToastData } from '@/components/NotificationToast';
+import { closedPeriodsApi, openingHoursApi, slotsApi, waitingListApi, waitlistApi, waitlistErrorCode } from '@/services/api';
 import type { BarberName, ClosedPeriod, OpeningHoursDay } from '@/types';
 import {
   DEFAULT_CLOSING_MINUTES,
@@ -28,6 +29,9 @@ const CARD       = '#1A1814';
 const GREY       = '#6B6560';
 const FAINT      = 'rgba(255,255,255,0.22)';
 const BORDER_MED = 'rgba(255,255,255,0.16)';
+// Sous ce délai, le backend ne prévient plus (cf. waitlist.NOTIFY_MIN_LEAD) :
+// inutile de proposer l'alerte.
+const WAITLIST_MIN_LEAD_MS = 2 * 60 * 60 * 1000;
 
 const { width: SCREEN_W } = Dimensions.get('window');
 // 3 columns, 2 gaps of 9, 20px padding each side
@@ -285,6 +289,13 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [joiningWaitlist, setJoiningWaitlist] = useState(false);
   const [joinedWaitlist, setJoinedWaitlist] = useState(false);
+  // Liste d'attente par créneau : créneaux pris par un RDV, et ceux que le
+  // client suit déjà (alerte « 🔔 Me prévenir » active).
+  const [takenTimes, setTakenTimes] = useState<Set<string>>(new Set());
+  const [watchedTimes, setWatchedTimes] = useState<Set<string>>(new Set());
+  const [notifyingTime, setNotifyingTime] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const hideToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,6 +318,7 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
         if (cancelled) return;
         const taken = new Set(res.slots.filter((s) => !s.is_available).map((s) => s.start_time));
         setBookedTimes(taken);
+        setTakenTimes(new Set(res.slots.filter((s) => s.is_booked).map((s) => s.start_time)));
         setDaySlots(res.slots.map((s) => s.start_time));
         setDayClosed(Boolean(res.is_closed));
         setClosingMinutes(closingMinutesOf(res.close_time));
@@ -314,10 +326,22 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
       .catch(() => {
         if (cancelled) return;
         setBookedTimes(new Set());
+        setTakenTimes(new Set());
         setDaySlots([]);
         setDayClosed(false);
       })
       .finally(() => { if (!cancelled) setLoadingSlots(false); });
+    // Alertes déjà posées sur ce jour (silencieux si non connecté).
+    setWatchedTimes(new Set());
+    waitlistApi.mine()
+      .then((entries) => {
+        if (cancelled) return;
+        const day = toIsoDate(date);
+        setWatchedTimes(new Set(
+          entries.filter((e) => e.barber === barberName && e.date === day).map((e) => e.time.slice(0, 5)),
+        ));
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [barberName]);
 
@@ -377,6 +401,39 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
     ? summarizeHours(openingHours, (i) => t(`step3.day.${i}` as TranslationKey), t('step3.closedLabel'))
     : t('step3.hoursNote');
 
+  const canWatch = (slot: string) => {
+    if (!selectedDate || !takenTimes.has(slot)) return false;
+    const [h, m] = slot.split(':').map(Number);
+    const start = new Date(selectedDate);
+    start.setHours(h, m, 0, 0);
+    return start.getTime() - Date.now() >= WAITLIST_MIN_LEAD_MS;
+  };
+
+  const handleNotifyMe = async (slot: string) => {
+    if (!selectedDate || notifyingTime || watchedTimes.has(slot)) return;
+    setNotifyingTime(slot);
+    try {
+      await waitlistApi.create({
+        barber: barberName,
+        date: toIsoDate(selectedDate),
+        time: slot,
+        service_name: service?.name,
+      });
+      setWatchedTimes((prev) => new Set(prev).add(slot));
+      setToast({ message: t('waitlist.added'), testID: 'waitlist-added-toast' });
+    } catch (error) {
+      const code = waitlistErrorCode(error);
+      if (code === 'already_subscribed') setWatchedTimes((prev) => new Set(prev).add(slot));
+      const key: TranslationKey =
+        code === 'already_subscribed' ? 'waitlist.alreadySubscribed'
+        : code === 'full' ? 'waitlist.full'
+        : 'waitlist.error';
+      setToast({ message: t(key), color: code === 'already_subscribed' ? GOLD : '#C0392B' });
+    } finally {
+      setNotifyingTime(null);
+    }
+  };
+
   const handleJoinWaitingList = async () => {
     if (!selectedDate || !serviceId) return;
     setJoiningWaitlist(true);
@@ -405,6 +462,7 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
   };
 
   return (
+    <>
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
@@ -462,6 +520,26 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
                   const isOn     = selectedTime === slot;
                   const available = slotAvailable(slot);
                   const disabled  = !available;
+                  if (!available && canWatch(slot)) {
+                    const watched = watchedTimes.has(slot);
+                    return (
+                      <TouchableOpacity
+                        key={slot}
+                        style={[styles.slotPill, styles.slotPillTaken]}
+                        onPress={() => handleNotifyMe(slot)}
+                        disabled={watched || notifyingTime !== null}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${slot} — ${t(watched ? 'waitlist.subscribed' : 'waitlist.notifyMe')}`}
+                        testID={`btn-notify-${slot}`}
+                      >
+                        <Text style={[styles.slotText, styles.slotTextDisabled]}>{slot}</Text>
+                        <Text style={[styles.notifyText, watched && styles.notifyTextOn]} numberOfLines={1}>
+                          {notifyingTime === slot ? '…' : t(watched ? 'waitlist.subscribed' : 'waitlist.notifyMe')}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  }
                   return (
                     <TouchableOpacity
                       key={slot}
@@ -503,6 +581,8 @@ export const Step3Date = forwardRef<Step3DateHandle, Props>(function Step3Date(
         </TouchableOpacity>
       )}
     </ScrollView>
+    <NotificationToast toast={toast} onHide={hideToast} />
+    </>
   );
 });
 
@@ -710,6 +790,19 @@ const styles = StyleSheet.create({
   },
   slotPillDisabled: {
     opacity: 0.35,
+  },
+  slotPillTaken: {
+    paddingVertical: 7,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  notifyText: {
+    marginTop: 2,
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: 'rgba(201,168,76,0.85)',
+  },
+  notifyTextOn: {
+    color: GOLD,
   },
   slotText: {
     fontSize: 14,

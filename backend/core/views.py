@@ -48,11 +48,12 @@ from django.utils import timezone
 from boutique.pricing import OrderPricingError, price_order, to_cents
 from .client_profile import build_client_profile
 from .comments import CommentError, check_commentable, clean_rating, clean_text, save_reply
+from .comments import client_name as client_display_name
 from .loyalty import reservation_points
 from .models import (
     BARBER_CHOICES, DEFAULT_BARBER,
     Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitingList,
-    BarberLeave, Notification, NotificationPreference, PaymentCard, UserSession,
+    WaitlistEntry, BarberLeave, Notification, NotificationPreference, PaymentCard, UserSession,
 )
 from .emails import (
     format_date_fr, format_date_fr_short, format_heure_fr, is_late_cancellation, queue_reservation_email,
@@ -62,10 +63,11 @@ from .permissions import IsStaffRole
 from .recommendations import SALON_TZ, build_recommendation, create_client_notification, run_daily_recommendations
 from .slots import day_hours, minutes_to_hhmm, slot_times_for, weekly_hours
 from .sms import send_reminders_for_tomorrow
+from . import waitlist
 from .serializers import (
     BarbershopSerializer, BarberSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
-    ClosedPeriodSerializer, OpeningHoursSerializer, ReviewSerializer, WaitingListSerializer,
+    ClosedPeriodSerializer, OpeningHoursSerializer, ReviewSerializer, WaitingListSerializer, WaitlistEntrySerializer,
     BarberLeaveSerializer, NotificationSerializer,
     NotificationPreferenceSerializer, PaymentCardSerializer,
 )
@@ -209,6 +211,96 @@ class WaitingListViewSet(viewsets.ModelViewSet):
         serializer.save(client=self.request.user)
 
 
+def _waitlist_error(message, code, http_status=status.HTTP_400_BAD_REQUEST):
+    # `code` permet à l'app d'afficher le bon toast sans parser le message.
+    return Response({'error': message, 'code': code}, status=http_status)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def waitlist_create(request):
+    serializer = WaitlistEntrySerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    barber, day, at = (serializer.validated_data[k] for k in ('barber', 'date', 'time'))
+    already = _waitlist_error("Vous êtes déjà sur la liste d'attente de ce créneau.", 'already_subscribed')
+
+    if waitlist.slot_start(day, at) <= timezone.now():
+        return _waitlist_error('Ce créneau est déjà passé.', 'slot_past')
+
+    with transaction.atomic():
+        # Verrou sur le RDV qui occupe le créneau : les inscriptions simultanées
+        # sur un même créneau passent une par une, le plafond tient.
+        occupying = waitlist.active_slot_reservation(barber, day, at, lock=True)
+        if occupying is None:
+            return _waitlist_error('Ce créneau est libre : réservez-le directement.', 'slot_free')
+        if occupying.user_id == request.user.id:
+            return _waitlist_error('Vous avez déjà réservé ce créneau.', 'own_slot')
+
+        entries = WaitlistEntry.objects.filter(barber=barber, date=day, time=at)
+        if entries.filter(client=request.user).exists():
+            return already
+        if entries.count() >= waitlist.WAITLIST_MAX_PER_SLOT:
+            return _waitlist_error("Liste d'attente complète pour ce créneau.", 'full', status.HTTP_409_CONFLICT)
+        try:
+            with transaction.atomic():
+                entry = serializer.save(client=request.user)
+        except IntegrityError:
+            return already
+
+    return Response(WaitlistEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def waitlist_mine(request):
+    entries = waitlist.upcoming_entries().filter(client=request.user).order_by('date', 'time')
+    return Response(WaitlistEntrySerializer(entries, many=True).data)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def waitlist_delete(request, pk):
+    deleted, _ = WaitlistEntry.objects.filter(pk=pk, client=request.user).delete()
+    if not deleted:
+        return Response({'error': 'Alerte introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET'])
+@permission_classes([IsStaffRole])
+def waitlist_for_slot(request):
+    """Inscrits en liste d'attente, pour le badge « N en attente » du planning.
+    `date` obligatoire ; `barber` et `time` filtrent sur un créneau. Avec la
+    date seule, le planning récupère toute la journée en une requête au lieu
+    d'une par RDV affiché."""
+    params = request.query_params
+    try:
+        day = datetime.strptime(params.get('date', ''), '%Y-%m-%d').date()
+        at = datetime.strptime(params['time'][:5], '%H:%M').time() if params.get('time') else None
+    except ValueError:
+        return Response({'error': 'Paramètres date (AAAA-MM-JJ) ou time (HH:MM) invalides.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    entries = WaitlistEntry.objects.filter(date=day).select_related('client').order_by('time', 'created_at')
+    if params.get('barber'):
+        entries = entries.filter(barber=params['barber'])
+    if at:
+        entries = entries.filter(time=at)
+    data = [
+        {
+            'id': e.id,
+            'client_name': client_display_name(e.client),
+            'barber': e.barber,
+            'date': e.date,
+            'time': e.time.strftime('%H:%M'),
+            'created_at': e.created_at,
+            'notified_at': e.notified_at,
+        }
+        for e in entries
+    ]
+    return Response({'count': len(data), 'entries': data})
+
+
 @api_view(['GET', 'PUT'])
 @permission_classes([AllowAny])
 def opening_hours(request):
@@ -276,8 +368,14 @@ def available_slots(request):
             .values_list('time', flat=True)
     }
 
+    # is_booked distingue un créneau pris par un RDV (liste d'attente possible)
+    # d'un créneau indisponible pour congé.
     slots = [
-        {'start_time': slot, 'end_time': slot, 'is_available': not on_leave and slot not in booked_hhmm}
+        {
+            'start_time': slot, 'end_time': slot,
+            'is_available': not on_leave and slot not in booked_hhmm,
+            'is_booked': slot in booked_hhmm,
+        }
         for slot in ([] if is_closed else slot_times_for(requested_date))
     ]
 

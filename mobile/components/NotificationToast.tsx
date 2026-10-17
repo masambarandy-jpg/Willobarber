@@ -10,19 +10,20 @@ export type ToastData = {
   subtitle?: string;
   // Pastille de couleur (ex. statut de commande) — or par défaut.
   color?: string;
-  // Route ouverte au toucher du toast.
-  href: string;
+  // Route ouverte au toucher du toast ; sans href, toast purement informatif.
+  href?: string;
   testID?: string;
 };
 
 type Props = {
   toast: ToastData | null;
   onHide: () => void;
-  onPress: (toast: ToastData) => void;
+  onPress?: (toast: ToastData) => void;
 };
 
 // Toast en haut d'écran pour les événements SSE temps réel (statut de
-// commande, réponse du barbier côté client ; nouveau message côté coiffeur).
+// commande, réponse du barbier, créneau libéré côté client ; nouveau message
+// côté coiffeur) et les confirmations locales (alerte liste d'attente).
 export function NotificationToast({ toast, onHide, onPress }: Props) {
   const insets = useSafeAreaInsets();
   const anim = useRef(new Animated.Value(0)).current;
@@ -50,7 +51,8 @@ export function NotificationToast({ toast, onHide, onPress }: Props) {
     >
       <TouchableOpacity
         style={styles.toast}
-        onPress={() => onPress(toast)}
+        onPress={() => onPress?.(toast)}
+        disabled={!toast.href || !onPress}
         activeOpacity={0.9}
         testID={toast.testID ?? 'notification-toast'}
       >
