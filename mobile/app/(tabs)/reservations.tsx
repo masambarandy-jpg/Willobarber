@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useReservations } from '@/hooks/useReservations';
@@ -36,6 +37,7 @@ import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 import ReservationComment from '@/components/client/ReservationComment';
 import { HistoryErrorBanner } from '@/components/client/HistoryErrorBanner';
 import { WaitlistAlerts } from '@/components/client/WaitlistAlerts';
+import { NotificationToast, type ToastData } from '@/components/NotificationToast';
 import {
   HISTORY_PREVIEW_COUNT, HistoryToggleButton, useListAccordion, useTrackedScroll,
 } from '@/components/client/HistoryAccordion';
@@ -161,7 +163,7 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
                 <TouchableOpacity style={styles.btnKeep} onPress={onClose}>
                   <Text style={styles.btnKeepText}>{t('reservations.cancelModal.keep')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
+                <TouchableOpacity testID="btn-confirm-cancel" style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
                   {loading
                     ? <ActivityIndicator color="#C0392B" size="small" />
                     : <Text style={styles.btnDangerText}>{t('reservations.cancelModal.confirmCancel')}</Text>
@@ -205,6 +207,43 @@ function ReviewModal({ target, review, onClose, onChange }: ReviewModalProps) {
         </View>
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+interface RdvActionsProps {
+  onReschedule: () => void;
+  onCancel: () => void;
+  // Absent tant que le RDV n'a pas de QR code.
+  onQr?: () => void;
+  onCalendar: () => void;
+  // Distingue les testID de la modale détail de ceux de la carte hero.
+  idPrefix?: string;
+}
+
+// Actions d'un RDV à venir, 2 lignes de 2 : Reprogrammer · Annuler / Mon QR · Calendrier.
+function RdvActions({ onReschedule, onCancel, onQr, onCalendar, idPrefix = '' }: RdvActionsProps) {
+  const { t } = useLanguage();
+  return (
+    <View style={styles.rdvActions}>
+      <View style={styles.rdvActionsRow}>
+        <TouchableOpacity testID={`${idPrefix}btn-reprogrammer`} style={[styles.btnOutline, styles.rdvActionBtn]} onPress={onReschedule} activeOpacity={0.85}>
+          <Text style={[styles.btnOutlineText, styles.rdvActionText]}>{t('reservations.reschedule')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity testID={`${idPrefix}btn-cancel-next-rdv`} style={[styles.btnDangerSm, styles.rdvActionBtn]} onPress={onCancel} activeOpacity={0.85}>
+          <Text style={[styles.btnDangerSmText, styles.rdvActionText]}>{t('reservations.cancelBtn')}</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.rdvActionsRow}>
+        {onQr && (
+          <TouchableOpacity testID={`${idPrefix}btn-mon-qr`} style={[styles.btnOutline, styles.rdvActionBtn]} onPress={onQr} activeOpacity={0.85}>
+            <Text style={[styles.btnOutlineText, styles.rdvActionText]}>{t('reservations.myQrBtn')}</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity testID={`${idPrefix}btn-add-calendar`} style={[styles.btnPrimary, styles.rdvActionBtn]} onPress={onCalendar} activeOpacity={0.85}>
+          <Text style={[styles.btnPrimaryText, styles.rdvActionText]}>{t('reservations.addToCalendar')}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -257,7 +296,7 @@ export default function ReservationsScreen() {
   const isTablet = useIsTablet();
   const { user, isAuthenticated, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
-  const { isLoading, refetch, cancel, upcoming, past, reservations, error } = useReservations();
+  const { isLoading, refetch, cancel, upcomingSorted, reservations, error } = useReservations();
   // Rien n'a pu être chargé : bandeau « Réessayer » à la place des listes. Si un
   // rechargement échoue alors que des réservations sont déjà affichées (refetch
   // au focus), on garde ces vraies données plutôt que de les masquer.
@@ -280,9 +319,17 @@ export default function ReservationsScreen() {
   const historyScroll = useTrackedScroll();
   const histAccordion = useListAccordion(historyScroll);
   const pointsAccordion = useListAccordion(historyScroll);
+  // « Mes autres RDV à venir » vit dans la colonne gauche sur tablette/web,
+  // dans l'unique ScrollView sur téléphone.
+  const leftColScroll = useTrackedScroll();
+  const upcomingAccordion = useListAccordion(isTablet ? leftColScroll : historyScroll);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [qrTarget, setQrTarget] = useState<(Reservation & { time: string }) | null>(null);
+  // RDV à venir ouvert en détail depuis une mini-carte.
+  const [detailTarget, setDetailTarget] = useState<ApiReservation | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const hideToast = useCallback(() => setToast(null), []);
   const [reviewModalTarget, setReviewModalTarget] = useState<{ id: number; service: string } | null>(null);
   const [mainTab, setMainTab] = useState<'apercu' | 'coupes'>('apercu');
   // Solde réel du client (backend /auth/me/), resynchronisé quand user change.
@@ -307,7 +354,6 @@ export default function ReservationsScreen() {
   if (__DEV__ && allReservations[0]) {
     console.log('[RESERVATIONS] Réservation brute reçue de l\'API:', JSON.stringify(allReservations[0]));
   }
-  const upcomingList = upcoming as ApiReservation[];
   // L'historique doit montrer tout RDV dont la date est passée, quel que soit son statut
   // (pending/confirmed oubliés, completed, cancelled...) — pas seulement status === 'completed'.
   const now = new Date();
@@ -324,9 +370,12 @@ export default function ReservationsScreen() {
     if (user) setLoyaltyPoints(user.loyalty_points ?? 0);
   }, [user]);
 
-  const nextReservation = upcomingList
-    .filter((r) => `${r.date}T${r.time}` >= nowKey)
-    .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0] ?? null;
+  // RDV à venir triés (cf. useReservations) : le 1er est la carte hero, les
+  // suivants « Mes autres RDV à venir ». La sidebar tablette/web lit le même
+  // store : une annulation recompose les trois.
+  const upcomingList = upcomingSorted as ApiReservation[];
+  const nextReservation = upcomingList[0] ?? null;
+  const otherUpcoming = upcomingList.slice(1);
 
   const pastSorted = [...pastList].sort((a, b) =>
     `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
@@ -362,17 +411,9 @@ export default function ReservationsScreen() {
   const isCommentable = (h: { id: number | null; status: string | null }) =>
     h.id != null && h.status != null && !NOT_A_VISIT_STATUSES.includes(h.status);
 
-  // Dernière visite honorée — sert à proposer "Laisser un avis" directement
-  // sur la carte du prochain RDV, sans que le client doive scroller l'historique.
-  const lastCompletedReservation = [...visitList]
-    .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`))[0] ?? null;
-  const pendingReviewTarget =
-    lastCompletedReservation && lastCompletedReservation.id != null && !reviewForReservation(lastCompletedReservation.id)
-      ? { id: lastCompletedReservation.id, service: lastCompletedReservation.service_name }
-      : null;
-
-  const nextRdvView = nextReservation ? (() => {
-    const d = parseApiDate(nextReservation.date);
+  // Données d'affichage d'un RDV à venir (carte hero, mini-cartes, modale détail).
+  const rdvView = (r: ApiReservation) => {
+    const d = parseApiDate(r.date);
     const diffDays = Math.ceil(
       (new Date(d).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24)
     );
@@ -385,27 +426,28 @@ export default function ReservationsScreen() {
       jour: String(d.getDate()).padStart(2, '0'),
       mois: moisAbbr,
       jourAbbr: t(`reservations.dayAbbr.${d.getDay()}` as TranslationKey),
-      service: nextReservation.service_name,
-      time: nextReservation.time.slice(0, 5),
-      timeLabel: formatHmm(nextReservation.time),
-      barbier: nextReservation.barber ?? 'Willo',
+      service: r.service_name,
+      time: r.time.slice(0, 5),
+      timeLabel: formatHmm(r.time),
+      barbier: r.barber ?? 'Willo',
       dateLabel: `${d.getDate()} ${t(`step3.month.${d.getMonth()}` as TranslationKey)} ${d.getFullYear()}`,
       dateShort: `${d.getDate()} ${moisAbbr}`,
       daysLabel,
     };
-  })() : null;
+  };
 
-  const rdv = nextRdvView;
+  const rdv = nextReservation ? rdvView(nextReservation) : null;
 
   // Solde à régler au salon = prix de la prestation − montant déjà payé en ligne
   // (acompte fixe si l'API ne renvoie pas de montant). 0 → ligne masquée.
-  const nextRdvBalance = nextReservation
-    ? Math.max(0, servicePrice(nextReservation) - (nextReservation.amount_paid != null ? Number(nextReservation.amount_paid) || 0 : ACOMPTE_FIXE))
-    : 0;
-  const nextRdvBalanceLabel = t('reservations.balanceAtSalon').replace(
+  const balanceOf = (r: ApiReservation) =>
+    Math.max(0, servicePrice(r) - (r.amount_paid != null ? Number(r.amount_paid) || 0 : ACOMPTE_FIXE));
+  const balanceLabel = (amount: number) => t('reservations.balanceAtSalon').replace(
     '{amount}',
-    language === 'en' ? `€${nextRdvBalance.toFixed(2)}` : `${nextRdvBalance.toFixed(2).replace('.', ',')} €`,
+    language === 'en' ? `€${amount.toFixed(2)}` : `${amount.toFixed(2).replace('.', ',')} €`,
   );
+  const nextRdvBalance = nextReservation ? balanceOf(nextReservation) : 0;
+  const nextRdvBalanceLabel = balanceLabel(nextRdvBalance);
 
   // Historique des points : un gain par RDV non annulé (points attribués dès la
   // réservation, cf. core/loyalty.py). Les enfants d'un même groupe (même
@@ -653,6 +695,7 @@ export default function ReservationsScreen() {
       console.log(`[ANNULATION] POST /reservations/${cancelTarget.id}/cancel/ — reason:`, reason);
       await cancel(cancelTarget.id, reason);
       setCancelTarget(null);
+      setToast({ message: t('reservations.cancelledToast'), color: '#C0392B', testID: 'rdv-cancelled-toast' });
       // L'annulation retire les points gagnés à la réservation.
       refreshUser().catch(() => {});
     } catch (err: any) {
@@ -673,15 +716,15 @@ export default function ReservationsScreen() {
     }
   };
 
-  const handleAddToCalendar = async () => {
-    if (!nextReservation || !rdv) return;
-    const startDate = `${nextReservation.date.replace(/-/g, '')}T${nextReservation.time.replace(/:/g, '').slice(0, 6)}`;
+  const handleAddToCalendar = async (r: ApiReservation) => {
+    const v = rdvView(r);
+    const startDate = `${r.date.replace(/-/g, '')}T${r.time.replace(/:/g, '').slice(0, 6)}`;
     if (Platform.OS === 'web') {
       const params = new URLSearchParams({
         action: 'TEMPLATE',
-        text: `${rdv.service} — WilloBarber`,
+        text: `${v.service} — WilloBarber`,
         dates: `${startDate}/${startDate}`,
-        details: `${t('reservations.calendarAlert.barberLabel')} ${rdv.barbier}\n${SALON_ADDRESS}`,
+        details: `${t('reservations.calendarAlert.barberLabel')} ${v.barbier}\n${SALON_ADDRESS}`,
         location: SALON_ADDRESS,
       });
       window.open(`https://calendar.google.com/calendar/render?${params}`, '_blank');
@@ -695,24 +738,22 @@ export default function ReservationsScreen() {
     } catch {
       Alert.alert(
         t('reservations.calendarAlert.title'),
-        `${rdv.service}\n\n📅  ${rdv.dateLabel} ${t('reservations.cancelNextAlert.confirmWebMid')} ${rdv.time}\n${t('reservations.calendarAlert.barberLabel')} ${rdv.barbier}\n📍  ${SALON_ADDRESS}`,
+        `${v.service}\n\n📅  ${v.dateLabel} ${t('reservations.cancelNextAlert.confirmWebMid')} ${v.time}\n${t('reservations.calendarAlert.barberLabel')} ${v.barbier}\n📍  ${SALON_ADDRESS}`,
         [{ text: t('common.ok') }]
       );
     }
   };
 
-  const handleReprogrammer = () => {
-    if (!nextReservation) return;
-
+  const handleReprogrammer = (r: ApiReservation) => {
     const goDateTime = () => router.push({
       pathname: '/(tabs)/book',
       params: {
         reschedule: 'true',
-        reservationId: String(nextReservation.id),
-        serviceId: String(nextReservation.service),
+        reservationId: String(r.id),
+        serviceId: String(r.service),
         // Même barbier : la reprogrammation ne change que la date/l'heure
         // (ids de BARBERS = prénom en minuscules).
-        barberId: (nextReservation.barber ?? 'Willo').toLowerCase(),
+        barberId: (r.barber ?? 'Willo').toLowerCase(),
       },
     });
     const goService = () => router.push('/(tabs)/book');
@@ -832,6 +873,69 @@ export default function ReservationsScreen() {
     Alert.alert(t('reservations.receiptTitle'), message, [{ text: t('common.close') }]);
   };
 
+  // Action lancée depuis la modale détail : on la ferme d'abord (iOS n'affiche
+  // pas une seconde Modal tant que la première n'a pas fini de se fermer).
+  const fromDetail = (action: () => void) => {
+    setDetailTarget(null);
+    if (Platform.OS === 'ios') setTimeout(action, 350);
+    else action();
+  };
+
+  // ── Mes autres RDV à venir : tous les RDV à venir sauf le prochain (hero) ──
+  const visibleOtherUpcoming = upcomingAccordion.expanded
+    ? otherUpcoming
+    : otherUpcoming.slice(0, HISTORY_PREVIEW_COUNT);
+  const upcomingOthersSection = !showInitialLoader && otherUpcoming.length > 0 && (
+    <View testID="upcoming-others">
+      <Text style={styles.sectionTitle}>{t('reservations.upcomingOthers')}</Text>
+      <View onLayout={upcomingAccordion.onListLayout}>
+        {visibleOtherUpcoming.map((r) => {
+          const v = rdvView(r);
+          return (
+            <Pressable
+              key={r.id}
+              testID={`upcoming-card-${r.id}`}
+              style={styles.miniCard}
+              onPress={() => setDetailTarget(r)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="calendar-outline" size={20} color="#C9A84C" />
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={styles.miniCardDate}>{v.dateShort} · {v.timeLabel}</Text>
+                <Text style={styles.miniCardInfo} numberOfLines={2}>
+                  {v.service} · {v.barbier} · {fmtPrice(servicePrice(r))}
+                </Text>
+              </View>
+              <TouchableOpacity
+                testID={`btn-cancel-upcoming-${r.id}`}
+                style={styles.miniCardCancel}
+                onPress={() => setCancelTarget(r)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+              >
+                <Text style={styles.miniCardCancelText}>{t('reservations.cancelUpcoming')}</Text>
+              </TouchableOpacity>
+            </Pressable>
+          );
+        })}
+      </View>
+      {otherUpcoming.length > HISTORY_PREVIEW_COUNT && (
+        <HistoryToggleButton
+          expanded={upcomingAccordion.expanded}
+          hiddenCount={otherUpcoming.length - HISTORY_PREVIEW_COUNT}
+          unit={t('reservations.rdvCountWord')}
+          collapsedLabel={t('reservations.viewAllUpcoming').replace('{n}', String(otherUpcoming.length))}
+          expandedLabel={t('reservations.hideUpcoming')}
+          onPress={upcomingAccordion.toggle}
+          testID="btn-toggle-upcoming"
+        />
+      )}
+    </View>
+  );
+
+  const detailView = detailTarget ? rdvView(detailTarget) : null;
+  const detailBalance = detailTarget ? balanceOf(detailTarget) : 0;
+
   return (
     <View style={styles.root}>
       {/* Sticky top bar */}
@@ -879,6 +983,9 @@ export default function ReservationsScreen() {
           <View style={styles.tabletRow}>
             {/* ═══ COLONNE GAUCHE (40%) ═══════════════════════════════ */}
             <ScrollView
+              ref={leftColScroll.ref}
+              onScroll={leftColScroll.onScroll}
+              scrollEventThrottle={16}
               style={styles.tabletLeftCol}
               contentContainerStyle={styles.tabletColContent}
               showsVerticalScrollIndicator={false}
@@ -947,42 +1054,18 @@ export default function ReservationsScreen() {
                       </View>
                     )}
 
-                    <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
-                      <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
-                    </TouchableOpacity>
-                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-                      <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
-                        <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={() => setCancelTarget(nextReservation)} activeOpacity={0.85}>
-                        <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {nextReservation?.qr_code && (
-                      <TouchableOpacity
-                        testID="btn-mon-qr"
-                        style={[styles.btnOutline, { marginTop: 10 }]}
-                        onPress={() => setQrTarget(nextReservation)}
-                        activeOpacity={0.85}
-                      >
-                        <Text style={styles.btnOutlineText}>{t('reservations.myQrBtn')}</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {pendingReviewTarget && (
-                      <TouchableOpacity
-                        testID="btn-leave-review-nextrdv"
-                        style={[styles.leaveReviewBtn, { marginTop: 10 }]}
-                        onPress={() => setReviewModalTarget(pendingReviewTarget)}
-                        activeOpacity={0.85}
-                      >
-                        <Text style={styles.leaveReviewBtnText}>{t('reservations.leaveReviewBtn')}</Text>
-                      </TouchableOpacity>
-                    )}
+                    <RdvActions
+                      onReschedule={() => handleReprogrammer(nextReservation)}
+                      onCancel={() => setCancelTarget(nextReservation)}
+                      onQr={nextReservation.qr_code ? () => setQrTarget(nextReservation) : undefined}
+                      onCalendar={() => handleAddToCalendar(nextReservation)}
+                    />
                   </View>
                 </>
               )}
+
+              {/* Mes autres RDV à venir */}
+              {upcomingOthersSection}
 
               {/* Resume card — masqué pour un nouveau client sans historique */}
               {resumeFav && !loadFailed && (
@@ -1357,42 +1440,18 @@ export default function ReservationsScreen() {
                 </View>
               )}
 
-              <TouchableOpacity testID="btn-add-calendar" style={styles.btnPrimary} onPress={handleAddToCalendar} activeOpacity={0.85}>
-                <Text style={styles.btnPrimaryText}>{t('reservations.addToCalendar')}</Text>
-              </TouchableOpacity>
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-                <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
-                  <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={() => setCancelTarget(nextReservation)} activeOpacity={0.85}>
-                  <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
-                </TouchableOpacity>
-              </View>
-
-              {nextReservation?.qr_code && (
-                <TouchableOpacity
-                  testID="btn-mon-qr"
-                  style={[styles.btnOutline, { marginTop: 10 }]}
-                  onPress={() => setQrTarget(nextReservation)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.btnOutlineText}>{t('reservations.myQrBtn')}</Text>
-                </TouchableOpacity>
-              )}
-
-              {pendingReviewTarget && (
-                <TouchableOpacity
-                  testID="btn-leave-review-nextrdv"
-                  style={[styles.leaveReviewBtn, { marginTop: 10 }]}
-                  onPress={() => setReviewModalTarget(pendingReviewTarget)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.leaveReviewBtnText}>{t('reservations.leaveReviewBtn')}</Text>
-                </TouchableOpacity>
-              )}
+              <RdvActions
+                onReschedule={() => handleReprogrammer(nextReservation)}
+                onCancel={() => setCancelTarget(nextReservation)}
+                onQr={nextReservation.qr_code ? () => setQrTarget(nextReservation) : undefined}
+                onCalendar={() => handleAddToCalendar(nextReservation)}
+              />
             </View>
           </>
         )}
+
+        {/* ── 3b. MES AUTRES RDV À VENIR ───────────────────────────────── */}
+        {upcomingOthersSection}
 
         {/* ── 4. REPRENEZ LÀ OÙ VOUS EN ÉTIEZ ── masqué pour un nouveau client sans historique */}
         {resumeFav && !loadFailed && (
@@ -1664,6 +1723,55 @@ export default function ReservationsScreen() {
         onClose={() => setReviewModalTarget(null)}
         onChange={handleCommentChange}
       />
+
+      {/* Détail d'un RDV à venir (tap sur une mini-carte) */}
+      <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
+        <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
+          <View testID="upcoming-detail-modal" style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
+            {detailTarget && detailView && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.nextRdvBadgeWrap}>
+                  <View style={styles.nextRdvBadge}>
+                    <Text style={styles.nextRdvBadgeText}>{detailView.jourAbbr} {detailView.dateShort} · {detailView.daysLabel}</Text>
+                  </View>
+                </View>
+                <Text style={styles.mockRdvService}>
+                  <GoldItalic>{detailView.service}</GoldItalic>
+                </Text>
+                <View style={styles.mockRdvInfoRow}>
+                  <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.time')}</Text>
+                  <Text style={styles.mockRdvVal}>{detailView.dateLabel} · {detailView.time}</Text>
+                </View>
+                <View style={styles.mockRdvInfoRow}>
+                  <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.barber')}</Text>
+                  <Text style={styles.mockRdvVal}>{detailView.barbier}</Text>
+                </View>
+                <View style={[styles.mockRdvInfoRow, { marginBottom: 14 }]}>
+                  <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.address')}</Text>
+                  <Text style={styles.mockRdvVal}>{SALON_ADDRESS}</Text>
+                </View>
+                {detailBalance > 0 && (
+                  <View style={styles.soldePill}>
+                    <Text style={styles.soldeText}>{balanceLabel(detailBalance)}</Text>
+                  </View>
+                )}
+                <RdvActions
+                  idPrefix="detail-"
+                  onReschedule={() => fromDetail(() => handleReprogrammer(detailTarget))}
+                  onCancel={() => fromDetail(() => setCancelTarget(detailTarget))}
+                  onQr={detailTarget.qr_code ? () => fromDetail(() => setQrTarget(detailTarget)) : undefined}
+                  onCalendar={() => handleAddToCalendar(detailTarget)}
+                />
+              </ScrollView>
+            )}
+            <TouchableOpacity onPress={() => setDetailTarget(null)} style={{ marginTop: 14, alignItems: 'center' }}>
+              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>{t('common.close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <NotificationToast toast={toast} onHide={hideToast} />
 
     </View>
   );
@@ -1975,22 +2083,48 @@ const styles = StyleSheet.create({
     marginTop: -4,
     marginBottom: 10,
   },
-  leaveReviewBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(201,168,76,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.3)',
-    borderRadius: 100,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginTop: -4,
+
+  // ── Actions d'un RDV à venir (2 × 2) ─────────────────────────────────────────
+  rdvActions:    { gap: 10 },
+  rdvActionsRow: { flexDirection: 'row', gap: 10 },
+  rdvActionBtn:  { flex: 1, paddingHorizontal: 10, justifyContent: 'center' },
+  // Libellés longs (« 📅 Ajouter au calendrier ») : retour à la ligne plutôt que tronqués.
+  rdvActionText: { textAlign: 'center' },
+
+  // ── Mes autres RDV à venir ───────────────────────────────────────────────────
+  miniCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#111',
+    borderWidth: 0.5,
+    borderColor: '#C9A84C',
+    borderRadius: 8,
+    padding: 14,
     marginBottom: 10,
   },
-  leaveReviewBtnText: {
-    color: '#C9A84C',
-    fontSize: 12.5,
-    fontWeight: '600',
+  miniCardDate: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11.5,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
+  miniCardInfo: {
+    color: '#C9A84C',
+    fontFamily: Fonts.italic,
+    fontStyle: 'italic',
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  miniCardCancel: {
+    borderWidth: 0.5,
+    borderColor: 'rgba(192,57,43,0.6)',
+    borderRadius: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  miniCardCancelText: { color: '#E57368', fontSize: 12.5, fontWeight: '600' },
 
   // Avatar
   avatar:     { backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 1.5, borderColor: '#C9A84C', alignItems: 'center', justifyContent: 'center' },
