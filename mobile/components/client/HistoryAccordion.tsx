@@ -69,9 +69,14 @@ type ToggleProps = {
   unit: string;
   onPress: () => void;
   testID?: string;
+  // Libellés propres à une liste autre que l'historique (ex. RDV à venir).
+  collapsedLabel?: string;
+  expandedLabel?: string;
 };
 
-export function HistoryToggleButton({ expanded, hiddenCount, unit, onPress, testID }: ToggleProps) {
+export function HistoryToggleButton({
+  expanded, hiddenCount, unit, onPress, testID, collapsedLabel, expandedLabel,
+}: ToggleProps) {
   const { t } = useLanguage();
   return (
     <TouchableOpacity
@@ -85,8 +90,8 @@ export function HistoryToggleButton({ expanded, hiddenCount, unit, onPress, test
       <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={GOLD} />
       <Text style={styles.text}>
         {expanded
-          ? t('reservations.hideHistory')
-          : `${t('reservations.viewAllHistoryPrefix')} (${hiddenCount} ${unit})`}
+          ? expandedLabel ?? t('reservations.hideHistory')
+          : collapsedLabel ?? `${t('reservations.viewAllHistoryPrefix')} (${hiddenCount} ${unit})`}
       </Text>
     </TouchableOpacity>
   );

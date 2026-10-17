@@ -17,14 +17,14 @@ function parseApiDate(dateStr: string): Date {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
-// Le backend n'a pas de champ d'affectation barbier sur Reservation — "Willo" en
-// fallback ici reprend la même convention que le planning coiffeur (cf. planning.tsx).
+// "Willo" en fallback pour les anciens RDV sans barbier (même convention que le
+// planning coiffeur, cf. planning.tsx).
 function formatNextRdvLabel(reservation: Reservation & { time: string }, t: (key: TranslationKey) => string): string {
   const d = parseApiDate(reservation.date);
   const jourAbbr = t(`reservations.dayAbbr.${d.getDay()}` as TranslationKey);
   const moisAbbr = t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey);
   const heure = reservation.time.slice(0, 5);
-  return `${jourAbbr} ${d.getDate()} ${moisAbbr} · ${heure} · Willo`;
+  return `${jourAbbr} ${d.getDate()} ${moisAbbr} · ${heure} · ${reservation.barber ?? 'Willo'}`;
 }
 
 const GOLD = '#C9A84C';
@@ -110,7 +110,8 @@ export default function ClientIPadLayout({ active, children }: Props) {
   const sidebarWidth = useClientSidebarWidth();
   const { user, isAuthenticated } = useAuth();
   const { t } = useLanguage();
-  const { upcoming } = useReservations();
+  // Store partagé avec Mon espace : un RDV réservé ou annulé recompose la carte.
+  const { upcomingSorted } = useReservations();
   const NAV_ITEMS = NAV_ITEM_KEYS.map(item => ({ ...item, label: t(item.labelKey) }));
 
   const firstName = user?.first_name || user?.username || 'Client';
@@ -119,17 +120,8 @@ export default function ClientIPadLayout({ active, children }: Props) {
 
   const go = (route: ClientRoute) => router.push(ROUTES[route] as never);
 
-  // Même dérivation que "Prochain RDV" dans reservations.tsx : le plus proche des
-  // réservations à venir (pending/confirmed) dont la date+heure n'est pas déjà
-  // passée, trié par date+heure croissante.
-  const upcomingList = upcoming as (Reservation & { time: string })[];
-  const now = new Date();
-  const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
-  const nextReservation = isAuthenticated
-    ? upcomingList
-        .filter((r) => `${r.date}T${r.time}` >= nowKey)
-        .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0] ?? null
-    : null;
+  // Même "Prochain RDV" que la carte hero de reservations.tsx.
+  const nextReservation = isAuthenticated ? upcomingSorted[0] ?? null : null;
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -179,6 +171,7 @@ export default function ClientIPadLayout({ active, children }: Props) {
 
         {nextReservation && (
           <LinearGradient
+            testID="sidebar-next-rdv"
             colors={[GOLD, GOLD_DARK]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -199,7 +192,7 @@ export default function ClientIPadLayout({ active, children }: Props) {
                   : '';
                 const timeFormatted = nextReservation.time?.substring(0, 5) ?? '';
 
-                const message = `✂️ ${nextReservation.service_name}\n📅 ${dateFormatted}\n⏰ ${timeFormatted}\n👤 Willo\n📍 Rue Auguste Van Zande 78`;
+                const message = `✂️ ${nextReservation.service_name}\n📅 ${dateFormatted}\n⏰ ${timeFormatted}\n👤 ${nextReservation.barber ?? 'Willo'}\n📍 Rue Auguste Van Zande 78`;
 
                 if (Platform.OS === 'web') {
                   window.alert(message);
