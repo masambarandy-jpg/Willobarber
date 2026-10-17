@@ -34,6 +34,9 @@ import { fmtPrice } from '@/components/booking/data';
 import { useClientMedia } from '@/hooks/useClientMedia';
 import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 import ReservationComment from '@/components/client/ReservationComment';
+import {
+  HISTORY_PREVIEW_COUNT, HistoryToggleButton, useListAccordion, useTrackedScroll,
+} from '@/components/client/HistoryAccordion';
 import { reviewsApi, loyaltyApi } from '@/services/api';
 
 // Réutilisé par le ScrollView de l'onglet "Mes coupes" (tablette/web) pour rendre son
@@ -287,7 +290,12 @@ export default function ReservationsScreen() {
   // null = aucun RDV sélectionné — le panneau de détail (tablette) affiche alors un
   // message de sélection par défaut plutôt que le premier élément de la liste.
   const [selectedHistIndex, setSelectedHistIndex] = useState<number | null>(null);
-  const [showAllHistory, setShowAllHistory] = useState(false);
+  // Historique des RDV et des points : deux accordéons indépendants, repliés
+  // à l'arrivée (3 éléments). La ScrollView suivie est celle de la mise en page
+  // affichée (colonne droite tablette ou écran téléphone).
+  const historyScroll = useTrackedScroll();
+  const histAccordion = useListAccordion(historyScroll);
+  const pointsAccordion = useListAccordion(historyScroll);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [qrTarget, setQrTarget] = useState<(Reservation & { time: string }) | null>(null);
@@ -510,7 +518,7 @@ export default function ReservationsScreen() {
     if (index === -1) return;
     openedLinkRef.current = linkKey;
     setHistFilter('Tous');
-    setShowAllHistory(true);
+    histAccordion.setExpanded(true);
     if (isTablet) {
       setSelectedHistIndex(index);
       setLinkedOpenId(HISTORIQUE[index].id);
@@ -586,7 +594,49 @@ export default function ReservationsScreen() {
     ? HISTORIQUE
     : HISTORIQUE.filter(h => h.annee === histFilter);
 
-  const visibleHist = showAllHistory ? filteredHist : filteredHist.slice(0, 5);
+  const visibleHist = histAccordion.expanded ? filteredHist : filteredHist.slice(0, HISTORY_PREVIEW_COUNT);
+  const visibleTransactions = pointsAccordion.expanded ? TRANSACTIONS : TRANSACTIONS.slice(0, HISTORY_PREVIEW_COUNT);
+  const renderTransaction = (tx: (typeof TRANSACTIONS)[number]) => {
+    const isSpend = tx.type === 'spend';
+    const isBonus = tx.type === 'bonus';
+    const iconColor = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#C9A84C';
+    const ptColor   = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#4CAF50';
+    const ptPrefix  = isSpend ? '' : '+';
+    const iconChar  = isSpend ? '−' : isBonus ? '+' : '★';
+    return (
+      <View key={tx.id} style={styles.txRow}>
+        <View style={[styles.txIconCircle, { backgroundColor: iconColor + '22', borderColor: iconColor + '55' }]}>
+          <Text style={{ color: iconColor, fontSize: 14 }}>{iconChar}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.txReason}>{tx.reason}</Text>
+          <Text style={styles.txDate}>{tx.date}</Text>
+        </View>
+        <Text style={[styles.txPoints, { color: ptColor }]}>
+          {ptPrefix}{Math.abs(tx.points)} pts
+        </Text>
+      </View>
+    );
+  };
+
+  const histToggle = filteredHist.length > HISTORY_PREVIEW_COUNT && (
+    <HistoryToggleButton
+      expanded={histAccordion.expanded}
+      hiddenCount={filteredHist.length - HISTORY_PREVIEW_COUNT}
+      unit={t('reservations.rdvCountWord')}
+      onPress={histAccordion.toggle}
+      testID="btn-toggle-rdv-history"
+    />
+  );
+  const pointsToggle = TRANSACTIONS.length > HISTORY_PREVIEW_COUNT && (
+    <HistoryToggleButton
+      expanded={pointsAccordion.expanded}
+      hiddenCount={TRANSACTIONS.length - HISTORY_PREVIEW_COUNT}
+      unit={t('reservations.operationsCountWord')}
+      onPress={pointsAccordion.toggle}
+      testID="btn-toggle-points-history"
+    />
+  );
 
   const handleCancel = async (reason: string) => {
     if (!cancelTarget) return;
@@ -1013,6 +1063,9 @@ export default function ReservationsScreen() {
 
             {/* ═══ COLONNE DROITE (60%) ═══════════════════════════════ */}
             <ScrollView
+              ref={historyScroll.ref}
+              onScroll={historyScroll.onScroll}
+              scrollEventThrottle={16}
               style={styles.tabletRightCol}
               contentContainerStyle={styles.tabletColContent}
               showsVerticalScrollIndicator={false}
@@ -1029,7 +1082,7 @@ export default function ReservationsScreen() {
                 {['Tous', '2026', '2025'].map(yr => (
                   <Pressable
                     key={yr}
-                    onPress={() => { setHistFilter(yr); setSelectedHistIndex(null); }}
+                    onPress={() => { setHistFilter(yr); setSelectedHistIndex(null); histAccordion.setExpanded(false); }}
                     style={[styles.filterChip, histFilter === yr && styles.filterChipActive]}
                   >
                     <Text style={[styles.filterChipText, histFilter === yr && styles.filterChipTextActive]}>{yr === 'Tous' ? t('reservations.filter.all') : yr}</Text>
@@ -1044,6 +1097,7 @@ export default function ReservationsScreen() {
               ) : (
                 <View style={styles.histSplit}>
                   <View style={styles.histSplitList}>
+                    <View onLayout={histAccordion.onListLayout}>
                     {visibleHist.map((h, i) => {
                       const isSelected = selectedHistIndex === i;
                       return (
@@ -1064,16 +1118,8 @@ export default function ReservationsScreen() {
                         </Pressable>
                       );
                     })}
-                    {!showAllHistory && filteredHist.length > 5 && (
-                      <TouchableOpacity
-                        onPress={() => setShowAllHistory(true)}
-                        style={{ padding: 16, alignItems: 'center' }}
-                      >
-                        <Text style={{ color: '#C9A84C', fontSize: 14 }}>
-                          {t('reservations.viewAllHistoryPrefix')} ({filteredHist.length} {t('reservations.rdvCountWord')})
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+                    </View>
+                    {histToggle}
                   </View>
                   {selectedHistIndex === null ? (
                     <View style={styles.histSplitDetail}>
@@ -1218,34 +1264,21 @@ export default function ReservationsScreen() {
               <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
               {TRANSACTIONS.length === 0 ? (
                 <Text style={styles.emptyHist}>{t('reservations.transactionsEmpty')}</Text>
-              ) : TRANSACTIONS.map(tx => {
-                const isSpend = tx.type === 'spend';
-                const isBonus = tx.type === 'bonus';
-                const iconColor = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#C9A84C';
-                const ptColor   = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#4CAF50';
-                const ptPrefix  = isSpend ? '' : '+';
-                const iconChar  = isSpend ? '−' : isBonus ? '+' : '★';
-                return (
-                  <View key={tx.id} style={styles.txRow}>
-                    <View style={[styles.txIconCircle, { backgroundColor: iconColor + '22', borderColor: iconColor + '55' }]}>
-                      <Text style={{ color: iconColor, fontSize: 14 }}>{iconChar}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.txReason}>{tx.reason}</Text>
-                      <Text style={styles.txDate}>{tx.date}</Text>
-                    </View>
-                    <Text style={[styles.txPoints, { color: ptColor }]}>
-                      {ptPrefix}{Math.abs(tx.points)} pts
-                    </Text>
-                  </View>
-                );
-              })}
+              ) : (
+                <>
+                  <View onLayout={pointsAccordion.onListLayout}>{visibleTransactions.map(renderTransaction)}</View>
+                  {pointsToggle}
+                </>
+              )}
             </ScrollView>
           </View>
           )}
         </View>
       ) : (
       <ScrollView
+        ref={historyScroll.ref}
+        onScroll={historyScroll.onScroll}
+        scrollEventThrottle={16}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -1450,7 +1483,7 @@ export default function ReservationsScreen() {
           {['Tous', '2026', '2025'].map(yr => (
             <Pressable
               key={yr}
-              onPress={() => { setHistFilter(yr); setSelectedHistIndex(null); setShowAllHistory(false); }}
+              onPress={() => { setHistFilter(yr); setSelectedHistIndex(null); histAccordion.setExpanded(false); }}
               style={[styles.filterChip, histFilter === yr && styles.filterChipActive]}
             >
               <Text style={[styles.filterChipText, histFilter === yr && styles.filterChipTextActive]}>{yr === 'Tous' ? t('reservations.filter.all') : yr}</Text>
@@ -1463,7 +1496,8 @@ export default function ReservationsScreen() {
         ) : filteredHist.length === 0 ? (
           <Text style={styles.emptyHist}>{t('reservations.emptyHistory')}</Text>
         ) : (
-          visibleHist.map((h, i) => (
+          <View onLayout={histAccordion.onListLayout}>
+          {visibleHist.map((h, i) => (
             <React.Fragment key={i}>
               <View style={styles.histCard}>
                 <View style={styles.histDateBox}>
@@ -1502,19 +1536,10 @@ export default function ReservationsScreen() {
                 </View>
               )}
             </React.Fragment>
-          ))
+          ))}
+          </View>
         )}
-
-        {!showAllHistory && filteredHist.length > 5 && (
-          <TouchableOpacity
-            onPress={() => setShowAllHistory(true)}
-            style={{ padding: 16, alignItems: 'center' }}
-          >
-            <Text style={{ color: '#C9A84C', fontSize: 14 }}>
-              {t('reservations.viewAllHistoryPrefix')} ({filteredHist.length} {t('reservations.rdvCountWord')})
-            </Text>
-          </TouchableOpacity>
-        )}
+        {histToggle}
 
         {/* ── 7. PROGRAMME FIDÉLITÉ ─────────────────────────────────── */}
         <Text style={[styles.sectionKicker, { marginTop: 28 }]}>{t('reservations.loyalty.programTitle')}</Text>
@@ -1601,28 +1626,12 @@ export default function ReservationsScreen() {
         <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
         {TRANSACTIONS.length === 0 ? (
           <Text style={styles.emptyHist}>{t('reservations.transactionsEmpty')}</Text>
-        ) : TRANSACTIONS.map(tx => {
-          const isSpend = tx.type === 'spend';
-          const isBonus = tx.type === 'bonus';
-          const iconColor = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#C9A84C';
-          const ptColor   = isSpend ? '#E53935' : isBonus ? '#64B5F6' : '#4CAF50';
-          const ptPrefix  = isSpend ? '' : '+';
-          const iconChar  = isSpend ? '−' : isBonus ? '+' : '★';
-          return (
-            <View key={tx.id} style={styles.txRow}>
-              <View style={[styles.txIconCircle, { backgroundColor: iconColor + '22', borderColor: iconColor + '55' }]}>
-                <Text style={{ color: iconColor, fontSize: 14 }}>{iconChar}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.txReason}>{tx.reason}</Text>
-                <Text style={styles.txDate}>{tx.date}</Text>
-              </View>
-              <Text style={[styles.txPoints, { color: ptColor }]}>
-                {ptPrefix}{Math.abs(tx.points)} pts
-              </Text>
-            </View>
-          );
-        })}
+        ) : (
+          <>
+            <View onLayout={pointsAccordion.onListLayout}>{visibleTransactions.map(renderTransaction)}</View>
+            {pointsToggle}
+          </>
+        )}
         </>
         )}
       </ScrollView>

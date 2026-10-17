@@ -282,6 +282,8 @@ const fr = {
   'reservations.receiptTitle': 'Reçu',
   'reservations.viewAllHistoryPrefix': "Voir tout l'historique",
   'reservations.rdvCountWord': 'RDV',
+  'reservations.operationsCountWord': 'opérations',
+  'reservations.hideHistory': "Masquer l'historique",
   'reservations.myQrBtn': '🎫 Mon QR',
   'reservations.leaveReviewBtn': '⭐ Laisser un avis',
 
@@ -904,6 +906,8 @@ const nl: Record<TranslationKey, string> = {
   'reservations.receiptTitle': 'Bon',
   'reservations.viewAllHistoryPrefix': 'Bekijk de volledige geschiedenis',
   'reservations.rdvCountWord': 'afspraken',
+  'reservations.operationsCountWord': 'transacties',
+  'reservations.hideHistory': 'Geschiedenis verbergen',
   'reservations.myQrBtn': '🎫 Mijn QR',
   'reservations.leaveReviewBtn': '⭐ Een review achterlaten',
 
@@ -1523,6 +1527,8 @@ const en: Record<TranslationKey, string> = {
   'reservations.receiptTitle': 'Receipt',
   'reservations.viewAllHistoryPrefix': 'See full history',
   'reservations.rdvCountWord': 'appointments',
+  'reservations.operationsCountWord': 'transactions',
+  'reservations.hideHistory': 'Hide history',
   'reservations.myQrBtn': '🎫 My QR',
   'reservations.leaveReviewBtn': '⭐ Leave a review',
 
