@@ -16,6 +16,7 @@ import Svg, { Path, Circle, Rect, Line } from 'react-native-svg';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
+import { SessionExpiredError } from '@/services/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
@@ -55,6 +56,12 @@ export default function CartScreen() {
     try {
       paymentIntentId = await paymentRef.current?.pay(Number(finalTotal.toFixed(2)));
     } catch (e) {
+      // Session perdue (refresh impossible) : rien n'a été débité, on fait se
+      // reconnecter le client puis on relance la commande.
+      if (e instanceof SessionExpiredError) {
+        showLoginModal(handleCheckout, t('cart.loginPrompt'));
+        return;
+      }
       setCheckoutError(e instanceof Error && e.message ? e.message : t('cart.checkoutError'));
       return;
     } finally {
