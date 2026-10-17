@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, TextStyle, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, Text, TextStyle, View, useWindowDimensions } from 'react-native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -27,11 +27,49 @@ const UNDERLINE_FADE_DURATION = 250;
 const UNDERLINE_FADE_EASING = Easing.in(Easing.ease);
 const UNDERLINE_GRADIENT_COLORS = ['transparent', '#C9A84C', '#F6E7B8', '#C9A84C', 'transparent'] as const;
 
-const SWEEP_GRADIENT_COLORS = ['#C9A059', '#F6E7B8', '#FFF7DF', '#F6E7B8', '#C9A059'] as const;
+// Reflet doré : même dégradé que la classe CSS .gold-sweep (web). L'or des bords
+// est la couleur du texte, si bien que le dégradé est invisible hors du reflet.
+const GOLD = '#C9A84C';
+const SWEEP_GRADIENT_COLORS = [GOLD, '#F6E7B8', '#FFF7DF', '#F6E7B8', GOLD] as const;
+const SWEEP_GRADIENT_LOCATIONS = [0.34, 0.47, 0.5, 0.53, 0.66] as const;
+const SWEEP_SIZE_RATIO = 2.8; // background-size: 280%
+// background-position 120% -> -40% : décalage = position × (largeur texte − largeur dégradé).
+const SWEEP_FROM_X_RATIO = 1.2 * (1 - SWEEP_SIZE_RATIO);
+const SWEEP_TO_X_RATIO = -0.4 * (1 - SWEEP_SIZE_RATIO);
 const SWEEP_DURATION = 1400;
-const SWEEP_FADE_OUT_DURATION = 300;
-const SWEEP_LOOP_INTERVAL = 8000; // cycle complet (balayage + fondu + pause)
-const SWEEP_TRANSLATE_RATIO = 1.5; // +150% -> -150%
+const SWEEP_EASING = Easing.bezier(0.4, 0, 0.2, 1);
+const SWEEP_LOOP_INTERVAL = 8000;
+// Premier reflet une fois les 4 lignes entrées, puis « détail. » juste après « coupe, ».
+const SWEEP_START_DELAY = STAGGER_DELAYS.line4 + ENTRANCE_DURATION;
+const SWEEP_SECOND_LINE_OFFSET = 220;
+
+// Web : MaskedView n'y applique pas de masque (il rend le dégradé puis le texte
+// plein par-dessus, cf. MaskedView.web.js) — le reflet passe donc par du CSS
+// background-clip: text. Délais = ceux du natif (SWEEP_START_DELAY, +220ms).
+const GOLD_SWEEP_CSS = `
+.gold-sweep {
+  font-style: italic;
+  background-image: linear-gradient(100deg, #C9A84C 34%, #F6E7B8 47%, #FFF7DF 50%, #F6E7B8 53%, #C9A84C 66%);
+  background-size: 280% 100%;
+  background-position: 120% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmerLoop ${SWEEP_LOOP_INTERVAL}ms cubic-bezier(.4,0,.2,1) ${SWEEP_START_DELAY}ms infinite both;
+}
+.gold-sweep.second { animation-delay: ${SWEEP_START_DELAY + SWEEP_SECOND_LINE_OFFSET}ms; }
+@keyframes shimmerLoop {
+  0% { background-position: 120% 0 }
+  ${(SWEEP_DURATION / SWEEP_LOOP_INTERVAL) * 100}%, 100% { background-position: -40% 0 }
+}
+`;
+
+if (Platform.OS === 'web' && typeof document !== 'undefined' && !document.getElementById('gold-sweep-css')) {
+  const tag = document.createElement('style');
+  tag.id = 'gold-sweep-css';
+  tag.textContent = GOLD_SWEEP_CSS;
+  document.head.appendChild(tag);
+}
 
 function useResponsiveSizes() {
   const { width } = useWindowDimensions();
@@ -122,48 +160,35 @@ function GoldSweepText({
   style,
   delay,
   lineHeight,
+  second = false,
 }: {
   text: string;
   style: TextStyle;
   delay: number;
   lineHeight: number;
+  second?: boolean;
 }) {
   const [width, setWidth] = useState(0);
-  const translateX = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
+  const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!width) {
+    if (Platform.OS === 'web' || !width) {
       return;
     }
 
     const animation = Animated.sequence([
-      Animated.delay(delay + ENTRANCE_DURATION),
+      Animated.delay(delay),
       Animated.loop(
         Animated.sequence([
-          Animated.timing(translateX, {
+          Animated.timing(progress, {
             toValue: 1,
             duration: SWEEP_DURATION,
-            easing: Easing.inOut(Easing.ease),
+            easing: SWEEP_EASING,
             useNativeDriver: true,
           }),
-          Animated.timing(opacity, {
-            toValue: 0,
-            duration: SWEEP_FADE_OUT_DURATION,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(translateX, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-          Animated.delay(SWEEP_LOOP_INTERVAL - SWEEP_DURATION - SWEEP_FADE_OUT_DURATION),
-          Animated.timing(opacity, {
-            toValue: 1,
-            duration: 0,
-            useNativeDriver: true,
-          }),
+          Animated.delay(SWEEP_LOOP_INTERVAL - SWEEP_DURATION),
+          // Retour invisible : en fin de balayage, seul l'or du bord couvre le texte.
+          Animated.timing(progress, { toValue: 0, duration: 0, useNativeDriver: true }),
         ])
       ),
     ]);
@@ -174,9 +199,30 @@ function GoldSweepText({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [width]);
 
-  const translateXValue = translateX.interpolate({
+  if (Platform.OS === 'web') {
+    return (
+      <span
+        className={second ? 'gold-sweep second' : 'gold-sweep'}
+        style={{
+          display: 'inline-block',
+          whiteSpace: 'nowrap',
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+          lineHeight: `${style.lineHeight}px`,
+          letterSpacing: style.letterSpacing,
+          // La police est déjà la coupe italique : sans ça, font-style: italic
+          // (.gold-sweep) ajouterait une fausse inclinaison par-dessus.
+          fontSynthesis: 'none',
+        }}
+      >
+        {text}
+      </span>
+    );
+  }
+
+  const translateX = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [width * SWEEP_TRANSLATE_RATIO, width * -SWEEP_TRANSLATE_RATIO],
+    outputRange: [width * SWEEP_FROM_X_RATIO, width * SWEEP_TO_X_RATIO],
   });
 
   return (
@@ -192,15 +238,16 @@ function GoldSweepText({
       </Text>
       {width > 0 && (
         <MaskedView
-          style={[StyleSheet.absoluteFillObject, { width, height: lineHeight }]}
+          style={[StyleSheet.absoluteFill, { width, height: lineHeight }]}
           maskElement={<Text style={style}>{text}</Text>}
         >
-          <Animated.View style={{ flex: 1, opacity, transform: [{ translateX: translateXValue }] }}>
+          <Animated.View style={{ width: width * SWEEP_SIZE_RATIO, height: lineHeight, transform: [{ translateX }] }}>
             <LinearGradient
               colors={SWEEP_GRADIENT_COLORS}
+              locations={SWEEP_GRADIENT_LOCATIONS}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={{ width: width * 2.5, height: lineHeight }}
+              style={StyleSheet.absoluteFill}
             />
           </Animated.View>
         </MaskedView>
@@ -244,7 +291,7 @@ export default function AnimatedLuxuryTitle() {
     fontSize,
     lineHeight,
     letterSpacing,
-    color: SWEEP_GRADIENT_COLORS[0],
+    color: GOLD,
     fontFamily: 'CormorantGaramond_600SemiBold_Italic',
   };
 
@@ -259,7 +306,7 @@ export default function AnimatedLuxuryTitle() {
             colors={UNDERLINE_GRADIENT_COLORS}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
         </Animated.View>
       </View>
@@ -269,7 +316,7 @@ export default function AnimatedLuxuryTitle() {
             <GoldSweepText
               text={t('home.hero.line2')}
               style={goldTextStyle}
-              delay={STAGGER_DELAYS.line4}
+              delay={SWEEP_START_DELAY}
               lineHeight={lineHeight}
             />
           </Animated.View>
@@ -279,7 +326,7 @@ export default function AnimatedLuxuryTitle() {
             colors={UNDERLINE_GRADIENT_COLORS}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
         </Animated.View>
       </View>
@@ -292,7 +339,7 @@ export default function AnimatedLuxuryTitle() {
             colors={UNDERLINE_GRADIENT_COLORS}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
         </Animated.View>
       </View>
@@ -302,7 +349,8 @@ export default function AnimatedLuxuryTitle() {
             <GoldSweepText
               text={t('home.hero.line4')}
               style={goldTextStyle}
-              delay={STAGGER_DELAYS.line4}
+              delay={SWEEP_START_DELAY + SWEEP_SECOND_LINE_OFFSET}
+              second
               lineHeight={lineHeight}
             />
           </Animated.View>
@@ -312,7 +360,7 @@ export default function AnimatedLuxuryTitle() {
             colors={UNDERLINE_GRADIENT_COLORS}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
         </Animated.View>
       </View>
