@@ -1,11 +1,15 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { router } from 'expo-router';
+import { OrderStatusToast } from '@/components/OrderStatusToast';
 import { API_BASE_URL } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useSSE } from '@/hooks/useSSE';
 import { clientNotificationsApi, TokenStorage } from '@/services/api';
-import type { ClientNotification } from '@/types';
+import type { ClientNotification, OrderStatusEvent } from '@/types';
 
-const SSE_EVENTS = ['notification'] as const;
+// notification : nouvelle entrée de la 🔔 ; order_status_changed : toast quand
+// le coiffeur fait avancer une commande boutique (la notif cloche arrive à part).
+const SSE_EVENTS = ['notification', 'order_status_changed'] as const;
 // Repli si le flux SSE ne passe pas (cf. useSSE) : les notifications client ne
 // sont pas critiques à la seconde près, un rechargement toutes les 30 s suffit.
 const FALLBACK_POLLING_MS = 30000;
@@ -32,6 +36,8 @@ export function ClientNotificationsProvider({ children }: { children: React.Reac
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
+  const [orderToast, setOrderToast] = useState<OrderStatusEvent | null>(null);
+  const hideOrderToast = useCallback(() => setOrderToast(null), []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -62,7 +68,12 @@ export function ClientNotificationsProvider({ children }: { children: React.Reac
   useSSE<(typeof SSE_EVENTS)[number]>({
     url: token && !polling ? `${API_BASE_URL}/sse/client/?token=${encodeURIComponent(token)}` : null,
     events: SSE_EVENTS,
-    onEvent: (_event, data) => {
+    onEvent: (event, data) => {
+      if (event === 'order_status_changed') {
+        const payload = data as OrderStatusEvent | null;
+        if (payload?.order_id) setOrderToast(payload);
+        return;
+      }
       const notif = data as ClientNotification | null;
       if (!notif?.id) return;
       setNotifications((prev) => [notif, ...prev.filter((n) => n.id !== notif.id)]);
@@ -90,6 +101,14 @@ export function ClientNotificationsProvider({ children }: { children: React.Reac
   return (
     <ClientNotificationsContext.Provider value={{ notifications, unreadCount, loading, refresh, markRead }}>
       {children}
+      <OrderStatusToast
+        event={orderToast}
+        onHide={hideOrderToast}
+        onPress={() => {
+          setOrderToast(null);
+          router.push('/(tabs)/notifications');
+        }}
+      />
     </ClientNotificationsContext.Provider>
   );
 }

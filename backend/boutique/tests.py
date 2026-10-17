@@ -221,6 +221,45 @@ class BoutiqueStaffOrderTests(TestCase):
         self.assertEqual(response.data['status_label'], 'Expédiée')
         publish.assert_called_once_with('boutique_order_updated', {'order_id': self.order.id, 'status': 'shipped'})
 
+    @patch('core.sse.publish')
+    @patch('core.sse.publish_to_client', return_value=1)
+    def test_status_change_notifies_only_the_client_once(self, publish_to_client, publish):
+        self.api.force_authenticate(self.staff)
+        url = f'/api/boutique/gestion/commandes/{self.order.id}/'
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.api.patch(url, {'status': 'shipped'}, format='json')
+        notif = Notification.objects.get(type='order_status')
+        self.assertEqual((notif.user, notif.title), (self.customer, '🚚 Votre commande est en route !'))
+        events = {c.args[1]: c.args[2] for c in publish_to_client.call_args_list}
+        self.assertEqual({c.args[0] for c in publish_to_client.call_args_list}, {self.customer.id})
+        self.assertEqual(events['order_status_changed'], {
+            'type': 'order_status_changed', 'order_id': self.order.id, 'order_number': self.order.numero,
+            'status': 'shipped', 'delivery_type': 'domicile', 'message': '🚚 Votre commande est en route !',
+            'notification_id': notif.id,
+        })
+        self.assertIn('notification', events)
+
+        # Re-clic sur le même statut : ni notification ni événement de plus.
+        publish_to_client.reset_mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self.api.patch(url, {'status': 'shipped'}, format='json').status_code, 200)
+        publish_to_client.assert_not_called()
+        self.assertEqual(Notification.objects.filter(type='order_status').count(), 1)
+
+    @patch('core.sse.publish')
+    @patch('core.sse.publish_to_client', return_value=1)
+    def test_pickup_order_ready_message(self, publish_to_client, publish):
+        self.order.delivery_type = 'retrait_salon'
+        self.order.save()
+        self.api.force_authenticate(self.staff)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.api.patch(f'/api/boutique/gestion/commandes/{self.order.id}/', {'status': 'ready'}, format='json')
+        self.assertEqual(
+            Notification.objects.get(type='order_status').title,
+            '🏪 Votre commande est prête à retirer au salon !',
+        )
+
     def test_signed_invoice_link(self):
         url = boutique_invoice_url(self.order, 'http://testserver/')
         response = self.api.get(url)

@@ -73,10 +73,12 @@ def publish(event, payload):
 
 
 def publish_to_client(user_id, event, payload):
+    """Retourne le nombre de flux ouverts par ce client qui ont reçu l'événement."""
     message = _format(event, payload)
     with _lock:
         queues = list(_client_subscribers.get(user_id, ()))
     _put_all(queues, message)
+    return len(queues)
 
 
 def _stream(registry, key):

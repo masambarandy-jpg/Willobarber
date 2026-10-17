@@ -267,6 +267,7 @@ class Notification(models.Model):
         ('seasonal_reminder', 'Rappel de visite'),
         ('invoice', 'Facture'),
         ('boutique_invoice', 'Facture boutique'),
+        ('order_status', 'Suivi de commande'),
         # Notification coiffeur (user NULL) : commande boutique payée.
         ('boutique_order', 'Commande boutique'),
     ]
