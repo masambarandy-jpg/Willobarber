@@ -422,31 +422,31 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
         >
           <View style={{
             flex: 1,
-            backgroundColor: '#000000',
             justifyContent: 'center',
             alignItems: 'center',
             padding: 16,
           }}>
+          {/* Fond assombri + flou : couvre tout l'écran (enfant direct du Modal,
+              pas du KeyboardAvoidingView qui n'a que la taille de la carte) */}
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { opacity: overlayAnim }]}
+            pointerEvents={closing ? 'none' : 'auto'}
+          >
+            <View style={[StyleSheet.absoluteFill, styles.overlayTint]} />
+            {Platform.OS !== 'web' && (
+              <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+            )}
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              onPress={handleClose}
+              activeOpacity={1}
+            />
+          </Animated.View>
+
           <KeyboardAvoidingView
             style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           >
-            {/* Fond flou */}
-            <Animated.View
-              style={[StyleSheet.absoluteFillObject, { opacity: overlayAnim }]}
-              pointerEvents={closing ? 'none' : 'auto'}
-            >
-              <View style={[StyleSheet.absoluteFillObject, styles.overlayTint]} />
-              {Platform.OS !== 'web' && (
-                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} />
-              )}
-              <TouchableOpacity
-                style={StyleSheet.absoluteFill}
-                onPress={handleClose}
-                activeOpacity={1}
-              />
-            </Animated.View>
-
             {/* Carte modale centrée */}
             <Animated.View
               style={[
@@ -765,7 +765,7 @@ export const useAuthModal = () => useContext(AuthModalContext);
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 9999,
     justifyContent: 'center',
     alignItems: 'center',

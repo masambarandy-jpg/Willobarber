@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     overflow: 'hidden',
   },
-  heroBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#1A1814' },
+  heroBg: { ...StyleSheet.absoluteFill, backgroundColor: '#1A1814' },
   avatar: {
     backgroundColor: 'rgba(201,168,76,0.15)',
     borderWidth: 2,
