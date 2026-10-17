@@ -1,8 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useSegments } from 'expo-router';
+import { router, useSegments } from 'expo-router';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { NotificationToast, type ToastData } from '@/components/NotificationToast';
 import { API_BASE_URL } from '@/constants';
 import { useSSE } from '@/hooks/useSSE';
 import { coiffeurAuthFetch } from '@/services/api';
@@ -14,6 +15,7 @@ const SSE_EVENTS: readonly CoiffeurSseEvent[] = [
   'reservation_updated',
   'new_boutique_order',
   'boutique_order_updated',
+  'new_comment',
 ];
 // Repli si le flux SSE ne passe pas (cf. useSSE) : rechargement périodique.
 const FALLBACK_POLLING_MS = 5000;
@@ -208,6 +210,9 @@ function mapApiNotif(n: ApiNotif): Notif {
     phone: d.client_phone || undefined,
     cancelledAt: n.type === 'annulation' ? time : undefined,
     order: n.type === 'boutique_order' ? d : undefined,
+    reviewId: d.review_id ?? undefined,
+    rating: d.rating ?? undefined,
+    reviewText: d.comment || undefined,
   };
 }
 
@@ -234,6 +239,8 @@ type CoiffeurNotificationsContextType = {
   reservationsVersion: number;
   // Idem pour les commandes boutique (nouvelle commande payée, statut modifié).
   ordersVersion: number;
+  // Idem pour les commentaires clients (écran Avis clients).
+  commentsVersion: number;
 };
 
 const CoiffeurNotificationsContext = createContext<CoiffeurNotificationsContextType>({
@@ -243,6 +250,7 @@ const CoiffeurNotificationsContext = createContext<CoiffeurNotificationsContextT
   marquerLue: () => {},
   reservationsVersion: 0,
   ordersVersion: 0,
+  commentsVersion: 0,
 });
 
 export function CoiffeurNotificationsProvider({ children }: { children: React.ReactNode }) {
@@ -252,6 +260,9 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [reservationsVersion, setReservationsVersion] = useState(0);
   const [ordersVersion, setOrdersVersion] = useState(0);
+  const [commentsVersion, setCommentsVersion] = useState(0);
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const hideToast = useCallback(() => setToast(null), []);
   const [polling, setPolling] = useState(false);
   const knownIds = useRef<Set<string> | null>(null);
 
@@ -270,6 +281,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
 
   const bumpReservations = useCallback(() => setReservationsVersion((v) => v + 1), []);
   const bumpOrders = useCallback(() => setOrdersVersion((v) => v + 1), []);
+  const bumpComments = useCallback(() => setCommentsVersion((v) => v + 1), []);
 
   const fetchNotifications = useCallback(async () => {
     if (token === undefined) return;
@@ -290,8 +302,9 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
       const previous = knownIds.current;
       knownIds.current = new Set(mapped.map((n) => n.id));
       const fresh = previous ? mapped.filter((n) => !previous.has(n.id)) : [];
-      if (fresh.some((n) => n.type !== 'boutique_order')) bumpReservations();
+      if (fresh.some((n) => n.type !== 'boutique_order' && n.type !== 'avis')) bumpReservations();
       if (fresh.some((n) => n.type === 'boutique_order')) bumpOrders();
+      if (fresh.some((n) => n.type === 'avis')) bumpComments();
 
       setNotifications(mapped);
     } catch (error) {
@@ -300,7 +313,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
     } finally {
       setLoading(false);
     }
-  }, [token, bumpReservations, bumpOrders]);
+  }, [token, bumpReservations, bumpOrders, bumpComments]);
 
   useEffect(() => {
     fetchNotifications();
@@ -320,6 +333,17 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
     events: SSE_EVENTS,
     onEvent: (event, data) => {
       const payload = (data ?? {}) as CoiffeurEvent;
+      if (event === 'new_comment') {
+        prependNotification(payload.notification);
+        bumpComments();
+        setToast({
+          message: `Nouveau message de ${payload.client_name ?? 'un client'}`,
+          subtitle: payload.comment ? `« ${payload.comment} »` : payload.service_name,
+          href: payload.review_id != null ? `/coiffeur/avis?reviewId=${payload.review_id}` : '/coiffeur/avis',
+          testID: 'new-comment-toast',
+        });
+        return;
+      }
       if (event === 'new_reservation' || event === 'reservation_cancelled' || event === 'new_boutique_order') {
         prependNotification(payload.notification);
       }
@@ -332,6 +356,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
         fetchNotifications();
         bumpReservations();
         bumpOrders();
+        bumpComments();
       }
     },
     onFallback: () => setPolling(true),
@@ -363,8 +388,18 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
   const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
-    <CoiffeurNotificationsContext.Provider value={{ notifications, unreadCount, loading, marquerLue, reservationsVersion, ordersVersion }}>
+    <CoiffeurNotificationsContext.Provider
+      value={{ notifications, unreadCount, loading, marquerLue, reservationsVersion, ordersVersion, commentsVersion }}
+    >
       {children}
+      <NotificationToast
+        toast={toast}
+        onHide={hideToast}
+        onPress={({ href }) => {
+          setToast(null);
+          router.push(href as never);
+        }}
+      />
     </CoiffeurNotificationsContext.Provider>
   );
 }

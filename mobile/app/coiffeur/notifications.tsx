@@ -232,15 +232,15 @@ export default function CoiffeurNotificationsScreen() {
                         <Avatar letter={selectedNotif.avatarLetter ?? (client.charAt(0).toUpperCase() || '?')} size={32} />
                         <Text style={styles.avisName}>{client}</Text>
                       </View>
-                      <View style={styles.avisStarsRow}>
-                        {Array.from({ length: 5 }, (_, i) => (
-                          <StarIcon key={i} filled={i < rating} />
-                        ))}
-                      </View>
-                      {/* reviewText n'est jamais renvoyé par l'API (le modèle
-                          Notification ne garde pas de lien vers le Review) —
-                          on retombe sur desc, qui contient au moins client/
-                          prestation/note. */}
+                      {rating > 0 && (
+                        <View style={styles.avisStarsRow}>
+                          {Array.from({ length: 5 }, (_, i) => (
+                            <StarIcon key={i} filled={i < rating} />
+                          ))}
+                        </View>
+                      )}
+                      {/* reviewText vient de data.comment (notifications créées
+                          depuis l'ajout des commentaires) ; sinon desc. */}
                       <Text style={styles.avisQuote}>
                         {selectedNotif.reviewText ? `« ${selectedNotif.reviewText} »` : selectedNotif.desc}
                       </Text>

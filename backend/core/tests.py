@@ -584,3 +584,117 @@ class OAuthLoginTests(TestCase):
         for body in ({'identifier': 'willo@salon.test'}, {'identifier': '+32 470 00 00 00'}):
             response = self.api.post('/api/auth/passwordless-login/', body, format='json')
             self.assertEqual(response.status_code, 404)
+
+
+@patch('core.views.queue_reservation_email')
+class LoyaltyPointsTests(TestCase):
+    def setUp(self):
+        owner = User.objects.create_user('owner', role='admin')
+        shop = Barbershop.objects.create(name='WB', address='x', phone='x', owner=owner)
+        self.signature = Service.objects.create(name='Signature', price=45, duration=45, barbershop=shop)
+        self.kids = Service.objects.create(name='Coupe enfant -15', price=15, duration=30, barbershop=shop, category='enfant')
+        self.user = User.objects.create_user('randy', role='client')
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def book(self, service, barber, child_count=1):
+        body = {'service': service.id, 'date': '2026-11-20', 'time': '15:30', 'barber': barber, 'child_count': child_count}
+        response = self.api.post('/api/reservations/', body, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        return response.data
+
+    def points(self):
+        self.user.refresh_from_db()
+        return self.user.loyalty_points
+
+    def test_three_child_cuts_give_30_points(self, _mail):
+        # Groupe de 3 enfants = 3 réservations (cf. book.tsx), la 1re porte child_count.
+        for i, barber in enumerate(('Willo', 'Malik', 'Idris')):
+            data = self.book(self.kids, barber, child_count=3 if i == 0 else 1)
+            self.assertEqual(data['loyalty_points'], 10)
+        self.assertEqual(self.points(), 30)
+
+    def test_adult_signature_still_gives_two_points_per_euro(self, _mail):
+        data = self.book(self.signature, 'Willo')
+        self.assertEqual((data['loyalty_points'], self.points()), (90, 90))
+
+    def test_cancelled_child_cut_removes_its_10_points(self, _mail):
+        self.book(self.signature, 'Willo')
+        kid = self.book(self.kids, 'Malik')
+        self.api.patch(f"/api/reservations/{kid['id']}/", {'status': 'cancelled_client'}, format='json')
+        self.assertEqual(self.points(), 90)
+
+
+@patch('core.sse.publish_to_client', return_value=1)
+@patch('core.sse.publish')
+class ReservationCommentTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user('owner', role='admin')
+        shop = Barbershop.objects.create(name='WB', address='x', phone='x', owner=self.staff)
+        service = Service.objects.create(name='Signature', price=45, duration=45, barbershop=shop)
+        self.user = User.objects.create_user('randy', first_name='Randy', role='client')
+        self.other = User.objects.create_user('other', role='client')
+        self.past = Reservation.objects.create(
+            user=self.user, service=service, date=date(2026, 9, 1), time=time(10, 0), status='confirmed', barber='Malik',
+        )
+        self.future = Reservation.objects.create(
+            user=self.user, service=service, date=date(2027, 1, 5), time=time(10, 0), status='confirmed',
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def url(self, reservation, suffix=''):
+        return f'/api/reservations/{reservation.id}/comment/{suffix}'
+
+    def comment(self, text='Merci Malik, top !', **extra):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.api.post(self.url(self.past), {'text': text, **extra}, format='json')
+
+    def test_comment_notifies_coiffeur_in_real_time(self, publish, publish_to_client):
+        r = self.comment(rating=5)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data['comment'], r.data['rating'], r.data['barber_name']), ('Merci Malik, top !', 5, 'Malik'))
+        event, payload = publish.call_args.args
+        self.assertEqual(event, 'new_comment')
+        self.assertEqual(payload['notification']['title'], 'Nouveau message de Randy')
+        self.assertEqual((payload['review_id'], payload['reservation_id']), (r.data['id'], self.past.id))
+
+    def test_rating_is_optional(self, *_):
+        self.assertIsNone(self.comment().data['rating'])
+
+    def test_only_past_attended_own_reservations(self, *_):
+        self.assertEqual(self.api.post(self.url(self.future), {'text': 'x'}, format='json').status_code, 400)
+        self.past.status = 'no_show'
+        self.past.save()
+        self.assertEqual(self.comment().status_code, 400)
+        self.api.force_authenticate(self.other)
+        self.assertEqual(self.comment().status_code, 404)
+
+    def test_edit_and_delete(self, *_):
+        self.comment()
+        self.assertEqual(self.comment().status_code, 400)  # un seul commentaire par RDV
+        r = self.api.patch(self.url(self.past), {'text': '  Encore mieux  '}, format='json')
+        self.assertEqual(r.data['comment'], 'Encore mieux')
+        self.assertEqual(self.api.patch(self.url(self.past), {'text': 'x' * 501}, format='json').status_code, 400)
+        self.assertEqual(self.api.delete(self.url(self.past)).status_code, 204)
+        self.assertEqual(self.api.delete(self.url(self.past)).status_code, 404)
+
+    def test_reply_notifies_only_the_client(self, publish, publish_to_client):
+        review_id = self.comment().data['id']
+        self.assertEqual(self.api.post(self.url(self.past, 'reply/'), {'text': 'Merci !'}, format='json').status_code, 403)
+
+        self.api.force_authenticate(self.staff)
+        self.assertEqual(self.api.get('/api/coiffeur/comments/').data[0]['id'], review_id)
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.api.post(self.url(self.past, 'reply/'), {'text': 'Merci à vous Randy !'}, format='json')
+        self.assertEqual(r.data['reply'], 'Merci à vous Randy !')
+        events = {c.args[1]: c.args[2] for c in publish_to_client.call_args_list}
+        self.assertEqual({c.args[0] for c in publish_to_client.call_args_list}, {self.user.id})
+        self.assertEqual(events['new_comment_reply']['reservation_id'], self.past.id)
+        self.assertEqual(events['notification']['type'], 'comment_reply')
+        self.assertEqual(events['notification']['title'], 'Votre barbier vous a répondu !')
+
+    def test_legacy_review_endpoint_works_on_past_reservation(self, *_):
+        # Avant : exigeait status='completed', que rien ne posait → toujours refusé.
+        r = self.api.post('/api/reviews/', {'reservation': self.past.id, 'rating': 4, 'comment': 'Bien'}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)

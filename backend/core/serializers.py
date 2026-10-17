@@ -1,5 +1,6 @@
 from django.utils import timezone
 from rest_framework import serializers
+from .loyalty import reservation_points
 from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitingList, BarberLeave, Notification, NotificationPreference, PaymentCard
 
 
@@ -53,10 +54,16 @@ class ReservationSerializer(serializers.ModelSerializer):
     client_display_name = serializers.SerializerMethodField()
     service_name = serializers.CharField(source='service.name', read_only=True)
     service_price = serializers.DecimalField(source='service.price', max_digits=6, decimal_places=2, read_only=True)
+    service_category = serializers.CharField(source='service.category', read_only=True)
     qr_code = serializers.CharField(read_only=True)
+    # Points gagnés avec ce RDV (historique fidélité de l'app).
+    loyalty_points = serializers.SerializerMethodField()
 
     def get_client_display_name(self, obj):
         return 'Client supprimé' if obj.user.is_deleted else obj.user.username
+
+    def get_loyalty_points(self, obj):
+        return reservation_points(obj)
 
     class Meta:
         model = Reservation
@@ -68,6 +75,8 @@ class ReservationSerializer(serializers.ModelSerializer):
             'service',
             'service_name',
             'service_price',
+            'service_category',
+            'loyalty_points',
             'date',
             'time',
             'status',
@@ -133,17 +142,19 @@ class BarberLeaveSerializer(serializers.ModelSerializer):
 
 
 class ReviewSerializer(serializers.ModelSerializer):
+    """Commentaire client sur un RDV passé (note facultative) + réponse du barbier."""
     client_name = serializers.SerializerMethodField()
     service_name = serializers.SerializerMethodField()
     reservation_date = serializers.SerializerMethodField()
+    barber_name = serializers.CharField(source='reservation.barber', read_only=True)
     reply = serializers.CharField(read_only=True, allow_null=True)
     replied_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
     class Meta:
         model = Review
         fields = [
-            'id', 'rating', 'comment', 'created_at', 'client_name', 'service_name',
-            'reservation_date', 'reservation', 'reply', 'replied_at',
+            'id', 'rating', 'comment', 'created_at', 'updated_at', 'client_name', 'service_name',
+            'reservation_date', 'reservation', 'barber_name', 'reply', 'replied_at',
         ]
 
     def get_client_name(self, obj):
