@@ -42,6 +42,13 @@
       ],
       "expo-video",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "WilloBarber utilise l'appareil photo pour scanner le QR code de réservation de vos clients.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-media-library",
         {
           "photosPermission": "WilloBarber a besoin d'accéder à vos photos pour sauvegarder vos coupes téléchargées.",

@@ -198,6 +198,17 @@ export function CameraIcon({ color = '#1a1208', size = 14 }: IconProps) {
   );
 }
 
+export function QrIcon({ color = '#1a1208', size = 16 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...base}>
+      <Rect x="3" y="3" width="7" height="7" rx="1" />
+      <Rect x="14" y="3" width="7" height="7" rx="1" />
+      <Rect x="3" y="14" width="7" height="7" rx="1" />
+      <Path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3" />
+    </Svg>
+  );
+}
+
 export function ChatIcon({ color = '#1a1208', size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...base}>

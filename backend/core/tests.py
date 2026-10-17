@@ -698,3 +698,78 @@ class ReservationCommentTests(TestCase):
         # Avant : exigeait status='completed', que rien ne posait → toujours refusé.
         r = self.api.post('/api/reviews/', {'reservation': self.past.id, 'rating': 4, 'comment': 'Bien'}, format='json')
         self.assertEqual(r.status_code, 201, r.data)
+
+
+class CheckinClientProfileTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user('owner', role='admin')
+        shop = Barbershop.objects.create(name='WB', address='x', phone='x', owner=self.staff)
+        self.signature = Service.objects.create(name='Signature', price=45, duration=45, barbershop=shop)
+        self.beard = Service.objects.create(name='Barbe', price=20, duration=20, barbershop=shop)
+        self.fade = Service.objects.create(name='Dégradé', price=30, duration=30, barbershop=shop)
+        self.color = Service.objects.create(name='Coloration', price=50, duration=60, barbershop=shop)
+        self.client_user = User.objects.create_user(
+            'randy', first_name='Randy', last_name='M', role='client', loyalty_points=240,
+        )
+        self.today = self.book(self.signature, date(2026, 10, 17), 'Malik')
+        self.api = APIClient()
+        self.api.force_authenticate(self.staff)
+
+    def book(self, service, day, barber='Willo', status='confirmed', at=time(10, 0)):
+        return Reservation.objects.create(
+            user=self.client_user, service=service, date=day, time=at, status=status, barber=barber,
+        )
+
+    def url(self, reservation):
+        return f'/api/checkin/{reservation.qr_code}/'
+
+    def test_valid_scan_checks_in_and_returns_profile(self):
+        r = self.api.post(self.url(self.today))
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertFalse(r.data['already_checked_in'])
+        self.assertTrue(r.data['reservation']['checked_in'])
+        self.assertEqual(r.data['reservation']['service_name'], 'Signature')
+        profile = r.data['client_profile']
+        self.assertEqual((profile['first_name'], profile['loyalty_points'], profile['total_visits']), ('Randy', 240, 1))
+        self.assertIsNone(profile['last_visit'])
+        self.today.refresh_from_db()
+        self.assertTrue(self.today.checked_in)
+
+    def test_second_scan_reports_already_checked_in(self):
+        first = self.api.post(self.url(self.today))
+        second = self.api.post(self.url(self.today))
+        self.assertTrue(second.data['already_checked_in'])
+        self.assertEqual(second.data['reservation']['checked_in_at'], first.data['reservation']['checked_in_at'])
+
+    def test_get_previews_profile_without_checking_in(self):
+        r = self.api.get(self.url(self.today))
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.data['reservation']['checked_in'])
+        self.today.refresh_from_db()
+        self.assertFalse(self.today.checked_in)
+
+    def test_non_staff_is_forbidden(self):
+        self.api.force_authenticate(self.client_user)
+        self.assertEqual(self.api.post(self.url(self.today)).status_code, 403)
+        self.assertEqual(self.api.get(self.url(self.today)).status_code, 403)
+        self.today.refresh_from_db()
+        self.assertFalse(self.today.checked_in)
+
+    def test_unknown_qr_returns_404(self):
+        r = self.api.post('/api/checkin/00000000-0000-0000-0000-000000000000/')
+        self.assertEqual(r.status_code, 404)
+        self.assertIn('error', r.data)
+
+    def test_profile_counts_only_honoured_past_visits(self):
+        self.book(self.fade, date(2026, 6, 1), 'Malik')
+        self.book(self.fade, date(2026, 8, 1), 'Malik', status='pending')
+        self.book(self.beard, date(2026, 9, 1), 'Idris')
+        self.book(self.color, date(2026, 9, 20), 'Willo', status='cancelled_client')
+        self.book(self.color, date(2026, 9, 25), 'Willo', status='no_show')
+        self.book(self.color, date(2026, 12, 1), 'Willo')  # futur : pas encore une visite
+
+        profile = self.api.get(self.url(self.today)).data['client_profile']
+        self.assertEqual(profile['total_visits'], 4)
+        self.assertEqual(profile['last_visit'], date(2026, 9, 1))
+        self.assertEqual(profile['favorite_services'], ['Dégradé', 'Barbe', 'Signature'])
+        self.assertEqual(profile['favorite_barber'], 'Malik')
