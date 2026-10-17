@@ -485,3 +485,80 @@ class OpeningHoursTests(TestCase):
         days = self.api.get('/api/barbers/availability/', {'week_start': self.monday}).data['barbers']['Willo']['days']
         self.assertEqual((days[4]['state'], days[4]['total']), ('open', 6))
         self.assertEqual(days[2]['state'], 'closed')
+
+
+class OAuthLoginTests(TestCase):
+    """L'oauth-login ne fait confiance qu'à un id_token Google vérifié — jamais
+    à un email envoyé par l'app (faille : prise de contrôle de n'importe quel
+    compte, y compris celui du gérant, avec juste son email)."""
+
+    CLIENT_ID = 'test-client.apps.googleusercontent.com'
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        cls.google_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        cls.attacker_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+    def setUp(self):
+        self.admin = User.objects.create_user('willo', email='willo@salon.test', role='admin', phone='32470000000')
+        self.api = APIClient()
+        signing_key = SimpleNamespace(key=self.google_key.public_key())
+        jwks = patch('core.oauth._google_jwks.get_signing_key_from_jwt', return_value=signing_key)
+        jwks.start()
+        self.addCleanup(jwks.stop)
+
+    def id_token(self, key=None, **claims):
+        import jwt
+        now = datetime.now(tz=SALON_TZ)
+        payload = {
+            'iss': 'https://accounts.google.com', 'aud': self.CLIENT_ID, 'sub': '1234',
+            'iat': now, 'exp': now + timedelta(minutes=5),
+            'email': 'nouveau@gmail.com', 'email_verified': True,
+            'given_name': 'Nora', 'family_name': 'Client', **claims,
+        }
+        return jwt.encode(payload, key or self.google_key, algorithm='RS256')
+
+    def login(self, body):
+        with self.settings(GOOGLE_OAUTH_CLIENT_IDS=[self.CLIENT_ID]):
+            return self.api.post('/api/auth/oauth-login/', body, format='json')
+
+    def test_email_alone_is_refused(self):
+        response = self.login({'email': 'willo@salon.test'})
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('access', response.data)
+
+    def test_forged_expired_or_foreign_tokens_are_refused(self):
+        for token in (
+            self.id_token(key=self.attacker_key, email='willo@salon.test'),  # pas signé par Google
+            self.id_token(email='willo@salon.test', aud='autre-app'),         # autre application
+            self.id_token(email='willo@salon.test', exp=datetime.now(tz=SALON_TZ) - timedelta(minutes=1)),
+            self.id_token(email='willo@salon.test', iss='https://evil.example'),
+            self.id_token(email='willo@salon.test', email_verified=False),
+        ):
+            response = self.login({'id_token': token})
+            self.assertEqual(response.status_code, 401, response.data)
+
+    def test_valid_token_logs_in_with_the_email_from_the_token(self):
+        # L'email du body est ignoré : seul celui du token vérifié compte.
+        response = self.login({'id_token': self.id_token(), 'email': 'willo@salon.test'})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['user']['email'], 'nouveau@gmail.com')
+        user = User.objects.get(email='nouveau@gmail.com')
+        self.assertEqual((user.first_name, user.role, user.has_usable_password()), ('Nora', 'client', False))
+
+    def test_existing_account_with_verified_google_email(self):
+        response = self.login({'id_token': self.id_token(email='willo@salon.test')})
+        self.assertEqual(response.data['user']['username'], 'willo')
+
+    def test_not_configured_and_other_providers(self):
+        with self.settings(GOOGLE_OAUTH_CLIENT_IDS=[]):
+            response = self.api.post('/api/auth/oauth-login/', {'id_token': self.id_token()}, format='json')
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(self.login({'provider': 'microsoft', 'email': 'willo@salon.test'}).status_code, 400)
+
+    def test_passwordless_login_no_longer_exists(self):
+        for body in ({'identifier': 'willo@salon.test'}, {'identifier': '+32 470 00 00 00'}):
+            response = self.api.post('/api/auth/passwordless-login/', body, format='json')
+            self.assertEqual(response.status_code, 404)

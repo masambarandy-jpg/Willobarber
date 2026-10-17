@@ -53,6 +53,7 @@ from .models import (
 from .emails import (
     format_date_fr, format_date_fr_short, format_heure_fr, is_late_cancellation, queue_reservation_email,
 )
+from .oauth import InvalidOAuthToken, OAuthNotConfigured, verify_google_id_token
 from .permissions import IsStaffRole
 from .recommendations import SALON_TZ, build_recommendation, create_client_notification, run_daily_recommendations
 from .slots import day_hours, minutes_to_hhmm, slot_times_for, weekly_hours
@@ -771,50 +772,31 @@ class DeleteAccountView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
-class PasswordlessLoginView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        identifier = (request.data.get('identifier') or request.data.get('email') or '').strip()
-        if not identifier:
-            return Response({'error': 'identifier requis'}, status=400)
-
-        if '@' in identifier:
-            user = User.objects.filter(email__iexact=identifier).first()
-        else:
-            digits = ''.join(filter(str.isdigit, identifier))
-            user = User.objects.filter(phone=digits).first() if digits else None
-
-        if not user:
-            return Response({'error': 'Utilisateur non trouvé'}, status=404)
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': {
-                'username': user.username,
-                'email': user.email,
-                'first_name': user.first_name,
-            },
-        })
-
-
 class OAuthLoginView(APIView):
-    """Connexion via un provider OAuth externe (Gmail, Outlook) déjà vérifié
-    côté client par expo-auth-session — l'email fourni est donc considéré
-    fiable. Contrairement à PasswordlessLoginView, cette route crée le compte
-    client à la volée si l'email n'existe pas encore (aucun mot de passe
-    utilisable n'est défini : seule la connexion OAuth ou passwordless
-    permettra de s'y reconnecter)."""
+    """Connexion Google : l'app envoie l'id_token signé par Google, vérifié
+    ici (cf. core/oauth.py). L'email et le nom sont lus dans le token vérifié —
+    jamais dans le body, sinon n'importe qui pourrait se connecter au compte
+    d'un autre en connaissant son email. Crée le compte client à la volée si
+    l'email n'existe pas encore (sans mot de passe utilisable)."""
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = (request.data.get('email') or '').strip().lower()
-        if not email:
-            return Response({'error': 'email requis'}, status=400)
+        if request.data.get('provider', 'google') != 'google':
+            return Response({'error': 'Fournisseur non pris en charge.'}, status=400)
+        id_token = (request.data.get('id_token') or '').strip()
+        if not id_token:
+            return Response({'error': 'id_token requis.'}, status=400)
+        try:
+            payload = verify_google_id_token(id_token)
+        except OAuthNotConfigured:
+            return Response({'error': 'Connexion Google non configurée.'}, status=503)
+        except InvalidOAuthToken as e:
+            logger.warning('[OAUTH] id_token Google refusé : %s', e)
+            return Response({'error': 'Connexion Google invalide.'}, status=401)
 
-        first_name = (request.data.get('first_name') or '').strip()
-        last_name = (request.data.get('last_name') or '').strip()
+        email = payload['email'].strip().lower()
+        first_name = (payload.get('given_name') or '').strip()
+        last_name = (payload.get('family_name') or '').strip()
 
         user = User.objects.filter(email__iexact=email).first()
         if not user:

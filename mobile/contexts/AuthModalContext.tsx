@@ -47,11 +47,13 @@ type AuthModalContextType = {
 const isPhone = (value: string) => /^[+]?[0-9\s\-]{8,}$/.test(value.trim());
 const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
-// À renseigner après création des apps OAuth dans Google Cloud Console et
-// Microsoft Entra (Azure AD) — voir mobile/README ou la doc du projet pour
-// les redirect URIs à y déclarer (le scheme "willobarber" en build natif).
-// Tant que ces valeurs sont vides, les boutons Gmail/Outlook affichent un
-// message d'indisponibilité plutôt que de planter.
+// À renseigner après création de l'app OAuth dans Google Cloud Console — voir
+// mobile/README ou la doc du projet pour les redirect URIs à y déclarer (le
+// scheme "willobarber" en build natif). Tant que ces valeurs sont vides, le
+// bouton Gmail affiche un message d'indisponibilité plutôt que de planter.
+// Le backend doit connaître les mêmes client IDs (GOOGLE_OAUTH_CLIENT_IDS)
+// pour accepter les id_token. Outlook a été retiré : jamais configuré, et le
+// backend n'accepte plus que des id_token Google vérifiés.
 // Google : le proxy auth.expo.io est fermé (et l'option useProxy a été
 // retirée d'expo-auth-session) — la connexion Google ne fonctionne donc plus
 // du tout dans Expo Go, seulement dans un dev build / build natif où le
@@ -60,7 +62,6 @@ const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim(
 const GOOGLE_CLIENT_ID_IOS = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS ?? '';
 const GOOGLE_CLIENT_ID_ANDROID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID ?? '';
 const GOOGLE_CLIENT_ID_WEB = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB ?? '';
-const MICROSOFT_CLIENT_ID = process.env.EXPO_PUBLIC_MICROSOFT_CLIENT_ID ?? '';
 // Google.useAuthRequest() plante si aucun client ID n'est fourni : on ne
 // l'appelle donc que si au moins un des trois est configuré (constante de
 // module, jamais réévaluée entre deux rendus — respecte les règles des hooks).
@@ -71,11 +72,6 @@ const hasGoogleConfig = !!(GOOGLE_CLIENT_ID_IOS || GOOGLE_CLIENT_ID_ANDROID || G
 // remplaçant côté Expo Go. Le bouton reste donc désactivé tant qu'on tourne
 // dans Expo Go ; il redevient utilisable dans un dev build / build natif.
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-
-const MICROSOFT_DISCOVERY = {
-  authorizationEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-  tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-};
 
 const AuthModalContext = createContext<AuthModalContextType>({
   showLoginModal: () => {},
@@ -100,7 +96,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [oauthLoading, setOauthLoading] = useState<'google' | 'microsoft' | null>(null);
+  const [oauthLoading, setOauthLoading] = useState<'google' | null>(null);
 
   const [isRegister, setIsRegister] = useState(false);
   const [registerFirstName, setRegisterFirstName] = useState('');
@@ -333,17 +329,18 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Connexion/inscription via le profil OAuth vérifié par Google ou Microsoft
-  // (cf. useEffect ci-dessous) : crée le compte s'il n'existe pas encore
-  // (voir OAuthLoginView côté backend) puis connecte l'utilisateur.
-  const completeOAuthLogin = async (email?: string, first?: string, last?: string) => {
-    if (!email) {
+  // (cf. useEffect ci-dessous) : le backend vérifie l'id_token signé par
+  // Google et en lit l'email (jamais un email fourni par l'app), crée le
+  // compte s'il n'existe pas encore puis renvoie nos JWT.
+  const completeOAuthLogin = async (idToken?: string) => {
+    if (!idToken) {
       setError(t('authModal.errorGeneric'));
       setOauthLoading(null);
       return;
     }
     setError('');
     try {
-      const { access, refresh } = await authApi.oauthLogin(email, first, last);
+      const { access, refresh } = await authApi.oauthLogin(idToken);
       await TokenStorage.save(access, refresh);
       await refreshUser();
       handleSuccess();
@@ -363,7 +360,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const googleOauthRedirectUri = oauthRedirectUri;
 
   const [googleRequest, googleResponse, googlePromptAsync] = hasGoogleConfig
-    ? Google.useAuthRequest({
+    ? Google.useIdTokenAuthRequest({
         iosClientId: GOOGLE_CLIENT_ID_IOS || undefined,
         androidClientId: GOOGLE_CLIENT_ID_ANDROID || undefined,
         webClientId: GOOGLE_CLIENT_ID_WEB || undefined,
@@ -371,26 +368,14 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
       })
     : [null, null, async () => {}];
 
-  const [msRequest, msResponse, msPromptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: MICROSOFT_CLIENT_ID,
-      scopes: ['openid', 'profile', 'email', 'User.Read'],
-      redirectUri: oauthRedirectUri,
-    },
-    MICROSOFT_DISCOVERY
-  );
-
   useEffect(() => {
     if (googleResponse?.type !== 'success') return;
     (async () => {
       try {
-        const accessToken =
-          googleResponse.authentication?.accessToken ?? (googleResponse.params as any)?.access_token;
-        if (!accessToken) throw new Error('no-access-token');
-        const profile = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }).then((r) => r.json());
-        await completeOAuthLogin(profile.email, profile.given_name, profile.family_name);
+        const idToken =
+          (googleResponse.params as any)?.id_token || googleResponse.authentication?.idToken;
+        if (!idToken) throw new Error('no-id-token');
+        await completeOAuthLogin(idToken);
       } catch (err) {
         console.log('Google OAuth error:', err);
         setError(t('authModal.errorGeneric'));
@@ -398,32 +383,6 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
       }
     })();
   }, [googleResponse]);
-
-  useEffect(() => {
-    const codeVerifier = msRequest?.codeVerifier;
-    if (msResponse?.type !== 'success' || !codeVerifier) return;
-    (async () => {
-      try {
-        const tokenResult = await AuthSession.exchangeCodeAsync(
-          {
-            clientId: MICROSOFT_CLIENT_ID,
-            code: (msResponse.params as any).code,
-            redirectUri: oauthRedirectUri,
-            extraParams: { code_verifier: codeVerifier },
-          },
-          MICROSOFT_DISCOVERY
-        );
-        const profile = await fetch('https://graph.microsoft.com/v1.0/me', {
-          headers: { Authorization: `Bearer ${tokenResult.accessToken}` },
-        }).then((r) => r.json());
-        await completeOAuthLogin(profile.mail || profile.userPrincipalName, profile.givenName, profile.surname);
-      } catch (err) {
-        console.log('Microsoft OAuth error:', err);
-        setError(t('authModal.errorGeneric'));
-        setOauthLoading(null);
-      }
-    })();
-  }, [msResponse]);
 
   const handleGooglePress = async () => {
     if (isExpoGo) return;
@@ -435,18 +394,6 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
     setOauthLoading('google');
     console.log('REDIRECT URI USED:', googleRequest?.redirectUri);
     const result = await googlePromptAsync();
-    if (result.type !== 'success') setOauthLoading(null);
-  };
-
-  const handleMicrosoftPress = async () => {
-    if (isExpoGo) return;
-    if (!MICROSOFT_CLIENT_ID || !msRequest) {
-      setError('Connexion Outlook indisponible pour le moment.');
-      return;
-    }
-    setError('');
-    setOauthLoading('microsoft');
-    const result = await msPromptAsync();
     if (result.type !== 'success') setOauthLoading(null);
   };
 
@@ -708,25 +655,6 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                       </TouchableOpacity>
                       {isExpoGo && (
                         <Text style={styles.quickPillCaption}>{t('authModal.googleUnavailable')}</Text>
-                      )}
-                    </View>
-                    <View style={styles.quickPillWrap}>
-                      <TouchableOpacity
-                        style={[styles.quickPill, isExpoGo && styles.quickPillDisabled]}
-                        onPress={handleMicrosoftPress}
-                        disabled={oauthLoading !== null || isExpoGo}
-                        activeOpacity={0.75}
-                      >
-                        {oauthLoading === 'microsoft'
-                          ? <ActivityIndicator color="#4A9EFF" size="small" />
-                          : <>
-                              <Feather name="mail" size={14} color={isExpoGo ? 'rgba(255,255,255,0.35)' : '#4A9EFF'} />
-                              <Text style={[styles.quickPillText, isExpoGo && styles.quickPillTextDisabled]}>{t('authModal.outlook')}</Text>
-                            </>
-                        }
-                      </TouchableOpacity>
-                      {isExpoGo && (
-                        <Text style={styles.quickPillCaption}>{t('authModal.outlookUnavailable')}</Text>
                       )}
                     </View>
                     <TouchableOpacity style={styles.quickPill} onPress={handleOtherProvider} activeOpacity={0.75}>

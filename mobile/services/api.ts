@@ -182,14 +182,13 @@ export const authApi = {
   register: (payload: RegisterPayload) =>
     http.post<AuthResponse>('/auth/register/', payload).then((r) => r.data),
 
-  passwordlessLogin: (identifier: string) =>
-    http.post<AuthResponse>('/auth/passwordless-login/', { email: identifier }).then((r) => r.data),
 
-  // Connexion via un provider OAuth externe (Gmail, Outlook) déjà vérifié
-  // côté client — crée le compte s'il n'existe pas encore (cf. OAuthLoginView).
-  oauthLogin: (email: string, firstName?: string, lastName?: string) =>
+  // Connexion Google : on transmet l'id_token signé par Google, que le backend
+  // vérifie et dont il lit l'email — crée le compte s'il n'existe pas encore
+  // (cf. OAuthLoginView).
+  oauthLogin: (idToken: string) =>
     http
-      .post<AuthResponse>('/auth/oauth-login/', { email, first_name: firstName, last_name: lastName })
+      .post<AuthResponse>('/auth/oauth-login/', { provider: 'google', id_token: idToken })
       .then((r) => r.data),
 
   logout: (refresh: string) =>

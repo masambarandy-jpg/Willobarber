@@ -155,6 +155,12 @@ AUTH_USER_MODEL = 'core.User'
 
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
 
+# Client IDs Google OAuth (iOS, Android, Web — séparés par des virgules) :
+# audiences acceptées pour les id_token vérifiés par OAuthLoginView.
+GOOGLE_OAUTH_CLIENT_IDS = [
+    cid.strip() for cid in os.environ.get('GOOGLE_OAUTH_CLIENT_IDS', '').split(',') if cid.strip()
+]
+
 # ─── Emails (SendGrid) ───────────────────────────────────────────────────────
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
 # IMPORTANT : SendGrid refuse (HTTP 403) tout expéditeur non vérifié dans le
