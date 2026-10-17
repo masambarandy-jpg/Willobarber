@@ -1,6 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { StarRating } from '@/components/ui/StarRating';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { commentsApi } from '@/services/api';
@@ -9,6 +22,12 @@ import type { Review } from '@/types';
 const GOLD = '#C9A84C';
 const MAX_LENGTH = 500;
 const DATE_LOCALES = { fr: 'fr-BE', nl: 'nl-BE', en: 'en-GB' } as const;
+const TOGGLE_MS = 200;
+// Animated n'a pas de pilote natif sur web.
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
+// Android (ancienne architecture) : LayoutAnimation est désactivé par défaut.
+if (Platform.OS === 'android') UIManager.setLayoutAnimationEnabledExperimental?.(true);
 
 interface Props {
   reservationId: number;
@@ -16,12 +35,37 @@ interface Props {
   review: Review | null;
   // Création/édition → le commentaire à jour ; suppression → null.
   onChange: (reservationId: number, review: Review | null) => void;
+  // Accordéon (par défaut) : une ligne compacte, dépliée au toucher. false =
+  // contenu toujours affiché (modale ouverte depuis une notification).
+  collapsible?: boolean;
+  defaultExpanded?: boolean;
 }
 
 // « Un mot pour votre barbier ? » sous le détail d'un RDV passé : commentaire
 // (note facultative), modifiable/supprimable, et réponse éventuelle du barbier.
-export default function ReservationComment({ reservationId, review, onChange }: Props) {
+export default function ReservationComment({
+  reservationId, review, onChange, collapsible = true, defaultExpanded = false,
+}: Props) {
   const { t, language } = useLanguage();
+  // État propre à chaque carte ; replié à l'arrivée sur l'écran.
+  const [expanded, setExpanded] = useState(!collapsible || defaultExpanded);
+  const progress = useRef(new Animated.Value(expanded ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: expanded ? 1 : 0,
+      duration: TOGGLE_MS,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: USE_NATIVE_DRIVER,
+    }).start();
+  }, [expanded, progress]);
+
+  const toggle = () => {
+    // Natif : la hauteur s'anime (les RDV suivants glissent) ; web : LayoutAnimation
+    // est sans effet, le contenu apparaît en fondu via `progress` ci-dessous.
+    LayoutAnimation.configureNext(LayoutAnimation.create(TOGGLE_MS, 'easeInEaseOut', 'opacity'));
+    setExpanded((v) => !v);
+  };
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
   const [rating, setRating] = useState(0);
@@ -60,97 +104,155 @@ export default function ReservationComment({ reservationId, review, onChange }: 
     setEditing(true);
   };
 
-  if (review && !editing) {
-    const edited = new Date(review.updated_at).getTime() - new Date(review.created_at).getTime() > 60_000;
-    return (
-      <View style={styles.card} testID="reservation-comment">
-        <Text style={styles.label}>{t('comment.label')}</Text>
-        {!!review.rating && <StarRating rating={review.rating} size={16} />}
-        <Text style={styles.commentText}>« {review.comment} »</Text>
-        <Text style={styles.meta}>
-          {t('comment.sentOn')} {formatDate(review.created_at)}{edited ? ` · ${t('comment.edited')}` : ''}
-        </Text>
+  const renderBody = () => {
+    if (review && !editing) {
+      const edited = new Date(review.updated_at).getTime() - new Date(review.created_at).getTime() > 60_000;
+      return (
+        <View style={styles.card} testID="reservation-comment">
+          <Text style={styles.label}>{t('comment.label')}</Text>
+          {!!review.rating && <StarRating rating={review.rating} size={16} />}
+          <Text style={styles.commentText}>« {review.comment} »</Text>
+          <Text style={styles.meta}>
+            {t('comment.sentOn')} {formatDate(review.created_at)}{edited ? ` · ${t('comment.edited')}` : ''}
+          </Text>
 
-        {!!review.reply && (
-          <View style={styles.reply} testID="reservation-comment-reply">
-            <View style={styles.replyHeader}>
-              <View style={styles.barberAvatar}>
-                <Text style={styles.barberAvatarText}>{review.barber_name.charAt(0)}</Text>
+          {!!review.reply && (
+            <View style={styles.reply} testID="reservation-comment-reply">
+              <View style={styles.replyHeader}>
+                <View style={styles.barberAvatar}>
+                  <Text style={styles.barberAvatarText}>{review.barber_name.charAt(0)}</Text>
+                </View>
+                <Text style={styles.replyAuthor}>{t('comment.replyFrom')} {review.barber_name}</Text>
               </View>
-              <Text style={styles.replyAuthor}>{t('comment.replyFrom')} {review.barber_name}</Text>
+              <Text style={styles.replyText}>{review.reply}</Text>
             </View>
-            <Text style={styles.replyText}>{review.reply}</Text>
-          </View>
-        )}
+          )}
 
-        {confirmDelete ? (
-          <View style={styles.actions}>
-            <Text style={styles.confirmText}>{t('comment.deleteConfirm')}</Text>
-            <TouchableOpacity onPress={() => setConfirmDelete(false)} disabled={busy}>
-              <Text style={styles.actionText}>{t('comment.cancel')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => run(async () => { await commentsApi.remove(reservationId); return null; })}
-              disabled={busy}
-              testID="btn-comment-delete-confirm"
-            >
-              {busy ? <ActivityIndicator color="#E57373" size="small" /> : <Text style={styles.deleteText}>{t('comment.delete')}</Text>}
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.actions}>
-            <TouchableOpacity onPress={startEdit} testID="btn-comment-edit">
-              <Text style={styles.actionText}>✏️ {t('comment.edit')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setConfirmDelete(true)} testID="btn-comment-delete">
-              <Text style={styles.actionText}>🗑️ {t('comment.delete')}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          {confirmDelete ? (
+            <View style={styles.actions}>
+              <Text style={styles.confirmText}>{t('comment.deleteConfirm')}</Text>
+              <TouchableOpacity onPress={() => setConfirmDelete(false)} disabled={busy}>
+                <Text style={styles.actionText}>{t('comment.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => run(async () => { await commentsApi.remove(reservationId); return null; })}
+                disabled={busy}
+                testID="btn-comment-delete-confirm"
+              >
+                {busy ? <ActivityIndicator color="#E57373" size="small" /> : <Text style={styles.deleteText}>{t('comment.delete')}</Text>}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.actions}>
+              <TouchableOpacity onPress={startEdit} testID="btn-comment-edit">
+                <Text style={styles.actionText}>✏️ {t('comment.edit')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setConfirmDelete(true)} testID="btn-comment-delete">
+                <Text style={styles.actionText}>🗑️ {t('comment.delete')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {!!error && <Text style={styles.error}>{error}</Text>}
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.card} testID="reservation-comment-form">
+        <Text style={styles.label}>{t('comment.label')}</Text>
+        <Text style={styles.ratingHint}>{t('comment.ratingOptional')}</Text>
+        <StarRating rating={rating} size={24} interactive onRate={(r) => setRating(r === rating ? 0 : r)} />
+        <TextInput
+          style={styles.input}
+          value={text}
+          onChangeText={setText}
+          placeholder={t('comment.placeholder')}
+          placeholderTextColor="rgba(255,255,255,0.3)"
+          maxLength={MAX_LENGTH}
+          multiline
+          testID="input-comment"
+        />
         {!!error && <Text style={styles.error}>{error}</Text>}
+        <View style={styles.formButtons}>
+          {editing && (
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditing(false)} disabled={busy}>
+              <Text style={styles.cancelBtnText}>{t('comment.cancel')}</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
+            onPress={submit}
+            disabled={!text.trim() || busy}
+            activeOpacity={0.85}
+            testID="btn-comment-send"
+          >
+            {busy
+              ? <ActivityIndicator color="#1A1208" size="small" />
+              : <Text style={styles.sendBtnText}>{editing ? t('comment.save') : t('comment.send')}</Text>}
+          </TouchableOpacity>
+        </View>
       </View>
     );
-  }
+  };
+
+  if (!collapsible) return renderBody();
+
+  const summary = !review
+    ? t('comment.collapsed.write')
+    : review.reply
+      ? `${t('comment.collapsed.message')} · ${t('comment.replyFrom')} ${review.barber_name}`
+      : t('comment.collapsed.sent');
 
   return (
-    <View style={styles.card} testID="reservation-comment-form">
-      <Text style={styles.label}>{t('comment.label')}</Text>
-      <Text style={styles.ratingHint}>{t('comment.ratingOptional')}</Text>
-      <StarRating rating={rating} size={24} interactive onRate={(r) => setRating(r === rating ? 0 : r)} />
-      <TextInput
-        style={styles.input}
-        value={text}
-        onChangeText={setText}
-        placeholder={t('comment.placeholder')}
-        placeholderTextColor="rgba(255,255,255,0.3)"
-        maxLength={MAX_LENGTH}
-        multiline
-        testID="input-comment"
-      />
-      {!!error && <Text style={styles.error}>{error}</Text>}
-      <View style={styles.formButtons}>
-        {editing && (
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditing(false)} disabled={busy}>
-            <Text style={styles.cancelBtnText}>{t('comment.cancel')}</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
-          onPress={submit}
-          disabled={!text.trim() || busy}
-          activeOpacity={0.85}
-          testID="btn-comment-send"
+    <View>
+      <TouchableOpacity
+        style={styles.toggle}
+        onPress={toggle}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        aria-expanded={expanded}
+        testID={`comment-toggle-${reservationId}`}
+      >
+        <Text style={styles.toggleIcon}>💬</Text>
+        <Text style={styles.toggleText} numberOfLines={2}>{summary}</Text>
+        <Animated.View
+          style={{ transform: [{ rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
         >
-          {busy
-            ? <ActivityIndicator color="#1A1208" size="small" />
-            : <Text style={styles.sendBtnText}>{editing ? t('comment.save') : t('comment.send')}</Text>}
-        </TouchableOpacity>
-      </View>
+          <Ionicons name="chevron-down" size={16} color={GOLD} />
+        </Animated.View>
+      </TouchableOpacity>
+      {expanded && (
+        <Animated.View
+          style={[
+            styles.body,
+            { opacity: progress, transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }) }] },
+          ]}
+        >
+          {renderBody()}
+        </Animated.View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // Ligne repliée : style doré des anciens boutons, en plus compact.
+  toggle: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: 'rgba(201,168,76,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.3)',
+    borderRadius: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  toggleIcon: { fontSize: 12.5 },
+  toggleText: { flexShrink: 1, color: GOLD, fontSize: 12.5, fontWeight: '600' },
+  body: { marginTop: 8 },
   card: { backgroundColor: '#1A1814', borderRadius: 16, padding: 18, gap: 10 },
   label: { fontSize: 15, fontWeight: '600', color: '#fff' },
   ratingHint: { fontSize: 12, color: 'rgba(255,255,255,0.45)' },
