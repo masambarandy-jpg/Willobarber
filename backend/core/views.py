@@ -52,7 +52,7 @@ from .comments import client_name as client_display_name
 from .loyalty import reservation_points
 from .models import (
     BARBER_CHOICES, DEFAULT_BARBER,
-    Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitingList,
+    Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, OpeningHours, Review,
     WaitlistEntry, BarberLeave, Notification, NotificationPreference, PaymentCard, UserSession,
 )
 from .emails import (
@@ -67,7 +67,7 @@ from . import waitlist
 from .serializers import (
     BarbershopSerializer, BarberSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
-    ClosedPeriodSerializer, OpeningHoursSerializer, ReviewSerializer, WaitingListSerializer, WaitlistEntrySerializer,
+    ClosedPeriodSerializer, OpeningHoursSerializer, ReviewSerializer, WaitlistEntrySerializer,
     BarberLeaveSerializer, NotificationSerializer,
     NotificationPreferenceSerializer, PaymentCardSerializer,
 )
@@ -193,22 +193,6 @@ class ClientNotificationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user)
-
-
-class WaitingListViewSet(viewsets.ModelViewSet):
-    queryset = WaitingList.objects.all()
-    serializer_class = WaitingListSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        user = self.request.user
-        is_staff = user.is_superuser or getattr(user, 'role', None) == 'admin'
-        if is_staff:
-            return WaitingList.objects.all()
-        return WaitingList.objects.filter(client=user)
-
-    def perform_create(self, serializer):
-        serializer.save(client=self.request.user)
 
 
 def _waitlist_error(message, code, http_status=status.HTTP_400_BAD_REQUEST):

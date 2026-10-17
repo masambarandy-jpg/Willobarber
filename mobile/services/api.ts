@@ -16,7 +16,6 @@ import type {
   Review,
   AvailableSlotsResponse,
   SalonSettingsPublic,
-  WaitingListEntry,
   RecommendationResponse,
   ClientNotification,
   SavedPaymentMethod,
@@ -595,14 +594,6 @@ export const coiffeurCommentsApi = {
       method: 'POST',
       body: JSON.stringify({ text }),
     }),
-};
-
-// ─── Waiting list API ────────────────────────────────────────────────────────
-
-export const waitingListApi = {
-  list: () => http.get<WaitingListEntry[]>('/waiting-list/').then((r) => r.data),
-  create: (payload: { service: number; preferred_date: string; barber?: number; preferred_time?: string }) =>
-    http.post<WaitingListEntry>('/waiting-list/', payload).then((r) => r.data),
 };
 
 // ─── Liste d'attente par créneau (« 🔔 Me prévenir ») ─────────────────────────

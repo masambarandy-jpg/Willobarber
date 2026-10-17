@@ -200,20 +200,6 @@ export interface Recommendation {
   }>;
 }
 
-// ─── Waiting List ─────────────────────────────────────────────────────────────
-
-export interface WaitingListEntry {
-  id: number;
-  client: number;
-  service: number;
-  barber: number | null;
-  preferred_date: string;
-  preferred_time: string | null;
-  status: 'waiting' | 'notified' | 'confirmed' | 'expired';
-  position: number;
-  created_at: string;
-}
-
 // ─── Closed periods (congés / fermetures) ────────────────────────────────────
 
 export interface ClosedPeriod {
