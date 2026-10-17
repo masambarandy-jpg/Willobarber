@@ -25,9 +25,9 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, StripeCardField
     const detailsRef = useRef<CardFieldInput.Details | undefined>(undefined);
 
     useImperativeHandle(ref, () => ({
-      pay: async (amount, cardForm, savedPaymentMethodId) => {
+      pay: async (amount, cardForm, savedPaymentMethodId, order) => {
         if (savedPaymentMethodId) {
-          const intent = await paymentsApi.createPaymentIntent(amount, 'eur', savedPaymentMethodId);
+          const intent = await paymentsApi.createPaymentIntent(amount, 'eur', savedPaymentMethodId, order);
           if (intent.status === 'succeeded' && intent.paymentIntentId) return intent.paymentIntentId;
           // requires_action : 3DS exigé par la banque malgré la carte
           // enregistrée → confirmation dans l'app, qui affiche le challenge.
@@ -44,7 +44,7 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, StripeCardField
           throw new Error(incompleteMessage);
         }
 
-        const { clientSecret } = await paymentsApi.createPaymentIntent(amount, 'eur');
+        const { clientSecret } = await paymentsApi.createPaymentIntent(amount, 'eur', undefined, order);
 
         const { paymentIntent, error } = await confirmPayment(clientSecret, {
           paymentMethodType: 'Card',

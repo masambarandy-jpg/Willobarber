@@ -1,4 +1,5 @@
 import type { CardForm } from './data';
+import type { BoutiqueOrderPayload } from '@/services/api';
 
 export interface CardInputDetails {
   complete: boolean;
@@ -9,8 +10,9 @@ export interface CardInputDetails {
 
 export interface StripeCardFieldHandle {
   // savedPaymentMethodId : carte enregistrée (pm_…) à débiter à la place du
-  // formulaire. Retourne l'id du PaymentIntent réglé.
-  pay: (amount: number, cardForm: CardForm, savedPaymentMethodId?: string) => Promise<string>;
+  // formulaire. order : commande boutique dont le backend calcule le montant.
+  // Retourne l'id du PaymentIntent réglé.
+  pay: (amount: number, cardForm: CardForm, savedPaymentMethodId?: string, order?: BoutiqueOrderPayload) => Promise<string>;
 }
 
 export interface StripeCardFieldProps {

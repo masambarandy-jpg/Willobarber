@@ -1,7 +1,6 @@
 import logging
 import threading
 from datetime import timedelta
-from decimal import Decimal
 
 import stripe
 from django.conf import settings
@@ -21,12 +20,10 @@ from .invoices import (
     build_boutique_invoice_pdf, notify_coiffeur_new_order, order_from_invoice_token, send_boutique_invoice,
 )
 from .models import Product, Order, OrderItem
+from .pricing import OrderPricingError, price_order, to_cents
 from .serializers import ProductSerializer, OrderSerializer, StaffOrderSerializer
 
 logger = logging.getLogger(__name__)
-
-# Même montant que l'option « Livraison à domicile » du panier (cart.tsx).
-DELIVERY_FEE = Decimal('4.95')
 
 # Statuts que le coiffeur peut appliquer, selon le mode de livraison.
 STAFF_STATUSES = {
@@ -55,7 +52,12 @@ def _check_payment_intent(payment_intent_id, total, user):
         return 'Paiement introuvable.'
     if intent.status != 'succeeded':
         return "Le paiement n'a pas abouti."
-    if intent.amount != int(round(total * 100)) or intent.currency != 'eur':
+    print(
+        f"[PAYMENT] check {payment_intent_id}: intent.amount={intent.amount} {intent.currency}, "
+        f"total_calculated={total}, total_x100={to_cents(total)}, "
+        f"created_with={intent.metadata.to_dict() if intent.metadata else {}}"
+    )
+    if intent.amount != to_cents(total) or intent.currency != 'eur':
         return 'Le montant payé ne correspond pas à la commande.'
     if _intent_user_id(intent) != str(user.id):
         return 'Ce paiement ne vous appartient pas.'
@@ -131,30 +133,10 @@ class OrderListCreateView(APIView):
             _refund(payment_intent_id, request.user)
             return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
 
-        if delivery_type not in dict(Order.DELIVERY_CHOICES):
-            return reject('Mode de livraison invalide.')
-        if delivery_type == 'domicile' and not delivery_address:
-            return reject("L'adresse de livraison est obligatoire.")
-
-        subtotal = Decimal('0.00')
-        validated_items = []
-
-        for item in items_data:
-            product_id = item.get('product_id')
-            quantite = item.get('quantite', 1)
-            if not isinstance(quantite, int) or isinstance(quantite, bool) or quantite < 1:
-                return reject('Quantité invalide.')
-            try:
-                product = Product.objects.get(pk=product_id, actif=True)
-            except Product.DoesNotExist:
-                return reject(f'Produit {product_id} introuvable.')
-            if quantite > product.stock:
-                return reject(f'Stock insuffisant pour {product.nom} (disponible : {product.stock}).')
-            subtotal += product.prix * Decimal(str(quantite))
-            validated_items.append({'product': product, 'quantite': quantite, 'prix_unitaire': product.prix})
-
-        delivery_fee = DELIVERY_FEE if delivery_type == 'domicile' else Decimal('0.00')
-        total = subtotal + delivery_fee
+        try:
+            validated_items, delivery_fee, total = price_order(items_data, delivery_type, delivery_address)
+        except OrderPricingError as e:
+            return reject(str(e))
 
         if _payment_intent_used(payment_intent_id):
             return Response({'detail': 'Ce paiement a déjà été utilisé.'}, status=status.HTTP_400_BAD_REQUEST)

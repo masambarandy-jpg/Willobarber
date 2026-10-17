@@ -299,13 +299,22 @@ export interface PaymentIntentResponse {
   paymentIntentId?: string;
 }
 
+// Commande boutique à payer : le backend en recalcule le montant depuis les
+// prix en base (amount n'est alors plus qu'indicatif).
+export interface BoutiqueOrderPayload {
+  items: { product_id: number; quantite: number }[];
+  delivery_type: 'retrait_salon' | 'domicile';
+  delivery_address: string;
+}
+
 export const paymentsApi = {
-  createPaymentIntent: (amount: number, currency: string = 'eur', paymentMethodId?: string) =>
+  createPaymentIntent: (amount: number, currency: string = 'eur', paymentMethodId?: string, order?: BoutiqueOrderPayload) =>
     http
       .post<PaymentIntentResponse>('/payments/create-payment-intent/', {
         amount,
         currency,
         ...(paymentMethodId ? { payment_method: paymentMethodId } : {}),
+        ...(order ? { order } : {}),
       })
       .then((r) => {
         console.log(

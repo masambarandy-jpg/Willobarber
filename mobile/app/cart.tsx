@@ -16,7 +16,7 @@ import Svg, { Path, Circle, Rect, Line } from 'react-native-svg';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthModal } from '@/contexts/AuthModalContext';
-import { SessionExpiredError } from '@/services/api';
+import { SessionExpiredError, type BoutiqueOrderPayload } from '@/services/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Fonts } from '@/constants';
 import { useIsTablet } from '@/components/client/useIsTablet';
@@ -51,10 +51,19 @@ export default function CartScreen() {
     }
     // Comme une réservation : paiement Stripe d'abord, puis création de la
     // commande avec le PaymentIntent réglé (vérifié côté backend).
+    // Nouveau PaymentIntent à chaque tentative, au montant que le backend
+    // calcule depuis ce panier — le même calcul que la vérification de la
+    // commande (boutique/pricing.py), donc plus de « montant ne correspond pas ».
+    const deliveryType = deliveryMode === 'domicile' ? 'domicile' : 'retrait_salon';
+    const order: BoutiqueOrderPayload = {
+      items: items.map(item => ({ product_id: item.product_id, quantite: item.qte })),
+      delivery_type: deliveryType,
+      delivery_address: deliveryType === 'domicile' ? deliveryAddress.trim() : '',
+    };
     let paymentIntentId: string | undefined;
     setIsPaying(true);
     try {
-      paymentIntentId = await paymentRef.current?.pay(Number(finalTotal.toFixed(2)));
+      paymentIntentId = await paymentRef.current?.pay(Number(finalTotal.toFixed(2)), order);
     } catch (e) {
       // Session perdue (refresh impossible) : rien n'a été débité, on fait se
       // reconnecter le client puis on relance la commande.
@@ -74,7 +83,7 @@ export default function CartScreen() {
     try {
       await checkout({
         paymentIntentId,
-        deliveryType: deliveryMode === 'domicile' ? 'domicile' : 'retrait_salon',
+        deliveryType,
         deliveryAddress,
       });
     } catch (e: any) {
