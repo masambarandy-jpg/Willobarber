@@ -80,6 +80,31 @@ http.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+// ─── Session expirée ─────────────────────────────────────────────────────────
+// Refresh impossible (absent, expiré ou blacklisté) : les tokens sont effacés
+// et AuthProvider est prévenu pour repasser l'app en « déconnecté » — sinon
+// l'UI se croit connectée et les appels suivants partent sans Authorization.
+
+export class SessionExpiredError extends Error {
+  constructor() {
+    super('session_expired');
+    this.name = 'SessionExpiredError';
+  }
+}
+
+const sessionExpiredListeners = new Set<() => void>();
+
+export function onSessionExpired(listener: () => void): () => void {
+  sessionExpiredListeners.add(listener);
+  return () => sessionExpiredListeners.delete(listener);
+}
+
+async function expireSession(): Promise<SessionExpiredError> {
+  await TokenStorage.clear();
+  sessionExpiredListeners.forEach((listener) => listener());
+  return new SessionExpiredError();
+}
+
 // ─── Response interceptor — refresh on 401 ───────────────────────────────────
 
 let isRefreshing = false;
@@ -109,31 +134,33 @@ http.interceptors.response.use(
 
       const refresh = await TokenStorage.getRefresh();
       if (!refresh) {
-        // Pas de refresh token (jamais connecté, ou session déjà nettoyée) :
-        // on ne tente rien, on nettoie et on rejette silencieusement — pas
-        // d'Error levée, rien à afficher à l'utilisateur.
-        await TokenStorage.clear();
-        processQueue('no_refresh_token', null);
-        return Promise.reject('no_refresh_token');
+        // Pas de refresh token (jamais connecté, ou session déjà nettoyée).
+        const expired = await expireSession();
+        processQueue(expired, null);
+        return Promise.reject(expired);
       }
 
       isRefreshing = true;
 
       try {
-        const { data } = await axios.post<{ access: string }>(
+        // ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION côté backend : la
+        // réponse contient un NOUVEAU refresh et l'ancien est blacklisté. Il
+        // faut donc le garder, sinon le refresh suivant échoue (« Token is
+        // blacklisted ») et la session saute sans prévenir.
+        const { data } = await axios.post<{ access: string; refresh?: string }>(
           `${API_BASE_URL}/auth/token/refresh/`,
           { refresh },
         );
 
-        await TokenStorage.setAccess(data.access);
-        http.defaults.headers.common.Authorization = `Bearer ${data.access}`;
+        if (data.refresh) await TokenStorage.save(data.access, data.refresh);
+        else await TokenStorage.setAccess(data.access);
         processQueue(null, data.access);
         original.headers.Authorization = `Bearer ${data.access}`;
         return http(original);
-      } catch (err) {
-        processQueue(err, null);
-        await TokenStorage.clear();
-        return Promise.reject(err);
+      } catch {
+        const expired = await expireSession();
+        processQueue(expired, null);
+        return Promise.reject(expired);
       } finally {
         isRefreshing = false;
       }
@@ -382,6 +409,13 @@ export type BoutiqueProduct = {
 
 export const boutiqueApi = {
   products: () => http.get<BoutiqueProduct[]>('/boutique/produits/').then((r) => r.data),
+
+  createOrder: <T,>(payload: {
+    items: { product_id: number; quantite: number }[];
+    payment_intent_id: string;
+    delivery_type: string;
+    delivery_address: string;
+  }) => http.post<T>('/boutique/commandes/', payload).then((r) => r.data),
 };
 
 // ─── Session coiffeur (token dédié 'coiffeur_token') ─────────────────────────

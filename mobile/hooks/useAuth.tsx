@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { authApi, TokenStorage } from '@/services/api';
+import { authApi, onSessionExpired, TokenStorage } from '@/services/api';
 import type { LoginPayload, RegisterPayload, User } from '@/types';
 
 interface AuthState {
@@ -35,6 +35,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => ({ ...prev, isLoading: false }));
     }
   }, []);
+
+  // Refresh impossible côté intercepteur (cf. services/api.ts) : la session
+  // est perdue, l'app doit l'afficher au lieu de rester « connectée » à vide.
+  useEffect(() => onSessionExpired(() => {
+    setState({ user: null, isAuthenticated: false, isLoading: false });
+  }), []);
 
   useEffect(() => {
     (async () => {

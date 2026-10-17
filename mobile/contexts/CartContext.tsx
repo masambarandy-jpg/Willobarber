@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { API_BASE_URL } from '@/constants';
-import { TokenStorage } from '@/services/api';
-import axios from 'axios';
+import { boutiqueApi } from '@/services/api';
 
 export type CartItem = {
   id: string;
@@ -116,23 +114,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const checkout = useCallback(async ({ paymentIntentId, deliveryType, deliveryAddress }: CheckoutPayload): Promise<OrderData> => {
     setIsLoading(true);
     try {
-      const token = await TokenStorage.getAccess();
-      const response = await axios.post<OrderData>(
-        `${API_BASE_URL}/boutique/commandes/`,
-        {
-          items: items.map(item => ({
-            product_id: item.product_id,
-            quantite: item.qte,
-          })),
-          payment_intent_id: paymentIntentId,
-          delivery_type: deliveryType,
-          delivery_address: deliveryType === 'domicile' ? deliveryAddress ?? '' : '',
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setLastOrder(response.data);
+      // Client http authentifié : même refresh automatique du token que le
+      // paiement qui précède (create-payment-intent).
+      const order = await boutiqueApi.createOrder<OrderData>({
+        items: items.map(item => ({
+          product_id: item.product_id,
+          quantite: item.qte,
+        })),
+        payment_intent_id: paymentIntentId,
+        delivery_type: deliveryType,
+        delivery_address: deliveryType === 'domicile' ? deliveryAddress ?? '' : '',
+      });
+      setLastOrder(order);
       clearCart();
-      return response.data;
+      return order;
     } finally {
       setIsLoading(false);
     }
