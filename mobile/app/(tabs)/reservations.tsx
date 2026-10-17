@@ -211,7 +211,7 @@ function ReviewModal({ target, review, onClose, onChange }: ReviewModalProps) {
             <View pointerEvents="box-none" style={{ flexShrink: 1 }}>
               <ScrollView keyboardShouldPersistTaps="always" showsVerticalScrollIndicator={false}>
                 {target && (
-                  <ReservationComment reservationId={target.id} review={review} onChange={onChange} />
+                  <ReservationComment reservationId={target.id} review={review} onChange={onChange} collapsible={false} />
                 )}
               </ScrollView>
             </View>
@@ -501,6 +501,8 @@ export default function ReservationsScreen() {
   // `at` (horodatage) distingue deux ouvertures successives du même RDV.
   const { reservationId: linkedReservationId, at: linkedAt } = useLocalSearchParams<{ reservationId?: string; at?: string }>();
   const openedLinkRef = useRef<string | null>(null);
+  // RDV ouvert depuis une notification : son commentaire s'affiche déplié.
+  const [linkedOpenId, setLinkedOpenId] = useState<number | null>(null);
   useEffect(() => {
     const linkKey = `${linkedReservationId}:${linkedAt}`;
     if (!linkedReservationId || openedLinkRef.current === linkKey) return;
@@ -509,7 +511,10 @@ export default function ReservationsScreen() {
     openedLinkRef.current = linkKey;
     setHistFilter('Tous');
     setShowAllHistory(true);
-    if (isTablet) setSelectedHistIndex(index);
+    if (isTablet) {
+      setSelectedHistIndex(index);
+      setLinkedOpenId(HISTORIQUE[index].id);
+    }
     else setReviewModalTarget({ id: HISTORIQUE[index].id as number, service: HISTORIQUE[index].service });
   }, [linkedReservationId, linkedAt, HISTORIQUE, isTablet]);
 
@@ -1114,7 +1119,8 @@ export default function ReservationsScreen() {
                         {isCommentable(h) && (
                           <View style={{ marginTop: 18 }}>
                             <ReservationComment
-                              key={h.id}
+                              key={`${h.id}:${linkedOpenId === h.id}`}
+                              defaultExpanded={linkedOpenId === h.id}
                               reservationId={h.id as number}
                               review={reviewForReservation(h.id as number)}
                               onChange={handleCommentChange}
@@ -1487,16 +1493,13 @@ export default function ReservationsScreen() {
                 </View>
               </View>
               {isCommentable(h) && (
-                <TouchableOpacity
-                  testID={`btn-leave-review-${i}`}
-                  style={styles.leaveReviewBtn}
-                  onPress={() => setReviewModalTarget({ id: h.id as number, service: h.service })}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.leaveReviewBtnText}>
-                    {t(reviewForReservation(h.id as number) ? 'comment.viewBtn' : 'comment.openBtn')}
-                  </Text>
-                </TouchableOpacity>
+                <View style={styles.histComment}>
+                  <ReservationComment
+                    reservationId={h.id as number}
+                    review={reviewForReservation(h.id as number)}
+                    onChange={handleCommentChange}
+                  />
+                </View>
               )}
             </React.Fragment>
           ))
@@ -1949,6 +1952,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  histComment: {
+    marginTop: -4,
+    marginBottom: 10,
   },
   leaveReviewBtn: {
     alignSelf: 'flex-start',
