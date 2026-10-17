@@ -205,6 +205,28 @@ class SavedPaymentMethodTests(TestCase):
         r = self.client.post('/api/payments/create-payment-intent/', {'amount': 5, 'payment_method': 'pm_x'}, format='json')
         self.assertEqual(r.status_code, 404)
 
+    @patch('core.views.stripe.PaymentIntent.create', return_value=_intent('succeeded'))
+    @patch('core.views.stripe.PaymentMethod.retrieve', return_value=_card('pm_1', 'fp1'))
+    def test_boutique_amount_is_computed_server_side(self, retrieve, intent_create):
+        # Le prix affiché par l'app (22 €) diffère du prix en base (24 €) : on
+        # débite le prix en base, celui que la commande vérifiera ensuite.
+        from boutique.models import Product
+        huile = Product.objects.create(nom='Huile Barbe Cèdre', categorie='huile', prix='24.00', stock=10)
+        self.user.stripe_customer_id = 'cus_1'
+        self.user.save()
+        order = {'items': [{'product_id': huile.id, 'quantite': 2}], 'delivery_type': 'domicile', 'delivery_address': 'Rue X 1'}
+        r = self.client.post('/api/payments/create-payment-intent/', {
+            'amount': 22, 'payment_method': 'pm_1', 'order': order,
+        }, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(intent_create.call_args.kwargs['amount'], 5295)
+
+    def test_boutique_payment_refused_for_invalid_order(self):
+        r = self.client.post('/api/payments/create-payment-intent/', {
+            'amount': 22, 'order': {'items': [{'product_id': 999, 'quantite': 1}]},
+        }, format='json')
+        self.assertEqual(r.status_code, 400)
+
     def test_list_is_empty_without_customer(self):
         self.assertEqual(self.client.get('/api/auth/me/payment-methods/').json(), [])
 

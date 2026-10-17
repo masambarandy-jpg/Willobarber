@@ -5,14 +5,15 @@ import type { CardInputDetails, StripeCardFieldHandle } from '@/components/booki
 import { formatSavedCard } from '@/components/booking/Step4Payment';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { paymentMethodsApi } from '@/services/api';
+import { paymentMethodsApi, type BoutiqueOrderPayload } from '@/services/api';
 import type { SavedPaymentMethod } from '@/types';
 
 const GOLD = '#C9A84C';
 
 export interface CartPaymentHandle {
-  // Débite `amount` € (carte enregistrée ou saisie) ; retourne l'id du PaymentIntent réglé.
-  pay: (amount: number) => Promise<string>;
+  // Débite la commande (carte enregistrée ou saisie) au montant recalculé par
+  // le backend — `amount` n'est qu'indicatif. Retourne l'id du PaymentIntent réglé.
+  pay: (amount: number, order: BoutiqueOrderPayload) => Promise<string>;
 }
 
 // Même paiement que l'étape 4 de la réservation (StripeCardField + cartes
@@ -41,7 +42,7 @@ export const CartPaymentSection = forwardRef<CartPaymentHandle>(function CartPay
   }, [isAuthenticated]);
 
   useImperativeHandle(ref, () => ({
-    pay: async (amount: number) => {
+    pay: async (amount: number, order: BoutiqueOrderPayload) => {
       const cardForm = {
         prenom: user?.first_name ?? '',
         nom: user?.last_name ?? '',
@@ -52,9 +53,9 @@ export const CartPaymentSection = forwardRef<CartPaymentHandle>(function CartPay
         cvc: '',
       };
       if (!cardFieldRef.current) throw new Error(t('step4.cardIncomplete'));
-      if (selectedCardId) return cardFieldRef.current.pay(amount, cardForm, selectedCardId);
+      if (selectedCardId) return cardFieldRef.current.pay(amount, cardForm, selectedCardId, order);
       if (!cardDetails?.complete) throw new Error(t('step4.cardIncomplete'));
-      return cardFieldRef.current.pay(amount, cardForm);
+      return cardFieldRef.current.pay(amount, cardForm, undefined, order);
     },
   }));
 

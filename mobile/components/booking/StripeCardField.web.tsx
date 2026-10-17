@@ -79,7 +79,7 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
     };
 
     useImperativeHandle(ref, () => ({
-      pay: async (amount, cardForm, savedPaymentMethodId) => {
+      pay: async (amount, cardForm, savedPaymentMethodId, order) => {
         if (isProcessing.current) {
           throw new Error(incompleteMessage);
         }
@@ -87,7 +87,7 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
 
         try {
           if (savedPaymentMethodId) {
-            const intent = await paymentsApi.createPaymentIntent(amount, 'eur', savedPaymentMethodId);
+            const intent = await paymentsApi.createPaymentIntent(amount, 'eur', savedPaymentMethodId, order);
             if (intent.status === 'succeeded' && intent.paymentIntentId) return intent.paymentIntentId;
             // requires_action : 3DS exigé par la banque malgré la carte
             // enregistrée → confirmCardPayment ouvre la modale 3DS de Stripe.js.
@@ -105,7 +105,7 @@ const StripeCardFieldInner = forwardRef<StripeCardFieldHandle, StripeCardFieldPr
             throw new Error(incompleteMessage);
           }
 
-          const { clientSecret } = await paymentsApi.createPaymentIntent(amount, 'eur');
+          const { clientSecret } = await paymentsApi.createPaymentIntent(amount, 'eur', undefined, order);
 
           // Stripe charge un challenge hCaptcha invisible qui peut échouer
           // silencieusement en environnement headless (ERR_ABORTED) et laisser

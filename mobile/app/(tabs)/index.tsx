@@ -123,15 +123,15 @@ export default function HomeScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [produitsIndex, setProduitsIndex] = useState(0);
-  const [stockByProductId, setStockByProductId] = useState<Record<number, { stock: number; stock_alert: number }>>({});
+  const [stockByProductId, setStockByProductId] = useState<Record<number, { stock: number; stock_alert: number; prix: number }>>({});
 
   useEffect(() => {
     let cancelled = false;
     boutiqueApi.products()
       .then((products) => {
         if (cancelled) return;
-        const map: Record<number, { stock: number; stock_alert: number }> = {};
-        products.forEach((p) => { map[p.id] = { stock: p.stock, stock_alert: p.stock_alert }; });
+        const map: Record<number, { stock: number; stock_alert: number; prix: number }> = {};
+        products.forEach((p) => { map[p.id] = { stock: p.stock, stock_alert: p.stock_alert, prix: Number(p.prix) }; });
         setStockByProductId(map);
       })
       .catch(() => {});
@@ -155,12 +155,14 @@ export default function HomeScreen() {
     service: t(`home.review.${r.key}.service` as TranslationKey),
   }));
 
-  const NOS_PRODUITS: Produit[] = PRODUITS_META.map(p => ({
+  // Prix de l'API (ceux que le backend débite) ; PRODUITS_META.prix ne sert
+  // que tant que la liste n'est pas chargée.
+  const NOS_PRODUITS: Produit[] = PRODUITS_META.map((p, i) => ({
     id: p.id,
     popular: p.popular,
     photo: p.photo,
     contenance: p.contenance,
-    prix: p.prix,
+    prix: stockByProductId[i + 1]?.prix ?? p.prix,
     cat: t(`home.product.${p.id}.cat` as TranslationKey),
     nom: t(`home.product.${p.id}.nom` as TranslationKey),
     desc: t(`home.product.${p.id}.desc` as TranslationKey),

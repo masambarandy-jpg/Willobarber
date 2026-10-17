@@ -45,6 +45,7 @@ from django.db.models import Count, Max, Q, Sum
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
+from boutique.pricing import OrderPricingError, price_order, to_cents
 from .models import (
     BARBER_CHOICES, DEFAULT_BARBER,
     Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitingList,
@@ -1244,10 +1245,34 @@ def create_payment_intent(request):
     currency = request.data.get('currency', 'eur')
     payment_method_id = request.data.get('payment_method')
 
-    try:
-        amount = int(round(float(amount) * 100))
-    except (TypeError, ValueError):
-        return Response({'error': 'Montant invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+    metadata = {'user_id': request.user.id, 'username': request.user.username}
+
+    # Commande boutique : le montant est recalculé ici depuis les prix en base,
+    # exactement comme à la création de la commande — jamais celui du client.
+    order = request.data.get('order')
+    if order is not None:
+        if not isinstance(order, dict):
+            return Response({'error': 'Commande invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            _, _, total = price_order(
+                order.get('items') or [],
+                order.get('delivery_type') or 'retrait_salon',
+                (order.get('delivery_address') or '').strip(),
+            )
+        except OrderPricingError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        print(f"[PAYMENT] create boutique user={request.user.id}: client_amount={amount}, "
+              f"total_calculated={total}, stripe_amount={to_cents(total)}")
+        if currency != 'eur':
+            return Response({'error': 'Devise invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+        amount = to_cents(total)
+        metadata.update(kind='boutique', total=str(total))
+    else:
+        try:
+            amount = int(round(float(amount) * 100))
+        except (TypeError, ValueError):
+            return Response({'error': 'Montant invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+        print(f"[PAYMENT] create user={request.user.id}: stripe_amount={amount}")
 
     if amount <= 0:
         return Response({'error': 'Montant invalide.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1255,7 +1280,7 @@ def create_payment_intent(request):
     params = {
         'amount': amount,
         'currency': currency,
-        'metadata': {'user_id': request.user.id, 'username': request.user.username},
+        'metadata': metadata,
     }
 
     if payment_method_id:
