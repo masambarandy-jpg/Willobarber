@@ -248,8 +248,7 @@ const fr = {
   'reservations.mockRdv.time': 'Heure',
   'reservations.mockRdv.barber': 'Barbier',
   'reservations.mockRdv.address': 'Adresse',
-  'reservations.mockRdv.soldePrefix': 'Solde 42,70€',
-  'reservations.mockRdv.soldeSuffix': 'au salon',
+  'reservations.balanceAtSalon': 'Solde {amount} au salon',
   'reservations.loyalty.ctaDisabledSuffix': 'restants)',
   'reservations.qrCode.caption': 'Présentez ce QR code à l\'accueil',
   'reservations.addToCalendar': '📅  Ajouter au calendrier',
@@ -260,13 +259,12 @@ const fr = {
   'reservations.cancelBtn': 'Annuler',
 
   'reservations.resumeTitle': 'Reprenez là où vous en étiez',
-  'reservations.resumeBadge': 'VOTRE COUPE HABITUELLE · 8 FOIS',
-  'reservations.resumeServiceMeta': '45 min · avec Willo · 45€',
+  'reservations.resumeBadge': 'VOTRE COUPE HABITUELLE · {n} FOIS',
+  'reservations.resumeServiceMeta': '{dur} · avec {barber} · {price}',
   'reservations.resumeCta': 'Même coupe →',
   'reservations.adaptBtn': '✏️ Adapter',
 
   'reservations.favoritesTitle': 'Vos favoris',
-  'reservations.favoritesEmpty': 'Vos favoris apparaîtront ici après vos premières visites.',
   'reservations.favLastPrefix': 'dernière',
 
   'reservations.historyTitle': 'Historique',
@@ -304,8 +302,6 @@ const fr = {
   'reservations.transactionsEmpty': 'Aucune transaction pour le moment.',
   'reservations.pointsSuffix': 'pts',
 
-  'reservations.hist.signature': 'Signature WilloBarber',
-  'reservations.hist.taille': 'Taille & rasage',
 
   'comment.label': 'Un mot pour votre barbier ?',
   'comment.placeholder': 'Partagez votre expérience, un remerciement...',
@@ -861,8 +857,7 @@ const nl: Record<TranslationKey, string> = {
   'reservations.mockRdv.time': 'Uur',
   'reservations.mockRdv.barber': 'Barbier',
   'reservations.mockRdv.address': 'Adres',
-  'reservations.mockRdv.soldePrefix': 'Saldo 42,70€',
-  'reservations.mockRdv.soldeSuffix': 'in de salon',
+  'reservations.balanceAtSalon': 'Saldo {amount} in de salon',
   'reservations.loyalty.ctaDisabledSuffix': 'resterend)',
   'reservations.qrCode.caption': 'Toon deze QR-code aan de balie',
   'reservations.addToCalendar': '📅  Toevoegen aan agenda',
@@ -873,13 +868,12 @@ const nl: Record<TranslationKey, string> = {
   'reservations.cancelBtn': 'Annuleren',
 
   'reservations.resumeTitle': 'Ga verder waar u gebleven was',
-  'reservations.resumeBadge': 'UW GEBRUIKELIJKE KNIPBEURT · 8 KEER',
-  'reservations.resumeServiceMeta': '45 min · met Willo · 45€',
+  'reservations.resumeBadge': 'UW GEBRUIKELIJKE KNIPBEURT · {n} KEER',
+  'reservations.resumeServiceMeta': '{dur} · met {barber} · {price}',
   'reservations.resumeCta': 'Zelfde knipbeurt →',
   'reservations.adaptBtn': '✏️ Aanpassen',
 
   'reservations.favoritesTitle': 'Uw favorieten',
-  'reservations.favoritesEmpty': 'Uw favorieten verschijnen hier na uw eerste bezoeken.',
   'reservations.favLastPrefix': 'laatste',
 
   'reservations.historyTitle': 'Geschiedenis',
@@ -917,8 +911,6 @@ const nl: Record<TranslationKey, string> = {
   'reservations.transactionsEmpty': 'Nog geen transacties.',
   'reservations.pointsSuffix': 'pt',
 
-  'reservations.hist.signature': 'Signature WilloBarber',
-  'reservations.hist.taille': 'Knippen & scheren',
 
   'comment.label': 'Een woordje voor je barbier?',
   'comment.placeholder': 'Deel je ervaring, een bedankje...',
@@ -1471,8 +1463,7 @@ const en: Record<TranslationKey, string> = {
   'reservations.mockRdv.time': 'Time',
   'reservations.mockRdv.barber': 'Barber',
   'reservations.mockRdv.address': 'Address',
-  'reservations.mockRdv.soldePrefix': 'Balance €42.70',
-  'reservations.mockRdv.soldeSuffix': 'at the salon',
+  'reservations.balanceAtSalon': 'Balance {amount} at the salon',
   'reservations.loyalty.ctaDisabledSuffix': 'remaining)',
   'reservations.qrCode.caption': 'Show this QR code at reception',
   'reservations.addToCalendar': '📅  Add to calendar',
@@ -1483,13 +1474,12 @@ const en: Record<TranslationKey, string> = {
   'reservations.cancelBtn': 'Cancel',
 
   'reservations.resumeTitle': 'Pick up where you left off',
-  'reservations.resumeBadge': 'YOUR USUAL CUT · 8 TIMES',
-  'reservations.resumeServiceMeta': '45 min · with Willo · €45',
+  'reservations.resumeBadge': 'YOUR USUAL CUT · {n} TIMES',
+  'reservations.resumeServiceMeta': '{dur} · with {barber} · {price}',
   'reservations.resumeCta': 'Same cut →',
   'reservations.adaptBtn': '✏️ Adjust',
 
   'reservations.favoritesTitle': 'Your favourites',
-  'reservations.favoritesEmpty': 'Your favourites will appear here after your first visits.',
   'reservations.favLastPrefix': 'last',
 
   'reservations.historyTitle': 'History',
@@ -1527,8 +1517,6 @@ const en: Record<TranslationKey, string> = {
   'reservations.transactionsEmpty': 'No transactions yet.',
   'reservations.pointsSuffix': 'pts',
 
-  'reservations.hist.signature': 'Signature WilloBarber',
-  'reservations.hist.taille': 'Trim & shave',
 
   'comment.label': 'A word for your barber?',
   'comment.placeholder': 'Share your experience, a thank-you...',
