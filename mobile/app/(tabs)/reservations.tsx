@@ -34,6 +34,7 @@ import { fmtPrice } from '@/components/booking/data';
 import { useClientMedia } from '@/hooks/useClientMedia';
 import ClientMediaGrid from '@/components/media/ClientMediaGrid';
 import ReservationComment from '@/components/client/ReservationComment';
+import { HistoryErrorBanner } from '@/components/client/HistoryErrorBanner';
 import {
   HISTORY_PREVIEW_COUNT, HistoryToggleButton, useListAccordion, useTrackedScroll,
 } from '@/components/client/HistoryAccordion';
@@ -91,41 +92,20 @@ const MOCK_LOYALTY = {
   total_earned: 0,
 };
 
-const TRANSACTIONS_META: { id: number; day?: string; moisIdx?: number; annee?: string; dateKey?: TranslationKey; reasonKey: TranslationKey; points: number; type: string }[] = [
-  { id: 1, day: '13', moisIdx: 6, annee: '2026', reasonKey: 'reservations.tx.signature', points:   90, type: 'earn'  },
-  { id: 2, day: '03', moisIdx: 5, annee: '2026', reasonKey: 'reservations.tx.rituel',    points:  150, type: 'earn'  },
-  { id: 3, day: '20', moisIdx: 4, annee: '2026', reasonKey: 'reservations.tx.freeCut',   points: -1000, type: 'spend' },
-  { id: 4, day: '05', moisIdx: 4, annee: '2026', reasonKey: 'reservations.tx.rasage',    points:   56, type: 'earn'  },
-  { id: 5, dateKey: 'reservations.tx.welcomeLabel', reasonKey: 'reservations.tx.welcomeReason', points: 20, type: 'bonus' },
-];
-
 const TIERS_META = [
   { labelKey: 'reservations.loyalty.tier.bronze' as TranslationKey, min: 0,   threshold: '0',   color: '#8B6914' },
   { labelKey: 'reservations.loyalty.tier.argent' as TranslationKey, min: 200, threshold: '200', color: '#6B6560' },
   { labelKey: 'reservations.loyalty.tier.or' as TranslationKey,     min: 500, threshold: '500', color: '#C9A84C' },
 ];
 
-// Mêmes couleurs que les données de démonstration ci-dessous.
 const BARBER_HIST_COLORS: Record<string, string> = { Willo: '#C9A84C', Malik: '#7A3B1E', Idris: '#1A6B4A' };
-
-const HISTORIQUE_META = [
-  { jour: '12', moisIdx: 3,  serviceKey: 'reservations.hist.signature' as TranslationKey, barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '45€', annee: '2026' },
-  { jour: '02', moisIdx: 2,  serviceKey: 'reservations.hist.taille' as TranslationKey,     barbier: 'M', barbierNom: 'Malik', couleur: '#7A3B1E', prix: '28€', annee: '2026' },
-  { jour: '18', moisIdx: 0,  serviceKey: 'reservations.hist.rituel' as TranslationKey,     barbier: 'W', barbierNom: 'Willo', couleur: '#C9A84C', prix: '75€', annee: '2026' },
-  { jour: '05', moisIdx: 11, serviceKey: 'reservations.hist.express' as TranslationKey,    barbier: 'I', barbierNom: 'Idris', couleur: '#1A6B4A', prix: '28€', annee: '2025' },
-];
 
 const FAVORIS_META = [
   { nomKey: 'reservations.hist.signature' as TranslationKey, dur: '45 min', prix: '45€', count: '8×', day: '12', moisIdx: 3 },
   { nomKey: 'reservations.hist.taille' as TranslationKey,    dur: '30 min', prix: '28€', count: '5×', day: '2',  moisIdx: 2 },
 ];
 
-const NEXT_RDV = {
-  time:      '10:30',
-  timeLabel: '10h30',
-  barbier:   'Willo',
-  adresse:   'Rue Auguste Van Zande 78',
-};
+const SALON_ADDRESS = 'Rue Auguste Van Zande 78';
 
 function getNextTarget(pts: number): number {
   if (pts < 1000) return 1000;
@@ -278,6 +258,10 @@ export default function ReservationsScreen() {
   const { user, isAuthenticated, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
   const { isLoading, refetch, cancel, upcoming, past, reservations, error } = useReservations();
+  // Rien n'a pu être chargé : bandeau « Réessayer » à la place des listes. Si un
+  // rechargement échoue alors que des réservations sont déjà affichées (refetch
+  // au focus), on garde ces vraies données plutôt que de les masquer.
+  const loadFailed = !!error && reservations.length === 0;
   const { t } = useLanguage();
 
   // Recharge les réservations à chaque prise de focus de l'onglet — sans ça, une
@@ -311,7 +295,10 @@ export default function ReservationsScreen() {
   useEffect(() => {
     if (!isLoading) setHasLoadedOnce(true);
   }, [isLoading]);
-  const showInitialLoader = isLoading && !hasLoadedOnce;
+  // Loader tant que rien n'est affichable : premier chargement, ou « Réessayer »
+  // après un échec (refetch remet `error` à null avant la requête : sans ce cas,
+  // l'écran afficherait « Aucun historique » pendant le rechargement).
+  const showInitialLoader = isLoading && (!hasLoadedOnce || reservations.length === 0);
 
   // L'API /reservations/ retourne un champ 'time', absent du type Reservation partagé
   // (utilisé ailleurs avec un shape différent) — on type le réel localement ici.
@@ -409,59 +396,39 @@ export default function ReservationsScreen() {
     };
   })() : null;
 
-  const rdv = nextRdvView ?? {
-    jour: '23',
-    mois: t('reservations.mockRdv.monthAbbr'),
-    jourAbbr: t('reservations.mockRdv.dayAbbr'),
-    service: null as string | null,
-    time: '10:30',
-    timeLabel: '10:30',
-    barbier: NEXT_RDV.barbier,
-    dateLabel: t('reservations.mockRdv.dateLabel'),
-    dateShort: t('reservations.mockRdv.dateShort'),
-    daysLabel: `${t('reservations.nextRdvIn')} 4 ${t('reservations.nextRdvDaysWord')}`,
-  };
+  const rdv = nextRdvView;
 
   // Historique des points : un gain par RDV non annulé (points attribués dès la
   // réservation, cf. core/loyalty.py). Les enfants d'un même groupe (même
   // prestation enfant, même jour) sont regroupés : « Coupe enfant × 3 · +30 pts ».
-  // Données fictives seulement si l'API est injoignable, comme l'historique.
-  const TRANSACTIONS: { id: string | number; date: string; reason: string; points: number; type: string }[] = error
-    ? TRANSACTIONS_META.map(tx => ({
-        ...tx,
-        date: tx.dateKey
-          ? t(tx.dateKey)
-          : `${tx.day} ${t(`reservations.monthAbbr.${tx.moisIdx}` as TranslationKey)} ${tx.annee}`,
-        reason: t(tx.reasonKey),
-      }))
-    : (() => {
-        const groups = new Map<string, { r: Reservation & { time: string }; count: number; points: number }>();
-        [...allReservations]
-          .filter((r) => !NOT_A_VISIT_STATUSES.includes(r.status))
-          .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`))
-          .forEach((r) => {
-            const key = r.service_category === 'enfant' ? `kids:${r.date}:${r.service_name}` : `rdv:${r.id}`;
-            const group = groups.get(key);
-            if (group) {
-              group.count += 1;
-              group.points += r.loyalty_points ?? 0;
-            } else {
-              groups.set(key, { r, count: 1, points: r.loyalty_points ?? 0 });
-            }
-          });
-        return [...groups.entries()].map(([key, { r, count, points }]) => {
-          const d = parseApiDate(r.date);
-          const date = `${d.getDate()} ${t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey)} ${d.getFullYear()}`;
-          const isKids = r.service_category === 'enfant';
-          return {
-            id: key,
-            date: isKids ? `${date} · ${t('reservations.tx.perChild')}` : date,
-            reason: count > 1 ? `${r.service_name} × ${count}` : r.service_name,
-            points,
-            type: 'earn',
-          };
-        });
-      })();
+  const TRANSACTIONS: { id: string; date: string; reason: string; points: number; type: string }[] = (() => {
+    const groups = new Map<string, { r: Reservation & { time: string }; count: number; points: number }>();
+    [...allReservations]
+      .filter((r) => !NOT_A_VISIT_STATUSES.includes(r.status))
+      .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`))
+      .forEach((r) => {
+        const key = r.service_category === 'enfant' ? `kids:${r.date}:${r.service_name}` : `rdv:${r.id}`;
+        const group = groups.get(key);
+        if (group) {
+          group.count += 1;
+          group.points += r.loyalty_points ?? 0;
+        } else {
+          groups.set(key, { r, count: 1, points: r.loyalty_points ?? 0 });
+        }
+      });
+    return [...groups.entries()].map(([key, { r, count, points }]) => {
+      const d = parseApiDate(r.date);
+      const date = `${d.getDate()} ${t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey)} ${d.getFullYear()}`;
+      const isKids = r.service_category === 'enfant';
+      return {
+        id: key,
+        date: isKids ? `${date} · ${t('reservations.tx.perChild')}` : date,
+        reason: count > 1 ? `${r.service_name} × ${count}` : r.service_name,
+        points,
+        type: 'earn',
+      };
+    });
+  })();
 
   const TIERS = TIERS_META.map(tier => ({
     ...tier,
@@ -469,39 +436,29 @@ export default function ReservationsScreen() {
     threshold: `${tier.threshold} ${t('reservations.pointsSuffix')}`,
   }));
 
-  const HISTORIQUE = error
-    ? HISTORIQUE_META.map(h => ({
-        ...h,
-        mois: t(`reservations.monthAbbr.${h.moisIdx}` as TranslationKey),
-        service: t(h.serviceKey),
-        id: null as number | null,
-        status: null as string | null,
-      }))
-    : pastSorted.map(r => {
-        const d = parseApiDate(r.date);
-        return {
-          jour: String(d.getDate()).padStart(2, '0'),
-          mois: t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey),
-          service: r.service_name,
-          // Barbier réel du RDV (agenda par barbier) — c'est aussi lui qui
-          // signe la réponse au commentaire du client.
-          barbier: (r.barber || 'Willo').charAt(0),
-          barbierNom: r.barber || 'Willo',
-          couleur: BARBER_HIST_COLORS[r.barber] ?? '#C9A84C',
-          prix: fmtPrice(PRICE_BY_SERVICE_NAME[r.service_name] ?? 0),
-          annee: r.date.slice(0, 4),
-          id: r.id as number | null,
-          status: r.status as string | null,
-        };
-      });
+  const HISTORIQUE = pastSorted.map(r => {
+    const d = parseApiDate(r.date);
+    return {
+      jour: String(d.getDate()).padStart(2, '0'),
+      mois: t(`reservations.monthAbbr.${d.getMonth()}` as TranslationKey),
+      service: r.service_name,
+      // Barbier réel du RDV (agenda par barbier) — c'est aussi lui qui
+      // signe la réponse au commentaire du client.
+      barbier: (r.barber || 'Willo').charAt(0),
+      barbierNom: r.barber || 'Willo',
+      couleur: BARBER_HIST_COLORS[r.barber] ?? '#C9A84C',
+      prix: fmtPrice(PRICE_BY_SERVICE_NAME[r.service_name] ?? 0),
+      annee: r.date.slice(0, 4),
+      id: r.id as number | null,
+      status: r.status as string | null,
+    };
+  });
 
   const FAVORIS = FAVORIS_META.map(f => ({
     ...f,
     nom: t(f.nomKey),
     date: `${f.day} ${t(`reservations.monthAbbr.${f.moisIdx}` as TranslationKey)}`,
   }));
-
-  const NEXT_RDV_SERVICE_LABEL = `${t('reservations.mockRdv.servicePrefix')} ${t('reservations.mockRdv.serviceGold')}`;
 
   // Ouverture directe d'un RDV (toast / notification « Votre barbier vous a
   // répondu ») : /reservations?reservationId=X → panneau de détail (tablette)
@@ -673,15 +630,17 @@ export default function ReservationsScreen() {
   };
 
   const handleAddToCalendar = async () => {
-    const startDate = nextReservation
-      ? `${nextReservation.date.replace(/-/g, '')}T${nextReservation.time.replace(/:/g, '').slice(0, 6)}`
-      : '20260523T103000';
-    const endDate = nextReservation
-      ? `${nextReservation.date.replace(/-/g, '')}T${nextReservation.time.replace(/:/g, '').slice(0, 6)}`
-      : '20260523T110000';
+    if (!nextReservation || !rdv) return;
+    const startDate = `${nextReservation.date.replace(/-/g, '')}T${nextReservation.time.replace(/:/g, '').slice(0, 6)}`;
     if (Platform.OS === 'web') {
-      const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Coupe+%2B+Barbe+%E2%80%94+WilloBarber&dates=${startDate}/${endDate}&details=Barbier+:+Willo%0AAdresse+:+Rue+Auguste+Van+Zande+78%0ASolde+%C3%A0+payer+au+salon+:+42.70%E2%82%AC&location=Rue+Auguste+Van+Zande+78`;
-      window.open(url, '_blank');
+      const params = new URLSearchParams({
+        action: 'TEMPLATE',
+        text: `${rdv.service} — WilloBarber`,
+        dates: `${startDate}/${startDate}`,
+        details: `${t('reservations.calendarAlert.barberLabel')} ${rdv.barbier}\n${SALON_ADDRESS}`,
+        location: SALON_ADDRESS,
+      });
+      window.open(`https://calendar.google.com/calendar/render?${params}`, '_blank');
       return;
     }
     try {
@@ -692,7 +651,7 @@ export default function ReservationsScreen() {
     } catch {
       Alert.alert(
         t('reservations.calendarAlert.title'),
-        `${rdv.service ? rdv.service : NEXT_RDV_SERVICE_LABEL}\n\n📅  ${rdv.dateLabel} ${t('reservations.cancelNextAlert.confirmWebMid')} ${rdv.time}\n${t('reservations.calendarAlert.barberLabel')} ${rdv.barbier}\n📍  ${NEXT_RDV.adresse}`,
+        `${rdv.service}\n\n📅  ${rdv.dateLabel} ${t('reservations.cancelNextAlert.confirmWebMid')} ${rdv.time}\n${t('reservations.calendarAlert.barberLabel')} ${rdv.barbier}\n📍  ${SALON_ADDRESS}`,
         [{ text: t('common.ok') }]
       );
     }
@@ -734,32 +693,6 @@ export default function ReservationsScreen() {
         { text: t('reservations.rescheduleAlert.dateTimeOption'), onPress: goDateTime },
         { text: t('reservations.rescheduleAlert.serviceOption'), onPress: goService },
         { text: t('common.cancel'), style: 'cancel' },
-      ]
-    );
-  };
-
-  const handleCancelNextRdv = () => {
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `${t('reservations.cancelNextAlert.confirmWebPrefix')} ${rdv.dateShort} ${t('reservations.cancelNextAlert.confirmWebMid')} ${rdv.timeLabel} ${t('reservations.cancelNextAlert.confirmWebWith')} ${rdv.barbier} ?`
-      );
-      if (confirmed) {
-        window.alert(`${t('reservations.cancelNextAlert.doneTitle')}. ${t('reservations.cancelNextAlert.doneMsg')}`);
-      }
-      return;
-    }
-    Alert.alert(
-      t('reservations.cancelNextAlert.title'),
-      `${t('reservations.cancelNextAlert.confirmWebPrefix')} ${rdv.dateShort} ${t('reservations.cancelNextAlert.confirmWebMid')} ${rdv.timeLabel} ${t('reservations.cancelNextAlert.confirmWebWith')} ${rdv.barbier} ${t('reservations.cancelNextAlert.body')}`,
-      [
-        { text: t('reservations.cancelNextAlert.cancelBtn'), style: 'cancel' },
-        {
-          text: t('reservations.cancelNextAlert.confirmBtn'),
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(t('reservations.cancelNextAlert.doneTitle'), t('reservations.cancelNextAlert.doneMsg'));
-          },
-        },
       ]
     );
   };
@@ -927,7 +860,10 @@ export default function ReservationsScreen() {
               {showInitialLoader && (
                 <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
               )}
-              {!showInitialLoader && (error || nextRdvView) && (
+              {!showInitialLoader && loadFailed && (
+                <HistoryErrorBanner onRetry={refetch} testID="next-rdv-error-banner" />
+              )}
+              {!showInitialLoader && rdv && nextReservation && (
                 <>
                   <View style={styles.nextRdvBadgeWrap}>
                     <View style={styles.nextRdvBadge}>
@@ -944,10 +880,7 @@ export default function ReservationsScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.mockRdvService}>
-                          {rdv.service
-                            ? <GoldItalic>{rdv.service}</GoldItalic>
-                            : <>{t('reservations.mockRdv.servicePrefix')} <GoldItalic>{t('reservations.mockRdv.serviceGold')}</GoldItalic></>
-                          }
+                          <GoldItalic>{rdv.service}</GoldItalic>
                         </Text>
                         <View style={styles.mockRdvInfoRow}>
                           <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.time')}</Text>
@@ -975,7 +908,7 @@ export default function ReservationsScreen() {
                       <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
                         <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={() => nextReservation ? setCancelTarget(nextReservation) : handleCancelNextRdv()} activeOpacity={0.85}>
+                      <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={() => setCancelTarget(nextReservation)} activeOpacity={0.85}>
                         <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
                       </TouchableOpacity>
                     </View>
@@ -1006,7 +939,7 @@ export default function ReservationsScreen() {
               )}
 
               {/* Resume card — masqué pour un nouveau client sans historique */}
-              {hasHistory && (
+              {hasHistory && !loadFailed && (
                 <>
                   <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
 
@@ -1092,6 +1025,8 @@ export default function ReservationsScreen() {
 
               {showInitialLoader ? (
                 <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
+              ) : loadFailed ? (
+                <HistoryErrorBanner onRetry={refetch} />
               ) : filteredHist.length === 0 ? (
                 <Text style={styles.emptyHist}>{t('reservations.emptyHistory')}</Text>
               ) : (
@@ -1262,7 +1197,11 @@ export default function ReservationsScreen() {
 
               {/* Historique des points */}
               <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
-              {TRANSACTIONS.length === 0 ? (
+              {showInitialLoader ? (
+                <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
+              ) : loadFailed ? (
+                <HistoryErrorBanner onRetry={refetch} testID="points-error-banner" />
+              ) : TRANSACTIONS.length === 0 ? (
                 <Text style={styles.emptyHist}>{t('reservations.transactionsEmpty')}</Text>
               ) : (
                 <>
@@ -1321,7 +1260,10 @@ export default function ReservationsScreen() {
         {showInitialLoader && (
           <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
         )}
-        {!showInitialLoader && (error || nextRdvView) && (
+        {!showInitialLoader && loadFailed && (
+          <HistoryErrorBanner onRetry={refetch} testID="next-rdv-error-banner" />
+        )}
+        {!showInitialLoader && rdv && nextReservation && (
           <>
             <View style={styles.nextRdvBadgeWrap}>
               <View style={styles.nextRdvBadge}>
@@ -1338,10 +1280,7 @@ export default function ReservationsScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.mockRdvService}>
-                    {rdv.service
-                      ? <GoldItalic>{rdv.service}</GoldItalic>
-                      : <>{t('reservations.mockRdv.servicePrefix')} <GoldItalic>{t('reservations.mockRdv.serviceGold')}</GoldItalic></>
-                    }
+                    <GoldItalic>{rdv.service}</GoldItalic>
                   </Text>
                   <View style={styles.mockRdvInfoRow}>
                     <Text style={styles.mockRdvKey}>{t('reservations.mockRdv.time')}</Text>
@@ -1369,7 +1308,7 @@ export default function ReservationsScreen() {
                 <TouchableOpacity testID="btn-reprogrammer" style={[styles.btnOutline, { flex: 1 }]} onPress={handleReprogrammer} activeOpacity={0.85}>
                   <Text style={styles.btnOutlineText}>{t('reservations.reschedule')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={() => nextReservation ? setCancelTarget(nextReservation) : handleCancelNextRdv()} activeOpacity={0.85}>
+                <TouchableOpacity testID="btn-cancel-next-rdv" style={styles.btnDangerSm} onPress={() => setCancelTarget(nextReservation)} activeOpacity={0.85}>
                   <Text style={styles.btnDangerSmText}>{t('reservations.cancelBtn')}</Text>
                 </TouchableOpacity>
               </View>
@@ -1400,7 +1339,7 @@ export default function ReservationsScreen() {
         )}
 
         {/* ── 4. REPRENEZ LÀ OÙ VOUS EN ÉTIEZ ── masqué pour un nouveau client sans historique */}
-        {hasHistory && (
+        {hasHistory && !loadFailed && (
           <>
             <Text style={styles.sectionTitle}>{t('reservations.resumeTitle')}</Text>
 
@@ -1493,6 +1432,8 @@ export default function ReservationsScreen() {
 
         {showInitialLoader ? (
           <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
+        ) : loadFailed ? (
+          <HistoryErrorBanner onRetry={refetch} />
         ) : filteredHist.length === 0 ? (
           <Text style={styles.emptyHist}>{t('reservations.emptyHistory')}</Text>
         ) : (
@@ -1624,7 +1565,11 @@ export default function ReservationsScreen() {
 
         {/* ── 8. HISTORIQUE DES POINTS ──────────────────────────────── */}
         <Text style={[styles.sectionKicker, { marginTop: 24 }]}>{t('reservations.pointsHistoryTitle')}</Text>
-        {TRANSACTIONS.length === 0 ? (
+        {showInitialLoader ? (
+          <ActivityIndicator color="#C9A84C" size="large" style={{ marginVertical: 30 }} />
+        ) : loadFailed ? (
+          <HistoryErrorBanner onRetry={refetch} testID="points-error-banner" />
+        ) : TRANSACTIONS.length === 0 ? (
           <Text style={styles.emptyHist}>{t('reservations.transactionsEmpty')}</Text>
         ) : (
           <>
