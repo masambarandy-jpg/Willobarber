@@ -446,14 +446,15 @@ export default function ReservationsScreen() {
   const now = new Date();
   const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
   const pastListAll = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
-  // Coupes masquées par le client : hors des stats (visites, dernière visite,
-  // favoris) et de l'historique, sauf « Afficher les coupes masquées ». Elles
-  // restent dans l'historique des points (points acquis).
+  // Masquer une coupe est purement cosmétique : elle sort de la liste
+  // historique (sauf « Afficher les coupes masquées »), pas des stats ni de
+  // l'historique des points — le client est bien venu au salon.
   const pastList = pastListAll.filter((r) => !r.hidden_by_client);
   const hiddenCount = pastListAll.length - pastList.length;
-  // Visites réellement honorées : les stats ignorent annulations et no-shows,
-  // contrairement à l'historique qui affiche tout.
-  const visitList = pastList.filter((r) => !NOT_A_VISIT_STATUSES.includes(r.status));
+  // Visites réellement honorées, masquées comprises : les stats (visites,
+  // dernière visite, favoris) ignorent annulations et no-shows, contrairement
+  // à l'historique qui affiche tout.
+  const visitList = pastListAll.filter((r) => !NOT_A_VISIT_STATUSES.includes(r.status));
 
   // Sync loyaltyPoints avec le user du contexte auth. Utilise [user] comme
   // dep (pas [user?.loyalty_points]) pour que l'effet re-tourne à chaque
@@ -1137,7 +1138,7 @@ export default function ReservationsScreen() {
                   <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
                 </View>
                 <View style={styles.statCard}>
-                  <Text style={styles.statText} numberOfLines={2} adjustsFontSizeToFit>{lastVisitLabel}</Text>
+                  <Text testID="stat-last-visit" style={styles.statText} numberOfLines={2} adjustsFontSizeToFit>{lastVisitLabel}</Text>
                   <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
                 </View>
                 <View style={styles.statCard}>
@@ -1253,7 +1254,7 @@ export default function ReservationsScreen() {
 
               <View style={styles.favGrid}>
                 {FAVORIS.map((fav) => (
-                  <View key={fav.nom} style={[styles.favCard, styles.favCardTablet]}>
+                  <View key={fav.nom} testID="fav-card" style={[styles.favCard, styles.favCardTablet]}>
                     <Text style={styles.favStar}>★</Text>
                     <Text style={styles.favName}>{fav.nom}</Text>
                     <Text style={styles.favMeta}>
@@ -1531,7 +1532,7 @@ export default function ReservationsScreen() {
             <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statText} numberOfLines={2} adjustsFontSizeToFit>{lastVisitLabel}</Text>
+            <Text testID="stat-last-visit" style={styles.statText} numberOfLines={2} adjustsFontSizeToFit>{lastVisitLabel}</Text>
             <Text style={styles.statLabel}>{t('reservations.stats.lastVisit')}</Text>
           </View>
           <View style={styles.statCard}>
@@ -1648,7 +1649,7 @@ export default function ReservationsScreen() {
         {!showFavoris ? null : isTablet ? (
           <View style={styles.favGrid}>
             {FAVORIS.map((fav) => (
-              <View key={fav.nom} style={[styles.favCard, styles.favCardTablet]}>
+              <View key={fav.nom} testID="fav-card" style={[styles.favCard, styles.favCardTablet]}>
                 <Text style={styles.favStar}>★</Text>
                 <Text style={styles.favName}>{fav.nom}</Text>
                 <Text style={styles.favMeta}>
@@ -1666,7 +1667,7 @@ export default function ReservationsScreen() {
             contentContainerStyle={{ gap: 12, paddingRight: 4, marginBottom: 24 }}
           >
             {FAVORIS.map((fav) => (
-              <View key={fav.nom} style={styles.favCard}>
+              <View key={fav.nom} testID="fav-card" style={styles.favCard}>
                 <Text style={styles.favStar}>★</Text>
                 <Text style={styles.favName}>{fav.nom}</Text>
                 <Text style={styles.favMeta}>
