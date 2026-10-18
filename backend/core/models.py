@@ -142,6 +142,9 @@ class Reservation(models.Model):
     qr_code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     checked_in = models.BooleanField(default=False)
     checked_in_at = models.DateTimeField(null=True, blank=True)
+    # Coupe passée retirée de l'historique « Mon espace » du client (soft
+    # delete) : le salon la voit toujours et les points fidélité restent acquis.
+    hidden_by_client = models.BooleanField(default=False)
 
     class Meta:
         # Un seul créneau actif (pending/confirmed) par date+heure — le salon

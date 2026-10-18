@@ -241,8 +241,10 @@ export const slotsApi = {
 // ─── Reservations API ────────────────────────────────────────────────────────
 
 export const reservationsApi = {
+  // include_hidden : Mon espace reçoit aussi les coupes masquées par le client
+  // (historique des points inchangé, bouton « Afficher les coupes masquées »).
   list: (status?: string) =>
-    http.get<Reservation[]>('/reservations/', { params: status ? { status } : {} }).then((r) => r.data),
+    http.get<Reservation[]>('/reservations/', { params: { include_hidden: '1', ...(status ? { status } : {}) } }).then((r) => r.data),
 
   create: (payload: CreateReservationPayload) =>
     http.post<Reservation>('/reservations/', payload).then((r) => r.data),
@@ -263,6 +265,12 @@ export const reservationsApi = {
   // 'date'/'time' (les noms de champs réels du serializer, pas 'start_time').
   reschedule: (id: number, payload: { date: string; time: string }) =>
     http.patch<Reservation>(`/reservations/${id}/`, payload).then((r) => r.data),
+
+  // Masque (ou réaffiche) une coupe passée de l'historique du client — soft
+  // delete : le salon la voit toujours, les points restent acquis.
+  // 403 si ce n'est pas son RDV, 400 code 'not_past' si le RDV est à venir.
+  hide: (id: number, hidden = true) =>
+    http.patch<Reservation>(`/reservations/${id}/hide/`, { hidden }).then((r) => r.data),
 
   qr: (id: number) =>
     http.get<{ reservation_id: number; qr_code: string; checked_in: boolean }>(`/reservations/${id}/qr/`).then((r) => r.data),

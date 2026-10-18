@@ -598,7 +598,12 @@ class ReservationViewSet(viewsets.ModelViewSet):
         is_staff = user.is_superuser or getattr(user, 'role', None) == 'admin'
         if is_staff:
             return Reservation.objects.all()
-        return Reservation.objects.filter(user=user)
+        queryset = Reservation.objects.filter(user=user)
+        # Coupes masquées par le client : hors de sa liste, sauf ?include_hidden=1.
+        # Le salon (branche staff ci-dessus) voit toujours tout.
+        if self.action == 'list' and self.request.query_params.get('include_hidden') != '1':
+            queryset = queryset.filter(hidden_by_client=False)
+        return queryset
 
     # Champs qu'un client n'est jamais autorisé à modifier lui-même — seul le
     # staff (via IsStaffRole) peut les toucher, sinon n'importe quel client
@@ -979,6 +984,35 @@ def reservation_qr_code(request, pk):
         'qr_code': str(reservation.qr_code),
         'checked_in': reservation.checked_in,
     })
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def hide_reservation(request, pk):
+    """Masque (ou réaffiche avec {"hidden": false}) une coupe passée de
+    l'historique du client. Soft delete : rien n'est supprimé, le salon la
+    voit toujours et les points fidélité ne bougent pas."""
+    try:
+        reservation = Reservation.objects.get(pk=pk)
+    except Reservation.DoesNotExist:
+        return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if reservation.user_id != request.user.id:
+        return Response({'error': 'Vous ne pouvez masquer que vos propres coupes.'}, status=status.HTTP_403_FORBIDDEN)
+
+    starts_at = datetime.combine(reservation.date, reservation.time, tzinfo=SALON_TZ)
+    if starts_at > timezone.now():
+        return Response(
+            {'error': 'Seule une coupe passée peut être masquée.', 'code': 'not_past'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    hidden = request.data.get('hidden', True)
+    if not isinstance(hidden, bool):
+        return Response({'error': '« hidden » doit être un booléen.'}, status=status.HTTP_400_BAD_REQUEST)
+    reservation.hidden_by_client = hidden
+    reservation.save(update_fields=['hidden_by_client'])
+    return Response(ReservationSerializer(reservation).data)
 
 
 @api_view(['GET', 'POST'])

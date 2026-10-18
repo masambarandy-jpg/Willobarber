@@ -142,6 +142,8 @@ export interface Reservation {
   loyalty_points?: number;
   service_category?: string;
   child_count?: number;
+  // Coupe passée retirée de l'historique par le client (soft delete).
+  hidden_by_client?: boolean;
 }
 
 export type BarberName = 'Willo' | 'Malik' | 'Idris';

@@ -210,6 +210,86 @@ function ReviewModal({ target, review, onClose, onChange }: ReviewModalProps) {
   );
 }
 
+interface HideCoupeButtonProps {
+  // Coupe déjà masquée (visible via « Afficher les coupes masquées ») : l'icône
+  // devient un œil pour la réafficher.
+  hidden: boolean;
+  onPress: () => void;
+  testID?: string;
+}
+
+// ✕ discrète dans le coin supérieur droit d'une carte d'historique. Jamais à
+// l'intérieur d'un autre bouton (sur web : <button> imbriqué interdit).
+function HideCoupeButton({ hidden, onPress, testID }: HideCoupeButtonProps) {
+  const { t } = useLanguage();
+  return (
+    <Pressable
+      onPress={onPress}
+      testID={testID}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={t(hidden ? 'history.unhideCoupe' : 'history.hideCoupe')}
+      // `hovered` n'existe que sur react-native-web (absent des types RN).
+      style={(state) => [styles.hideBtn, { opacity: (state as { hovered?: boolean }).hovered ? 1 : 0.6 }]}
+    >
+      {(state) => (
+        <Ionicons
+          name={hidden ? 'eye-outline' : 'close'}
+          size={15}
+          color={(state as { hovered?: boolean }).hovered ? (hidden ? '#C9A84C' : '#E57368') : '#9A9490'}
+        />
+      )}
+    </Pressable>
+  );
+}
+
+// Fondu de sortie d'une carte masquée ; onDone une fois l'animation finie.
+function FadeOut({ active, onDone, children }: { active: boolean; onDone: () => void; children: React.ReactNode }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  useEffect(() => {
+    if (!active) {
+      opacity.setValue(1);
+      return;
+    }
+    Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: Platform.OS !== 'web' })
+      .start(({ finished }) => { if (finished) onDoneRef.current(); });
+  }, [active, opacity]);
+  return <Animated.View style={{ opacity }}>{children}</Animated.View>;
+}
+
+interface HideCoupeModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  loading: boolean;
+}
+function HideCoupeModal({ visible, onClose, onConfirm, loading }: HideCoupeModalProps) {
+  const isTablet = useIsTablet();
+  const { t } = useLanguage();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
+        <View testID="hide-coupe-modal" style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
+          <Text style={styles.modalTitle}>{t('history.hideCoupeTitle')}</Text>
+          <Text style={styles.modalSub}>{t('history.hideCoupeMessage')}</Text>
+          <View style={styles.modalBtns}>
+            <TouchableOpacity style={styles.btnKeep} onPress={onClose}>
+              <Text style={styles.btnKeepText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity testID="btn-confirm-hide" style={styles.btnHideConfirm} onPress={onConfirm} disabled={loading}>
+              {loading
+                ? <ActivityIndicator color="#1A1208" size="small" />
+                : <Text style={styles.btnHideConfirmText}>{t('history.hideConfirm')}</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 interface RdvActionsProps {
   onReschedule: () => void;
   onCancel: () => void;
@@ -296,7 +376,7 @@ export default function ReservationsScreen() {
   const isTablet = useIsTablet();
   const { user, isAuthenticated, refreshUser } = useAuth();
   const { showLoginModal } = useAuthModal();
-  const { isLoading, refetch, cancel, upcomingSorted, reservations, error } = useReservations();
+  const { isLoading, refetch, cancel, setHidden, upcomingSorted, reservations, error } = useReservations();
   // Rien n'a pu être chargé : bandeau « Réessayer » à la place des listes. Si un
   // rechargement échoue alors que des réservations sont déjà affichées (refetch
   // au focus), on garde ces vraies données plutôt que de les masquer.
@@ -330,6 +410,13 @@ export default function ReservationsScreen() {
   const [detailTarget, setDetailTarget] = useState<ApiReservation | null>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
   const hideToast = useCallback(() => setToast(null), []);
+  // Masquer une coupe de l'historique : cible de la modale de confirmation,
+  // carte en cours de fondu, et affichage optionnel des coupes masquées.
+  const [hideTarget, setHideTarget] = useState<number | null>(null);
+  const [hiding, setHiding] = useState(false);
+  const [fadingId, setFadingId] = useState<number | null>(null);
+  const fadeDoneRef = useRef<(() => void) | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
   const [reviewModalTarget, setReviewModalTarget] = useState<{ id: number; service: string } | null>(null);
   const [mainTab, setMainTab] = useState<'apercu' | 'coupes'>('apercu');
   // Solde réel du client (backend /auth/me/), resynchronisé quand user change.
@@ -358,7 +445,12 @@ export default function ReservationsScreen() {
   // (pending/confirmed oubliés, completed, cancelled...) — pas seulement status === 'completed'.
   const now = new Date();
   const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
-  const pastList = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
+  const pastListAll = allReservations.filter((r) => `${r.date}T${r.time}` < nowKey);
+  // Coupes masquées par le client : hors des stats (visites, dernière visite,
+  // favoris) et de l'historique, sauf « Afficher les coupes masquées ». Elles
+  // restent dans l'historique des points (points acquis).
+  const pastList = pastListAll.filter((r) => !r.hidden_by_client);
+  const hiddenCount = pastListAll.length - pastList.length;
   // Visites réellement honorées : les stats ignorent annulations et no-shows,
   // contrairement à l'historique qui affiche tout.
   const visitList = pastList.filter((r) => !NOT_A_VISIT_STATUSES.includes(r.status));
@@ -377,7 +469,7 @@ export default function ReservationsScreen() {
   const nextReservation = upcomingList[0] ?? null;
   const otherUpcoming = upcomingList.slice(1);
 
-  const pastSorted = [...pastList].sort((a, b) =>
+  const pastSorted = [...(showHidden ? pastListAll : pastList)].sort((a, b) =>
     `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
   );
 
@@ -502,6 +594,7 @@ export default function ReservationsScreen() {
       annee: r.date.slice(0, 4),
       id: r.id as number | null,
       status: r.status as string | null,
+      hidden: !!r.hidden_by_client,
     };
   });
 
@@ -671,6 +764,58 @@ export default function ReservationsScreen() {
       testID="btn-toggle-rdv-history"
     />
   );
+  // Masquer (après confirmation) ou réafficher une coupe. La carte masquée
+  // s'efface en fondu une fois le PATCH confirmé, puis quitte la liste : les
+  // stats (dérivées du store) se recomptent d'elles-mêmes.
+  const applyHidden = async (id: number, hidden: boolean) => {
+    const fades = hidden && !showHidden;
+    await setHidden(id, hidden, fades
+      ? () => new Promise<void>((resolve) => { fadeDoneRef.current = resolve; setFadingId(id); })
+      : undefined);
+    setFadingId(null);
+    setSelectedHistIndex(null);
+    setToast({ message: t(hidden ? 'history.coupeHidden' : 'history.coupeUnhidden'), testID: 'coupe-hidden-toast' });
+  };
+
+  const handleConfirmHide = async () => {
+    if (hideTarget == null) return;
+    setHiding(true);
+    try {
+      const id = hideTarget;
+      setHideTarget(null);
+      await applyHidden(id, true);
+    } catch {
+      setFadingId(null);
+      setToast({ message: t('history.hideError'), color: '#C0392B' });
+    } finally {
+      setHiding(false);
+    }
+  };
+
+  const handleHidePress = (h: (typeof HISTORIQUE)[number]) => {
+    if (h.id == null) return;
+    if (!h.hidden) {
+      setHideTarget(h.id);
+      return;
+    }
+    applyHidden(h.id, false).catch(() => setToast({ message: t('history.hideError'), color: '#C0392B' }));
+  };
+
+  const hiddenToggle = (hiddenCount > 0 || showHidden) && !loadFailed && (
+    <TouchableOpacity
+      testID="btn-toggle-hidden-coupes"
+      style={styles.hiddenToggle}
+      onPress={() => { setShowHidden((v) => !v); setSelectedHistIndex(null); }}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.hiddenToggleText}>
+        {showHidden
+          ? t('history.hideHiddenCoupes')
+          : t('history.showHiddenCoupes').replace('{n}', String(hiddenCount))}
+      </Text>
+    </TouchableOpacity>
+  );
+
   const pointsToggle = TRANSACTIONS.length > HISTORY_PREVIEW_COUNT && (
     <HistoryToggleButton
       expanded={pointsAccordion.expanded}
@@ -988,7 +1133,7 @@ export default function ReservationsScreen() {
               {/* Stats */}
               <View style={styles.statsGrid}>
                 <View style={styles.statCard}>
-                  <Text style={styles.statNum}>{visitList.length}</Text>
+                  <Text testID="stat-visits" style={styles.statNum}>{visitList.length}</Text>
                   <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
                 </View>
                 <View style={styles.statCard}>
@@ -1165,25 +1310,33 @@ export default function ReservationsScreen() {
                     {visibleHist.map((h, i) => {
                       const isSelected = selectedHistIndex === i;
                       return (
-                        <Pressable
-                          key={i}
-                          testID={`hist-row-${i}`}
-                          onPress={() => setSelectedHistIndex(i)}
-                          style={[styles.histListRow, isSelected && styles.histListRowActive]}
-                        >
-                          <View style={styles.histDateBox}>
-                            <Text style={styles.histDateNum}>{h.jour}</Text>
-                            <Text style={styles.histDateMon}>{h.mois}</Text>
+                        <FadeOut key={h.id ?? i} active={fadingId === h.id} onDone={() => fadeDoneRef.current?.()}>
+                          {/* ✕ à côté de la ligne (pas dedans) : la ligne est déjà un bouton. */}
+                          <View testID={`hist-card-${h.id}`}>
+                            <Pressable
+                              testID={`hist-row-${i}`}
+                              onPress={() => setSelectedHistIndex(i)}
+                              style={[styles.histListRow, styles.histWithHide, isSelected && styles.histListRowActive, h.hidden && styles.histHidden]}
+                            >
+                              <View style={styles.histDateBox}>
+                                <Text style={styles.histDateNum}>{h.jour}</Text>
+                                <Text style={styles.histDateMon}>{h.mois}</Text>
+                              </View>
+                              <View style={{ flex: 1, gap: 3 }}>
+                                <Text style={styles.histService} numberOfLines={1}>{h.service}</Text>
+                                <Text style={styles.histMeta}>{h.barbierNom} · {h.prix}</Text>
+                              </View>
+                            </Pressable>
+                            {h.id != null && (
+                              <HideCoupeButton hidden={h.hidden} onPress={() => handleHidePress(h)} testID={`btn-hide-coupe-${h.id}`} />
+                            )}
                           </View>
-                          <View style={{ flex: 1, gap: 3 }}>
-                            <Text style={styles.histService} numberOfLines={1}>{h.service}</Text>
-                            <Text style={styles.histMeta}>{h.barbierNom} · {h.prix}</Text>
-                          </View>
-                        </Pressable>
+                        </FadeOut>
                       );
                     })}
                     </View>
                     {histToggle}
+                    {hiddenToggle}
                   </View>
                   {selectedHistIndex === null ? (
                     <View style={styles.histSplitDetail}>
@@ -1374,7 +1527,7 @@ export default function ReservationsScreen() {
         {/* ── 2. GRILLE STATS ───────────────────────────────────────── */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Text style={styles.statNum}>{visitList.length}</Text>
+            <Text testID="stat-visits" style={styles.statNum}>{visitList.length}</Text>
             <Text style={styles.statLabel}>{t('reservations.stats.visits')}</Text>
           </View>
           <View style={styles.statCard}>
@@ -1554,8 +1707,8 @@ export default function ReservationsScreen() {
         ) : (
           <View onLayout={histAccordion.onListLayout}>
           {visibleHist.map((h, i) => (
-            <React.Fragment key={i}>
-              <View style={styles.histCard}>
+            <FadeOut key={h.id ?? i} active={fadingId === h.id} onDone={() => fadeDoneRef.current?.()}>
+              <View testID={`hist-card-${h.id}`} style={[styles.histCard, styles.histWithHide, h.hidden && styles.histHidden]}>
                 <View style={styles.histDateBox}>
                   <Text style={styles.histDateNum}>{h.jour}</Text>
                   <Text style={styles.histDateMon}>{h.mois}</Text>
@@ -1581,6 +1734,9 @@ export default function ReservationsScreen() {
                     <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15 }}>↓</Text>
                   </TouchableOpacity>
                 </View>
+                {h.id != null && (
+                  <HideCoupeButton hidden={h.hidden} onPress={() => handleHidePress(h)} testID={`btn-hide-coupe-${h.id}`} />
+                )}
               </View>
               {isCommentable(h) && (
                 <View style={styles.histComment}>
@@ -1591,11 +1747,12 @@ export default function ReservationsScreen() {
                   />
                 </View>
               )}
-            </React.Fragment>
+            </FadeOut>
           ))}
           </View>
         )}
         {histToggle}
+        {hiddenToggle}
 
         {/* ── 7. PROGRAMME FIDÉLITÉ ─────────────────────────────────── */}
         <Text style={[styles.sectionKicker, { marginTop: 28 }]}>{t('reservations.loyalty.programTitle')}</Text>
@@ -1765,6 +1922,13 @@ export default function ReservationsScreen() {
           </View>
         </View>
       </Modal>
+
+      <HideCoupeModal
+        visible={hideTarget != null}
+        onClose={() => setHideTarget(null)}
+        onConfirm={handleConfirmHide}
+        loading={hiding}
+      />
 
       <NotificationToast toast={toast} onHide={hideToast} />
 
@@ -2060,6 +2224,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   histDateBox: { width: 42, alignItems: 'center', flexShrink: 0 },
+  // Place réservée à droite pour la ✕ (hors des icônes ↺ / ↓).
+  histWithHide: { paddingRight: 34 },
+  histHidden:   { opacity: 0.5 },
+  hideBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  hiddenToggle:     { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 8, marginTop: 4 },
+  hiddenToggleText: { color: 'rgba(255,255,255,0.45)', fontSize: 12.5, textDecorationLine: 'underline' },
   histDateNum: { fontFamily: Fonts.bold, fontSize: 22, fontWeight: '700', color: '#fff', lineHeight: 25 },
   histDateMon: { fontSize: 11, letterSpacing: 0.5, color: 'rgba(255,255,255,0.5)', marginTop: 1, textTransform: 'uppercase' },
   histService: { fontSize: 15, fontWeight: '500', color: '#fff' },
@@ -2286,4 +2466,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnKeepText: { color: '#fff', fontWeight: '600', fontSize: 14.5 },
+  btnHideConfirm: {
+    flex: 1,
+    backgroundColor: '#C9A84C',
+    borderRadius: 100,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  btnHideConfirmText: { color: '#1A1208', fontWeight: '700', fontSize: 14.5 },
 });

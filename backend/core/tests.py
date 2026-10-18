@@ -918,3 +918,77 @@ class WaitlistTests(TestCase):
         self.assertEqual(self.api.get('/api/waitlist/for-slot/', {'date': '2026-11-20'}).data['count'], 2)
         self.assertEqual(self.api.get('/api/waitlist/for-slot/', {**self.SLOT, 'time': '16:30'}).data['count'], 0)
         self.assertEqual(self.api.get('/api/waitlist/for-slot/', {'date': 'demain'}).status_code, 400)
+
+
+@patch('core.sse.publish_to_client', return_value=1)
+@patch('core.sse.publish')
+class HiddenByClientTests(TestCase):
+    """Masquer une coupe de son historique (soft delete côté client)."""
+
+    def setUp(self):
+        owner = User.objects.create_user('owner', role='admin')
+        shop = Barbershop.objects.create(name='WB', address='x', phone='x', owner=owner)
+        service = Service.objects.create(name='Signature', price=45, duration=45, barbershop=shop)
+        self.client_user = User.objects.create_user('randy', role='client', loyalty_points=90)
+        self.other = User.objects.create_user('other', role='client')
+        today = salon_now().date()
+        self.past = Reservation.objects.create(
+            user=self.client_user, service=service, date=today - timedelta(days=30), time=time(10, 0), status='confirmed',
+        )
+        self.future = Reservation.objects.create(
+            user=self.client_user, service=service, date=today + timedelta(days=30), time=time(10, 0), status='confirmed',
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.client_user)
+        self.staff = APIClient()
+        self.staff.force_authenticate(owner)
+
+    def hide(self, reservation, api=None, **body):
+        return (api or self.api).patch(f'/api/reservations/{reservation.id}/hide/', body, format='json')
+
+    def ids(self, api, **params):
+        return {r['id'] for r in api.get('/api/reservations/', params).data}
+
+    def test_hide_past_cut_removes_it_from_client_list_only(self, *_):
+        r = self.hide(self.past)
+        self.assertEqual((r.status_code, r.data['hidden_by_client']), (200, True))
+        self.past.refresh_from_db()
+        self.assertTrue(self.past.hidden_by_client)
+        self.assertEqual(self.ids(self.api), {self.future.id})
+        self.assertEqual(self.ids(self.api, include_hidden='1'), {self.past.id, self.future.id})
+        # Le salon voit toujours tout.
+        self.assertEqual(self.ids(self.staff), {self.past.id, self.future.id})
+
+    def test_hide_keeps_loyalty_points(self, *_):
+        self.hide(self.past)
+        self.client_user.refresh_from_db()
+        self.assertEqual(self.client_user.loyalty_points, 90)
+
+    def test_unhide(self, *_):
+        self.hide(self.past)
+        r = self.hide(self.past, hidden=False)
+        self.assertEqual((r.status_code, r.data['hidden_by_client']), (200, False))
+        self.assertIn(self.past.id, self.ids(self.api))
+
+    def test_other_client_gets_403(self, *_):
+        intruder = APIClient()
+        intruder.force_authenticate(self.other)
+        self.assertEqual(self.hide(self.past, api=intruder).status_code, 403)
+        # Même le salon ne masque pas à la place du client.
+        self.assertEqual(self.hide(self.past, api=self.staff).status_code, 403)
+        self.past.refresh_from_db()
+        self.assertFalse(self.past.hidden_by_client)
+
+    def test_future_reservation_gets_400(self, *_):
+        r = self.hide(self.future)
+        self.assertEqual((r.status_code, r.data['code']), (400, 'not_past'))
+
+    def test_invalid_payload_and_unknown_id(self, *_):
+        self.assertEqual(self.hide(self.past, hidden='oui').status_code, 400)
+        self.assertEqual(self.api.patch('/api/reservations/999999/hide/', {}, format='json').status_code, 404)
+
+    def test_field_not_writable_through_generic_patch(self, *_):
+        r = self.api.patch(f'/api/reservations/{self.past.id}/', {'hidden_by_client': True}, format='json')
+        self.assertEqual(r.status_code, 403)
+        self.past.refresh_from_db()
+        self.assertFalse(self.past.hidden_by_client)

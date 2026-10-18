@@ -89,8 +89,11 @@ class ReservationSerializer(serializers.ModelSerializer):
             'qr_code',
             'checked_in',
             'checked_in_at',
+            'hidden_by_client',
         ]
-        read_only_fields = ['qr_code', 'checked_in', 'checked_in_at']
+        # hidden_by_client ne se modifie que via PATCH /reservations/<id>/hide/
+        # (propriétaire + RDV passé, cf. views.hide_reservation).
+        read_only_fields = ['qr_code', 'checked_in', 'checked_in_at', 'hidden_by_client']
 
 
 class ClosedPeriodSerializer(serializers.ModelSerializer):

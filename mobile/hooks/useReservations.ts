@@ -93,6 +93,16 @@ export function useReservations() {
     await load();
   }, []);
 
+  // Masque / réaffiche une coupe passée. `beforeApply` s'exécute entre la
+  // confirmation serveur et la mise à jour du store (ex. fondu de la carte).
+  const setHidden = useCallback(async (id: number, hidden: boolean, beforeApply?: () => Promise<void>) => {
+    await reservationsApi.hide(id, hidden);
+    await beforeApply?.();
+    setState({
+      reservations: state.reservations.map((r) => (r.id === id ? { ...r, hidden_by_client: hidden } : r)),
+    });
+  }, []);
+
   const upcoming = reservations.filter(
     (r) => r.status === 'pending' || r.status === 'confirmed',
   );
@@ -101,5 +111,5 @@ export function useReservations() {
   );
   const upcomingSorted = sortUpcoming(upcoming);
 
-  return { reservations, upcoming, upcomingSorted, past, isLoading, error, refetch, cancel };
+  return { reservations, upcoming, upcomingSorted, past, isLoading, error, refetch, cancel, setHidden };
 }
