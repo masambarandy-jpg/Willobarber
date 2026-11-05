@@ -1197,6 +1197,13 @@ class CancellationRefundTests(TestCase):
         r = self.cancel(self.book(timedelta(hours=48), status='pending'))
         self.assertEqual((r.status_code, r.data['status']), (200, 'cancelled_and_refunded'))
 
+    def test_client_reason_is_stored_in_full(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        reservation = self.book(timedelta(hours=48))
+        self.assertEqual(self.cancel(reservation, body={'reason': 'x' * 500}).status_code, 200)
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.cancellation_reason, 'x' * 500)
+
     def test_client_reason_over_500_chars_is_refused(self, _sg, _refund, _sse):
         r = self.cancel(self.book(timedelta(hours=48)), body={'reason': 'x' * 501})
         self.assertEqual(r.status_code, 400)

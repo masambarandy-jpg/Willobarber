@@ -171,7 +171,7 @@ class Reservation(models.Model):
     refund_confirmed_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancelled_by = models.CharField(max_length=10, choices=CANCELLED_BY_CHOICES, null=True, blank=True)
-    cancellation_reason = models.CharField(max_length=50, null=True, blank=True)
+    cancellation_reason = models.TextField(null=True, blank=True)
 
     class Meta:
         # Un seul créneau actif (pending/confirmed) par date+heure — le salon

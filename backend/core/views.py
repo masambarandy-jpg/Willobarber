@@ -768,7 +768,7 @@ class CancelReservationView(APIView):
             if has_started(reservation, now):
                 return Response({'error': 'Ce rendez-vous a déjà commencé : il ne peut plus être annulé.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            result, late = cancel_for_client(reservation, serializer.validated_data['reason'][:50] or None, now)
+            result, late = cancel_for_client(reservation, serializer.validated_data['reason'] or None, now)
         message = _late_message(result) if late else "Votre rendez-vous est annulé et le paiement en ligne vous est remboursé."
         return _cancellation_response(result, message)
 
