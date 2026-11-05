@@ -1,4 +1,8 @@
-from datetime import date, datetime, time, timedelta
+import hashlib
+import hmac
+import json
+import time as py_time
+from datetime import date, datetime, time, timedelta, timezone as dt_timezone
 from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -6,10 +10,13 @@ from unittest.mock import patch
 import stripe
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
+from .cancellations import REFUND_FAILED_MESSAGE
 from .models import (
-    Barbershop, BarberLeave, ClosedPeriod, Notification, OpeningHours, Reservation, Service, User, WaitlistEntry,
+    Barbershop, BarberCancellationLog, BarberLeave, ClosedPeriod, Notification, OpeningHours, RefundAttempt,
+    Reservation, Service, User, WaitlistEntry,
 )
 from .recommendations import (
     SALON_TZ, salon_now, get_client_habits, process_user, should_send_seasonal_reminder, suggest_slots,
@@ -992,3 +999,391 @@ class HiddenByClientTests(TestCase):
         self.assertEqual(r.status_code, 403)
         self.past.refresh_from_db()
         self.assertFalse(self.past.hidden_by_client)
+
+
+REFUND = SimpleNamespace(id='re_1', amount=4500, status='succeeded')
+
+
+@override_settings(
+    SENDGRID_API_KEY='SG.test', SENDGRID_FROM_EMAIL='contact@willobarber.be', APP_URL='https://app.willobarber.be/',
+    ADMIN_EMAIL='admin@willobarber.be', STRIPE_SECRET_KEY='sk_test_dummy', STRIPE_WEBHOOK_SECRET='whsec_test',
+    # Pages admin rendues sans collectstatic (le stockage Manifest exigerait le manifeste).
+    STORAGES={
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    },
+)
+@patch('core.emails.threading.Thread', SyncThread)
+@patch('core.sse.publish_to_client')
+@patch('stripe.Refund.create')
+@patch('core.emails.sendgrid.SendGridAPIClient')
+class CancellationRefundTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user('owner', role='admin')
+        shop = Barbershop.objects.create(name='WB', address='x', phone='x', owner=self.staff)
+        self.service = Service.objects.create(name='Signature', price=45, duration=45, barbershop=shop)
+        self.client_user = User.objects.create_user(
+            'randy', email='randy@example.com', first_name='Randy', loyalty_points=200,
+        )
+        self.api = APIClient()
+
+    def book(self, delta=None, at=None, **extra):
+        """RDV payé en ligne, à `delta` de maintenant ou à l'heure de Bruxelles `at`."""
+        start = at or timezone.now().astimezone(SALON_TZ) + delta
+        return Reservation.objects.create(**{
+            'user': self.client_user, 'service': self.service, 'date': start.date(), 'time': start.time(),
+            'status': 'confirmed', 'payment_intent_id': 'pi_1', 'amount_paid': 45, **extra,
+        })
+
+    def cancel(self, reservation, user=None, body=None):
+        self.api.force_authenticate(user or self.client_user)
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.api.post(f'/api/reservations/{reservation.id}/cancel/', body or {}, format='json')
+
+    def cancel_by_barber(self, reservation, reason, user=None, notes=''):
+        self.api.force_authenticate(user or self.staff)
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.api.post(
+                f'/api/reservations/{reservation.id}/cancel-by-barber/', {'reason': reason, 'notes': notes}, format='json',
+            )
+
+    def mails(self, sg):
+        return [c.args[0].get() for c in sg.return_value.send.call_args_list]
+
+    def points(self):
+        return User.objects.get(pk=self.client_user.pk).loyalty_points
+
+    # ─── Côté client ──────────────────────────────────────────────────────────
+
+    def test_client_cancel_more_than_24h_triggers_full_refund(self, sg, refund, _sse):
+        refund.return_value = REFUND
+        reservation = self.book(timedelta(hours=48))
+        r = self.cancel(reservation)
+
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data['status'], 'cancelled_and_refunded')
+        self.assertEqual(r.data['refund_amount'], 45.0)
+        self.assertEqual(r.data['loyalty_points_removed'], 90)
+        refund.assert_called_once_with(payment_intent='pi_1', idempotency_key=f'refund-{reservation.id}')
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.refund_id, 're_1')
+        self.assertEqual(reservation.refund_amount, 45)
+        self.assertIsNotNone(reservation.refunded_at)
+        self.assertIsNotNone(reservation.cancelled_at)
+        self.assertEqual(reservation.cancelled_by, 'client')
+        attempt = RefundAttempt.objects.get(reservation=reservation)
+        self.assertEqual((attempt.status, attempt.stripe_refund_id), ('succeeded', 're_1'))
+        self.assertIn('45 € vous sont intégralement remboursés', self.mails(sg)[0]['content'][0]['value'])
+
+    def test_client_cancel_less_than_24h_no_refund(self, sg, refund, _sse):
+        reservation = self.book(timedelta(hours=23))
+        r = self.cancel(reservation)
+
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual((r.data['status'], r.data['refund_amount']), ('cancelled_late_no_refund', 0))
+        refund.assert_not_called()
+        self.assertFalse(RefundAttempt.objects.exists())
+        self.assertIn("n'est pas remboursé", self.mails(sg)[0]['content'][0]['value'].replace('&#x27;', "'"))
+
+    def test_client_cancel_exactly_24h_is_late(self, _sg, refund, _sse):
+        now = datetime(2026, 11, 10, 12, 0, tzinfo=SALON_TZ)
+        reservation = self.book(at=now + timedelta(hours=24))
+        with patch('django.utils.timezone.now', return_value=now):
+            r = self.cancel(reservation)
+        self.assertEqual(r.data['status'], 'cancelled_late_no_refund')
+        refund.assert_not_called()
+
+    def test_client_cancel_removes_loyalty_points_always(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        self.cancel(self.book(timedelta(hours=48)))
+        self.assertEqual(self.points(), 110)
+        r = self.cancel(self.book(timedelta(hours=2)))
+        self.assertEqual(r.data['loyalty_points_removed'], 90)
+        self.assertEqual(self.points(), 20)
+        # Jamais de solde négatif : la réponse indique ce qui a réellement été retiré.
+        r = self.cancel(self.book(timedelta(hours=3)))
+        self.assertEqual(r.data['loyalty_points_removed'], 20)
+        self.assertEqual(self.points(), 0)
+
+    def test_client_cannot_cancel_other_user_reservation(self, _sg, refund, _sse):
+        reservation = self.book(timedelta(hours=48))
+        other = User.objects.create_user('other')
+        self.assertEqual(self.cancel(reservation, user=other).status_code, 403)
+        # Le client-endpoint n'est ouvert qu'au titulaire, même pour le salon.
+        self.assertEqual(self.cancel(reservation, user=self.staff).status_code, 403)
+        refund.assert_not_called()
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, 'confirmed')
+
+    def test_client_cannot_cancel_already_cancelled(self, _sg, refund, _sse):
+        reservation = self.book(timedelta(hours=48), status='cancelled_client')
+        r = self.cancel(reservation)
+        self.assertEqual((r.status_code, r.data['error']), (400, 'Déjà annulée'))
+        refund.assert_not_called()
+
+    def test_client_can_cancel_pending_booking_from_app(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        r = self.cancel(self.book(timedelta(hours=48), status='pending'))
+        self.assertEqual((r.status_code, r.data['status']), (200, 'cancelled_and_refunded'))
+
+    def test_client_reason_over_500_chars_is_refused(self, _sg, _refund, _sse):
+        r = self.cancel(self.book(timedelta(hours=48)), body={'reason': 'x' * 501})
+        self.assertEqual(r.status_code, 400)
+
+    def test_cancel_without_payment_intent_only_frees_slot(self, _sg, refund, _sse):
+        reservation = self.book(timedelta(hours=48), payment_intent_id='', amount_paid=None)
+        r = self.cancel(reservation)
+        self.assertEqual((r.status_code, r.data['refund_amount']), (200, 0))
+        refund.assert_not_called()
+        self.assertFalse(RefundAttempt.objects.exists())
+
+    # ─── Côté coiffeur ────────────────────────────────────────────────────────
+
+    def test_barber_can_mark_no_show_after_15_min(self, sg, refund, _sse):
+        reservation = self.book(timedelta(minutes=-16))
+        r = self.cancel_by_barber(reservation, 'client_no_show')
+
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data['status'], 'cancelled_no_show')
+        self.assertEqual((r.data['reason'], r.data['refund_amount'], r.data['loyalty_points_removed']), ('client_no_show', 0, 90))
+        refund.assert_not_called()
+        self.assertEqual(self.points(), 110)
+        self.assertEqual(self.mails(sg)[0]['subject'], 'Vous avez manqué votre rendez-vous WilloBarber')
+
+    def test_barber_cannot_mark_no_show_before_start(self, _sg, _refund, _sse):
+        r = self.cancel_by_barber(self.book(timedelta(minutes=30)), 'client_no_show')
+        self.assertEqual((r.status_code, r.data['error']), (400, "Vous ne pouvez marquer no-show qu'après +15 min"))
+
+    def test_barber_cannot_mark_no_show_at_exactly_14_min(self, _sg, _refund, _sse):
+        now = datetime(2026, 11, 10, 15, 14, tzinfo=SALON_TZ)
+        reservation = self.book(at=datetime(2026, 11, 10, 15, 0, tzinfo=SALON_TZ))
+        with patch('django.utils.timezone.now', return_value=now):
+            r = self.cancel_by_barber(reservation, 'client_no_show')
+        self.assertEqual(r.status_code, 400)
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, 'confirmed')
+
+    def test_barber_cannot_mark_checked_in_client_as_no_show(self, _sg, _refund, _sse):
+        r = self.cancel_by_barber(self.book(timedelta(minutes=-30), checked_in=True), 'client_no_show')
+        self.assertEqual(r.status_code, 400)
+
+    def test_barber_cancel_client_requested_more_than_24h_refunds(self, sg, refund, _sse):
+        refund.return_value = REFUND
+        r = self.cancel_by_barber(self.book(timedelta(hours=48)), 'client_requested')
+        self.assertEqual((r.data['status'], r.data['refund_amount'], r.data['loyalty_points_removed']), ('cancelled_and_refunded', 45.0, 90))
+        refund.assert_called_once()
+        self.assertIn('À votre demande', self.mails(sg)[0]['content'][0]['value'])
+
+    def test_barber_cancel_client_requested_less_than_24h_no_refund(self, _sg, refund, _sse):
+        r = self.cancel_by_barber(self.book(timedelta(hours=5)), 'client_requested')
+        self.assertEqual((r.data['status'], r.data['refund_amount'], r.data['loyalty_points_removed']), ('cancelled_late_no_refund', 0, 90))
+        refund.assert_not_called()
+
+    def test_barber_cancel_salon_unavailable_always_refunds_100(self, sg, refund, _sse):
+        refund.return_value = REFUND
+        # Même à moins de 24h : le service n'est pas rendu du fait du salon.
+        r = self.cancel_by_barber(self.book(timedelta(hours=2)), 'salon_unavailable', notes='Barbier malade ce jour')
+        self.assertEqual((r.data['status'], r.data['refund_amount']), ('cancelled_by_salon_refunded', 45.0))
+        refund.assert_called_once()
+        self.assertIn('Nous sommes désolés', self.mails(sg)[0]['content'][0]['value'])
+
+    def test_barber_cancel_salon_unavailable_keeps_loyalty_points(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        r = self.cancel_by_barber(self.book(timedelta(hours=48)), 'salon_unavailable')
+        self.assertEqual(r.data['loyalty_points_removed'], 0)
+        self.assertEqual(self.points(), 200)
+
+    def test_client_cannot_use_barber_endpoint(self, _sg, refund, _sse):
+        reservation = self.book(timedelta(hours=48))
+        r = self.cancel_by_barber(reservation, 'salon_unavailable', user=self.client_user)
+        self.assertEqual(r.status_code, 403)
+        refund.assert_not_called()
+
+    def test_barber_role_can_use_barber_endpoint(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        barber = User.objects.create_user('malik', role='barber')
+        r = self.cancel_by_barber(self.book(timedelta(hours=48)), 'salon_unavailable', user=barber)
+        self.assertEqual(r.status_code, 200, r.data)
+
+    def test_barber_endpoint_requires_valid_reason(self, _sg, _refund, _sse):
+        r = self.cancel_by_barber(self.book(timedelta(hours=48)), 'because')
+        self.assertEqual(r.status_code, 400)
+
+    def test_barber_cancellation_creates_audit_log(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        reservation = self.book(timedelta(hours=48))
+        self.cancel_by_barber(reservation, 'salon_unavailable', notes='Dégât des eaux au salon')
+        log = BarberCancellationLog.objects.get(reservation=reservation)
+        self.assertEqual((log.barber_user, log.reason, log.notes), (self.staff, 'salon_unavailable', 'Dégât des eaux au salon'))
+        self.assertTrue(log.client_was_refunded)
+        self.assertEqual(log.refund_amount, 45)
+        reservation.refresh_from_db()
+        self.assertEqual((reservation.cancelled_by, reservation.cancellation_reason), ('barber', 'salon_unavailable'))
+
+    def test_no_show_increments_user_counter(self, _sg, _refund, _sse):
+        self.cancel_by_barber(self.book(timedelta(minutes=-20)), 'client_no_show')
+        self.assertEqual(User.objects.get(pk=self.client_user.pk).no_show_count, 1)
+        self.assertFalse(BarberCancellationLog.objects.get().client_was_refunded)
+
+    # ─── Transverses ──────────────────────────────────────────────────────────
+
+    def test_stripe_failure_does_not_block_cancellation(self, sg, refund, _sse):
+        refund.side_effect = stripe.error.APIConnectionError('Stripe injoignable')
+        reservation = self.book(timedelta(hours=48))
+        with self.assertLogs('core.cancellations', level='ERROR'):
+            r = self.cancel(reservation)
+
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data['message'], REFUND_FAILED_MESSAGE)
+        self.assertEqual(r.data['refund_amount'], 0)
+        self.assertEqual(r.data['loyalty_points_removed'], 90)
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, 'cancelled_and_refunded')
+        self.assertIsNone(reservation.refund_id)
+        attempt = RefundAttempt.objects.get(reservation=reservation)
+        self.assertEqual((attempt.status, attempt.error_message), ('failed', 'Stripe injoignable'))
+        recipients = [m['personalizations'][0]['to'][0]['email'] for m in self.mails(sg)]
+        self.assertIn('admin@willobarber.be', recipients)
+        self.assertIn('randy@example.com', recipients)
+
+    def test_double_cancellation_is_idempotent(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        reservation = self.book(timedelta(hours=48))
+        self.assertEqual(self.cancel(reservation).status_code, 200)
+        self.assertEqual(self.cancel(reservation).status_code, 400)
+        self.assertEqual(self.cancel_by_barber(reservation, 'salon_unavailable').status_code, 400)
+        refund.assert_called_once()
+        self.assertEqual(self.points(), 110)
+
+    def test_slot_is_freed_after_cancellation(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        start = datetime(2030, 3, 5, 15, 30, tzinfo=SALON_TZ)  # un mardi : salon ouvert
+        reservation = self.book(at=start)
+        self.api.force_authenticate(self.client_user)
+
+        def is_available():
+            data = self.api.get('/api/slots/available/', {'date': '2030-03-05', 'barber': 'Willo'}).data
+            return next(s['is_available'] for s in data['slots'] if s['start_time'] == '15:30')
+
+        self.assertFalse(is_available())
+        self.cancel(reservation)
+        self.assertTrue(is_available())
+        # Plus de conflit en base : le créneau est de nouveau réservable.
+        self.book(at=start)
+
+    def test_waitlist_is_notified_after_cancellation(self, sg, refund, publish_to_client):
+        refund.return_value = REFUND
+        reservation = self.book(timedelta(hours=48))
+        waiting = User.objects.create_user('waiting', email='waiting@example.com')
+        entry = WaitlistEntry.objects.create(
+            client=waiting, barber=reservation.barber, date=reservation.date, time=reservation.time,
+        )
+        self.cancel(reservation)
+
+        entry.refresh_from_db()
+        self.assertIsNotNone(entry.notified_at)
+        self.assertEqual(publish_to_client.call_args.args[:2], (waiting.id, 'waitlist_available'))
+        self.assertTrue(Notification.objects.filter(user=waiting, type='waitlist_available').exists())
+        self.assertIn('waiting@example.com', [m['personalizations'][0]['to'][0]['email'] for m in self.mails(sg)])
+
+    def test_timezone_calculation_uses_europe_brussels(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        # RDV à 12h00 à Bruxelles (11h00 UTC), 23h30 plus tard : lire l'heure en
+        # UTC donnerait 24h30 et déclencherait à tort un remboursement.
+        winter = self.book(at=datetime(2027, 1, 15, 12, 0, tzinfo=SALON_TZ))
+        with patch('django.utils.timezone.now', return_value=datetime(2027, 1, 14, 11, 30, tzinfo=dt_timezone.utc)):
+            self.assertEqual(self.cancel(winter).data['status'], 'cancelled_late_no_refund')
+        # Passage à l'heure d'été : 24h30 à l'horloge, mais 23h30 réellement écoulées.
+        dst = self.book(at=datetime(2027, 3, 28, 13, 0, tzinfo=SALON_TZ))
+        with patch('django.utils.timezone.now', return_value=datetime(2027, 3, 27, 11, 30, tzinfo=dt_timezone.utc)):
+            self.assertEqual(self.cancel(dst).data['status'], 'cancelled_late_no_refund')
+        refund.assert_not_called()
+
+    def test_client_cancellation_notifies_barber(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        self.cancel(self.book(timedelta(hours=48)))
+        self.assertTrue(Notification.objects.filter(type='annulation', user__isnull=True).exists())
+
+    # ─── Webhook Stripe ───────────────────────────────────────────────────────
+
+    def post_webhook(self, refund_status, secret='whsec_test', event_type='charge.refund.updated', refund_id='re_1'):
+        payload = json.dumps({
+            'id': 'evt_1', 'object': 'event', 'type': event_type,
+            'data': {'object': {'id': refund_id, 'object': 'refund', 'status': refund_status,
+                                'payment_intent': 'pi_1', 'amount': 4500}},
+        })
+        stamp = int(py_time.time())
+        signature = hmac.new(secret.encode(), f'{stamp}.{payload}'.encode(), hashlib.sha256).hexdigest()
+        self.api.force_authenticate(None)
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.api.post(
+                '/api/payments/stripe-webhook/', payload, content_type='application/json',
+                HTTP_STRIPE_SIGNATURE=f't={stamp},v1={signature}',
+            )
+
+    def test_webhook_rejects_invalid_signature(self, _sg, _refund, _sse):
+        self.assertEqual(self.post_webhook('succeeded', secret='whsec_pirate').status_code, 400)
+
+    def test_webhook_succeeded_confirms_refund(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        reservation = self.book(timedelta(hours=48))
+        self.cancel(reservation)
+        r = self.post_webhook('succeeded')
+        self.assertEqual(r.status_code, 200, r.data)
+        reservation.refresh_from_db()
+        self.assertIsNotNone(reservation.refund_confirmed_at)
+
+    def test_webhook_failed_alerts_admin_and_reopens_retry(self, sg, refund, _sse):
+        refund.return_value = REFUND
+        reservation = self.book(timedelta(hours=48))
+        self.cancel(reservation)
+        with self.assertLogs('core.cancellations', level='ERROR'):
+            self.post_webhook('failed')
+        reservation.refresh_from_db()
+        self.assertIsNone(reservation.refund_id)
+        self.assertTrue(RefundAttempt.objects.filter(reservation=reservation, status='failed').exists())
+        self.assertIn('admin@willobarber.be', [m['personalizations'][0]['to'][0]['email'] for m in self.mails(sg)])
+
+    def test_webhook_records_manual_dashboard_refund(self, _sg, refund, _sse):
+        refund.side_effect = stripe.error.APIConnectionError('down')
+        reservation = self.book(timedelta(hours=48))
+        with self.assertLogs('core.cancellations', level='ERROR'):
+            self.cancel_by_barber(reservation, 'salon_unavailable')
+        self.post_webhook('succeeded', event_type='refund.updated', refund_id='re_manual')
+        reservation.refresh_from_db()
+        self.assertEqual((reservation.refund_id, reservation.refund_amount), ('re_manual', 45))
+        self.assertTrue(BarberCancellationLog.objects.get(reservation=reservation).client_was_refunded)
+
+    # ─── Admin ────────────────────────────────────────────────────────────────
+
+    def test_admin_retry_refund_action(self, _sg, refund, _sse):
+        refund.side_effect = stripe.error.APIConnectionError('down')
+        reservation = self.book(timedelta(hours=48))
+        with self.assertLogs('core.cancellations', level='ERROR'):
+            self.cancel_by_barber(reservation, 'salon_unavailable')
+        refund.side_effect = None
+        refund.return_value = REFUND
+        admin_user = User.objects.create_superuser('root', password='x')
+        self.client.force_login(admin_user)
+        r = self.client.post('/admin/core/refundattempt/', {
+            'action': 'retry_refund', '_selected_action': [RefundAttempt.objects.get().pk],
+        }, follow=True)
+        self.assertContains(r, '1 remboursement(s) effectué(s)')
+
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.refund_id, 're_1')
+        self.assertEqual(RefundAttempt.objects.filter(status='succeeded').first().attempt_number, 2)
+        self.assertEqual(refund.call_args.kwargs['idempotency_key'], f'refund-{reservation.id}')
+        self.assertTrue(BarberCancellationLog.objects.get().client_was_refunded)
+
+    def test_admin_dashboard_flags_high_no_show_rate(self, _sg, _refund, _sse):
+        self.cancel_by_barber(self.book(timedelta(minutes=-30), barber='Malik'), 'client_no_show')
+        self.book(timedelta(hours=1), barber='Malik')
+        self.book(timedelta(days=-1), barber='Willo')
+        self.client.force_login(User.objects.create_superuser('root', password='x'))
+        r = self.client.get('/admin/core/barbercancellationlog/dashboard/')
+        self.assertEqual(r.status_code, 200)
+        malik, willo = r.context['stats']
+        self.assertEqual((malik['barber'], malik['total'], malik['client_no_show'], malik['no_show_rate'], malik['flagged']), ('Malik', 2, 1, 50.0, True))
+        self.assertEqual((willo['total'], willo['flagged']), (1, False))
+        self.assertContains(r, 'background:#C0392B')
