@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 from .loyalty import reservation_points
-from .models import User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitlistEntry, BarberLeave, Notification, NotificationPreference, PaymentCard
+from .models import BarberCancellationLog, User, Barbershop, Barber, Service, Reservation, ClientMedia, ClosedPeriod, OpeningHours, Review, WaitlistEntry, BarberLeave, Notification, NotificationPreference, PaymentCard
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -58,6 +58,8 @@ class ReservationSerializer(serializers.ModelSerializer):
     qr_code = serializers.CharField(read_only=True)
     # Points gagnés avec ce RDV (historique fidélité de l'app).
     loyalty_points = serializers.SerializerMethodField()
+    # Bouton « Appeler le client » du dashboard coiffeur.
+    client_phone = serializers.CharField(source='user.phone', read_only=True)
 
     def get_client_display_name(self, obj):
         return 'Client supprimé' if obj.user.is_deleted else obj.user.username
@@ -90,10 +92,31 @@ class ReservationSerializer(serializers.ModelSerializer):
             'checked_in',
             'checked_in_at',
             'hidden_by_client',
+            'client_phone',
+            'refund_amount',
+            'refunded_at',
+            'refund_confirmed_at',
+            'cancelled_at',
+            'cancelled_by',
+            'cancellation_reason',
         ]
         # hidden_by_client ne se modifie que via PATCH /reservations/<id>/hide/
         # (propriétaire + RDV passé, cf. views.hide_reservation).
-        read_only_fields = ['qr_code', 'checked_in', 'checked_in_at', 'hidden_by_client']
+        # Les champs d'annulation ne s'écrivent que via cancellations.py.
+        read_only_fields = [
+            'qr_code', 'checked_in', 'checked_in_at', 'hidden_by_client',
+            'refund_amount', 'refunded_at', 'refund_confirmed_at',
+            'cancelled_at', 'cancelled_by', 'cancellation_reason',
+        ]
+
+
+class CancelReservationSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')
+
+
+class CancelByBarberSerializer(serializers.Serializer):
+    reason = serializers.ChoiceField(choices=BarberCancellationLog.REASON_CHOICES)
+    notes = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')
 
 
 class ClosedPeriodSerializer(serializers.ModelSerializer):

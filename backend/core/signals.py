@@ -3,10 +3,8 @@ from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
 from . import sse, waitlist
-from .models import Notification, Reservation, Review
+from .models import CANCELLED_STATUSES, Notification, Reservation, Review
 from .serializers import NotificationSerializer
-
-CANCELLED_STATUSES = ('cancelled', 'cancelled_client')
 
 
 def reservation_payload(reservation):
@@ -84,7 +82,7 @@ def notify_on_reservation_change(sender, instance, created, **kwargs):
     old_status = getattr(instance, '_old_status', None)
     if instance.status in CANCELLED_STATUSES and old_status not in CANCELLED_STATUSES:
         event = {'reservation_id': instance.id, 'barber_id': None}
-        if instance.status == 'cancelled_client':
+        if instance.status == 'cancelled_client' or instance.cancelled_by == 'client':
             notification = Notification.objects.create(
                 type='annulation',
                 title='Rendez-vous annulé',

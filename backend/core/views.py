@@ -51,7 +51,7 @@ from .comments import CommentError, check_commentable, clean_rating, clean_text,
 from .comments import client_name as client_display_name
 from .loyalty import reservation_points
 from .models import (
-    BARBER_CHOICES, DEFAULT_BARBER,
+    BARBER_CHOICES, CANCELLED_STATUSES, DEFAULT_BARBER,
     Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, OpeningHours, Review,
     WaitlistEntry, BarberLeave, Notification, NotificationPreference, PaymentCard, UserSession,
 )
@@ -75,7 +75,6 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 ACOMPTE_FIXE = 5
-CANCELLED_STATUSES = ('cancelled', 'cancelled_client')
 
 
 class PayeStamp(Flowable):
@@ -348,7 +347,7 @@ def available_slots(request):
         t.strftime('%H:%M')
         for t in Reservation.objects
             .filter(barber=barber, date=requested_date)
-            .exclude(status__in=['cancelled', 'cancelled_client'])
+            .exclude(status__in=CANCELLED_STATUSES)
             .values_list('time', flat=True)
     }
 
