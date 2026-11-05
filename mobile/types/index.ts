@@ -144,6 +144,8 @@ export interface Reservation {
   time?: string;
   payment_intent_id?: string;
   amount_paid?: string | null;
+  // Groupe d'enfants : id de la réservation qui porte le paiement.
+  parent_reservation?: number | null;
 }
 
 export type BarberName = 'Willo' | 'Malik' | 'Idris';
@@ -157,6 +159,7 @@ export interface CreateReservationPayload {
   payment_intent_id?: string;
   amount_paid?: number;
   child_count?: number;
+  parent_reservation?: number;
 }
 
 // ─── Review ──────────────────────────────────────────────────────────────────

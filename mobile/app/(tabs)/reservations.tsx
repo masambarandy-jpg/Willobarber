@@ -43,7 +43,7 @@ import {
 } from '@/components/client/HistoryAccordion';
 import { reviewsApi, loyaltyApi } from '@/services/api';
 import {
-  LATE_CANCELLATION_MS, formatDelay, formatEuro, lateCancellationAmounts, paidOnlineAmount, salonStartMs,
+  LATE_CANCELLATION_MS, formatDelay, formatEuro, isCancellableStatus, lateCancellationAmounts, paidOnlineAmount, salonStartMs,
 } from '@/utils/reservationTime';
 
 // Réutilisé par le ScrollView de l'onglet "Mes coupes" (tablette/web) pour rendre son
@@ -136,11 +136,13 @@ function GoldItalic({ children }: { children: React.ReactNode }) {
 
 interface CancelModalProps {
   reservation: Reservation | null;
+  // Tous les RDV du client, pour annoncer ceux que la cascade annulera aussi.
+  reservations: Reservation[];
   onClose: () => void;
   onConfirm: (reason: string) => void;
   loading: boolean;
 }
-function CancelModal({ reservation, onClose, onConfirm, loading }: CancelModalProps) {
+function CancelModal({ reservation, reservations, onClose, onConfirm, loading }: CancelModalProps) {
   const [reason, setReason] = useState('');
   const isTablet = useIsTablet();
   const { t } = useLanguage();
@@ -158,6 +160,11 @@ function CancelModal({ reservation, onClose, onConfirm, loading }: CancelModalPr
         .replace('{amount}', formatEuro(lateCancellationAmounts(paid).refund))
       : t('reservations.cancelModal.refund').replace('{amount}', formatEuro(paid));
 
+  const isChild = !!reservation?.parent_reservation;
+  const linkedCount = reservation
+    ? reservations.filter((r) => r.parent_reservation === reservation.id && isCancellableStatus(r.status)).length
+    : 0;
+
   return (
     <Modal visible={!!reservation} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
@@ -174,7 +181,14 @@ function CancelModal({ reservation, onClose, onConfirm, loading }: CancelModalPr
                   {t('reservations.cancelModal.remaining').replace('{delay}', formatDelay(remaining))}
                 </Text>
               )}
-              <Text style={styles.modalSub} testID="cancel-policy">{policy}</Text>
+              <Text style={styles.modalSub} testID="cancel-policy">
+                {isChild ? t('reservations.cancelModal.childBlocked') : policy}
+              </Text>
+              {linkedCount > 0 && (
+                <Text style={styles.modalSub} testID="cancel-linked">
+                  {t('reservations.cancelModal.linked').replace('{count}', String(linkedCount))}
+                </Text>
+              )}
               <Text style={styles.fieldLabel}>{t('reservations.cancelModal.reasonLabel')}</Text>
               <TextInput
                 style={styles.modalInput}
@@ -189,12 +203,14 @@ function CancelModal({ reservation, onClose, onConfirm, loading }: CancelModalPr
                 <TouchableOpacity style={styles.btnKeep} onPress={onClose}>
                   <Text style={styles.btnKeepText}>{t('reservations.cancelModal.keep')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity testID="btn-confirm-cancel" style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
-                  {loading
-                    ? <ActivityIndicator color="#C0392B" size="small" />
-                    : <Text style={styles.btnDangerText}>{t('reservations.cancelModal.confirmCancel')}</Text>
-                  }
-                </TouchableOpacity>
+                {!isChild && (
+                  <TouchableOpacity testID="btn-confirm-cancel" style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
+                    {loading
+                      ? <ActivityIndicator color="#C0392B" size="small" />
+                      : <Text style={styles.btnDangerText}>{t('reservations.cancelModal.confirmCancel')}</Text>
+                    }
+                  </TouchableOpacity>
+                )}
               </View>
             </ScrollView>
           </View>
@@ -1896,6 +1912,7 @@ export default function ReservationsScreen() {
 
       <CancelModal
         reservation={cancelTarget}
+        reservations={reservations}
         onClose={() => setCancelTarget(null)}
         onConfirm={handleCancel}
         loading={cancelling}

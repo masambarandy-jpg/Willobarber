@@ -1383,6 +1383,118 @@ class CancellationRefundTests(TestCase):
         self.assertEqual(recipients, {'randy@example.com'})
         self.assertTrue(User.objects.get(pk=self.client_user.pk).is_deleted)
 
+    def family(self, delta=timedelta(hours=48), count=2):
+        parent = self.book(delta, child_count=count + 1)
+        start = timezone.now().astimezone(SALON_TZ) + delta
+        children = [
+            self.book(at=start + timedelta(minutes=30 * (i + 1)), payment_intent_id='', amount_paid=0, parent_reservation=parent)
+            for i in range(count)
+        ]
+        return parent, children
+
+    def test_cancel_parent_cascades_to_children(self, sg, refund, _sse):
+        refund.return_value = REFUND
+        User.objects.filter(pk=self.client_user.pk).update(loyalty_points=300)
+        parent, children = self.family()
+        r = self.cancel(parent, body={'reason': 'Empêchement'})
+
+        self.assertEqual(r.data['loyalty_points_removed'], 270)
+        self.assertEqual(self.points(), 30)
+        parent.refresh_from_db()
+        for child in children:
+            child.refresh_from_db()
+            self.assertEqual(child.status, parent.status)
+            self.assertEqual(child.cancelled_at, parent.cancelled_at)
+            self.assertEqual((child.cancelled_by, child.cancellation_reason), ('client', 'Empêchement'))
+            self.assertIsNone(child.refund_amount)
+        # Un seul email, qui récapitule tous les RDV annulés.
+        client_mails = [m for m in self.mails(sg) if m['personalizations'][0]['to'][0]['email'] == 'randy@example.com']
+        self.assertEqual(len(client_mails), 1)
+        self.assertEqual(client_mails[0]['content'][0]['value'].count('RDV lié'), 2)
+
+    def test_cannot_cancel_child_directly(self, _sg, refund, _sse):
+        _, [child, _other] = self.family()
+        expected = 'Annulez la réservation principale pour annuler toute la famille, ou contactez le support.'
+        for r in (self.cancel(child), self.cancel_by_barber(child, 'salon_unavailable')):
+            self.assertEqual((r.status_code, r.data['error']), (400, expected))
+        child.refresh_from_db()
+        self.assertEqual(child.status, 'confirmed')
+        refund.assert_not_called()
+
+    def test_parent_cancellation_refunds_once_not_per_child(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        parent, _ = self.family()
+        self.cancel_by_barber(parent, 'salon_unavailable', notes='Barbier malade')
+        refund.assert_called_once()
+        self.assertEqual(RefundAttempt.objects.count(), 1)
+        # Journal : une ligne par RDV, seul le parent porte le remboursement.
+        logs = BarberCancellationLog.objects.all()
+        self.assertEqual(logs.count(), 3)
+        self.assertEqual(logs.filter(client_was_refunded=True).get().reservation, parent)
+
+    def test_late_group_cancellation_keeps_a_single_fee(self, _sg, refund, _sse):
+        refund.return_value = LATE_REFUND
+        parent, _ = self.family(timedelta(hours=5))
+        r = self.cancel(parent)
+        self.assertEqual((r.data['refund_amount'], r.data['cancellation_fee']), (40.0, 5.0))
+        self.assertEqual(refund.call_args.kwargs['amount'], 4000)
+
+    def test_parent_cancellation_frees_all_child_slots(self, _sg, refund, publish_to_client):
+        refund.return_value = REFUND
+        parent, children = self.family()
+        waiting = User.objects.create_user('waiting', email='waiting@example.com')
+        entry = WaitlistEntry.objects.create(
+            client=waiting, barber=children[0].barber, date=children[0].date, time=children[0].time,
+        )
+        self.cancel(parent)
+        entry.refresh_from_db()
+        self.assertIsNotNone(entry.notified_at)
+        # La contrainte d'unicité ne bloque plus : chaque créneau est de nouveau réservable.
+        for child in children:
+            child.refresh_from_db()
+            Reservation.objects.create(
+                user=waiting, service=self.service, date=child.date, time=child.time, barber=child.barber, status='confirmed',
+            )
+
+    def test_no_show_on_group_counts_once(self, _sg, _refund, _sse):
+        parent, children = self.family(timedelta(minutes=-20), count=1)
+        r = self.cancel_by_barber(parent, 'client_no_show')
+        self.assertEqual(r.data['loyalty_points_removed'], 180)
+        self.assertEqual(User.objects.get(pk=self.client_user.pk).no_show_count, 1)
+        children[0].refresh_from_db()
+        self.assertEqual(children[0].status, 'cancelled_no_show')
+
+    def test_no_show_refused_when_a_child_has_checked_in(self, _sg, _refund, _sse):
+        parent, children = self.family(timedelta(minutes=-20), count=1)
+        Reservation.objects.filter(pk=children[0].pk).update(checked_in=True)
+        self.assertEqual(self.cancel_by_barber(parent, 'client_no_show').status_code, 400)
+
+    def test_delete_account_cancels_group_once(self, _sg, refund, _sse):
+        refund.return_value = REFUND
+        parent, children = self.family()
+        self.api.force_authenticate(self.client_user)
+        with self.assertLogs('core.cancellations', level='WARNING'):
+            self.api.delete('/api/auth/delete-account/')
+        refund.assert_called_once()
+        children[0].refresh_from_db()
+        self.assertEqual(children[0].status, 'cancelled_and_refunded')
+
+    def test_booking_links_child_to_parent_of_same_client_only(self, _sg, _refund, _sse):
+        parent = self.book(timedelta(days=30))
+        body = {'service': self.service.id, 'barber': 'Willo', 'date': '2030-03-05', 'time': '15:30',
+                'parent_reservation': parent.id}
+        self.api.force_authenticate(self.client_user)
+        with patch('core.views.queue_reservation_email'):
+            r = self.api.post('/api/reservations/', body, format='json')
+            self.assertEqual(r.status_code, 201, r.data)
+            self.assertEqual(r.data['parent_reservation'], parent.id)
+            # Une réservation enfant ne peut pas devenir parente, ni celle d'un autre client.
+            r = self.api.post('/api/reservations/', {**body, 'time': '16:00', 'parent_reservation': r.data['id']}, format='json')
+            self.assertEqual(r.status_code, 400)
+            self.api.force_authenticate(User.objects.create_user('other'))
+            r = self.api.post('/api/reservations/', {**body, 'time': '16:30', 'parent_reservation': parent.id}, format='json')
+            self.assertEqual(r.status_code, 400)
+
     def test_slot_is_freed_after_cancellation(self, _sg, refund, _sse):
         refund.return_value = REFUND
         start = datetime(2030, 3, 5, 15, 30, tzinfo=SALON_TZ)  # un mardi : salon ouvert

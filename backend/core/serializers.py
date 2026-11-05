@@ -67,6 +67,20 @@ class ReservationSerializer(serializers.ModelSerializer):
     def get_loyalty_points(self, obj):
         return reservation_points(obj)
 
+    def validate_parent_reservation(self, parent):
+        # Lien fixé une fois pour toutes à la création, vers un RDV actif du même client.
+        if parent is None:
+            return parent
+        user = self.context['request'].user
+        if (
+            self.instance is not None
+            or parent.user_id != user.id
+            or parent.parent_reservation_id
+            or parent.status not in ('pending', 'confirmed')
+        ):
+            raise serializers.ValidationError('Réservation principale invalide.')
+        return parent
+
     class Meta:
         model = Reservation
         fields = [
@@ -93,6 +107,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             'checked_in_at',
             'hidden_by_client',
             'client_phone',
+            'parent_reservation',
             'refund_amount',
             'refunded_at',
             'refund_confirmed_at',

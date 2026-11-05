@@ -87,6 +87,7 @@ type ApiReservation = {
   payment_intent_id?: string;
   amount_paid?: string | null;
   checked_in_at?: string | null;
+  parent_reservation?: number | null;
 };
 
 // Réel : /api/services/ → contient bien price et duration (minutes)
@@ -1150,6 +1151,7 @@ export default function CoiffeurDashboardScreen() {
           key={`${cancelTarget.reservation.id}-${cancelTarget.reason}`}
           reservation={cancelTarget.reservation}
           reason={cancelTarget.reason}
+          linkedCount={todayReservations.filter((r) => r.parent_reservation === cancelTarget.reservation.id).length}
           onClose={() => setCancelTarget(null)}
           onDone={handleCancelled}
         />

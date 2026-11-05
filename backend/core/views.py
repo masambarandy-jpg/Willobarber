@@ -48,7 +48,7 @@ from django.utils import timezone
 from boutique.pricing import OrderPricingError, price_order, to_cents
 from .cancellations import (
     CANCELLABLE_STATUSES, LATE_STATUS, NO_SHOW_GRACE, REFUND_FAILED_MESSAGE, apply_cancellation, handle_refund_webhook,
-    cancel_active_reservations, cancel_for_client, has_started, log_barber_cancellation,
+    CHILD_CANCEL_ERROR, cancel_active_reservations, cancel_for_client, has_started,
 )
 from .client_profile import build_client_profile
 from .comments import CommentError, check_commentable, clean_rating, clean_text, save_reply
@@ -765,6 +765,8 @@ class CancelReservationView(APIView):
             self.check_object_permissions(request, reservation)
             if reservation.status not in CANCELLABLE_STATUSES:
                 return Response({'error': 'Déjà annulée'}, status=status.HTTP_400_BAD_REQUEST)
+            if reservation.parent_reservation_id:
+                return Response({'error': CHILD_CANCEL_ERROR}, status=status.HTTP_400_BAD_REQUEST)
             if has_started(reservation, now):
                 return Response({'error': 'Ce rendez-vous a déjà commencé : il ne peut plus être annulé.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -790,12 +792,14 @@ class CancelReservationByBarberView(APIView):
                 return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
             if reservation.status not in CANCELLABLE_STATUSES:
                 return Response({'error': 'Déjà annulée'}, status=status.HTTP_400_BAD_REQUEST)
+            if reservation.parent_reservation_id:
+                return Response({'error': CHILD_CANCEL_ERROR}, status=status.HTTP_400_BAD_REQUEST)
 
             if reason == 'client_no_show':
                 # Délai de grâce : un client peut arriver avec quelques minutes de
                 # retard. Le no-show (ni remboursement, ni points, compteur +1) n'est
                 # donc ouvert qu'après 15 min, et jamais pour un client déjà enregistré.
-                if reservation.checked_in:
+                if reservation.checked_in or reservation.child_reservations.filter(checked_in=True).exists():
                     return Response({'error': 'Ce client a déjà été enregistré à son arrivée.'}, status=status.HTTP_400_BAD_REQUEST)
                 if now <= reservation_start(reservation) + NO_SHOW_GRACE:
                     return Response({'error': "Vous ne pouvez marquer no-show qu'après +15 min"}, status=status.HTTP_400_BAD_REQUEST)
@@ -812,14 +816,12 @@ class CancelReservationByBarberView(APIView):
 
             result = apply_cancellation(
                 reservation, new_status, 'barber', reason, now, refund=refund, remove_points=remove_points,
+                barber_user=request.user, notes=serializer.validated_data['notes'],
             )
             if reason == 'client_requested':
                 message = _late_message(result) if late else "RDV annulé à la demande du client."
             if reason == 'client_no_show':
                 User.objects.filter(pk=reservation.user_id).update(no_show_count=F('no_show_count') + 1)
-            log_barber_cancellation(
-                reservation, request.user, reason, serializer.validated_data['notes'], reservation.refund_amount,
-            )
         return _cancellation_response(result, message, reason=reason)
 
 

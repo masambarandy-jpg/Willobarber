@@ -199,6 +199,9 @@ def render_cancellation_email(reservation, first_name, refund_failed=False):
     rows = [_row('Prestation', escape(reservation.service.name)),
             _row('Date', format_date_fr(reservation.date), strike=True),
             _row('Heure', format_heure_fr(reservation.time), strike=True)]
+    # Récapitulatif d'un groupe : les enfants annulés en même temps que le parent.
+    children = reservation.child_reservations.filter(cancelled_at=reservation.cancelled_at).order_by('date', 'time')
+    rows += [_row('RDV lié', f"{format_date_fr(c.date)} · {format_heure_fr(c.time)}", strike=True) for c in children]
     return subject, _render_layout(
         subject, kicker, title, escape(first_name), intro, rows, note,
         'Reprendre rendez-vous', settings.APP_URL,

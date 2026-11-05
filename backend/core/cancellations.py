@@ -29,6 +29,7 @@ CANCELLABLE_STATUSES = ACTIVE_RESERVATION_STATUSES
 LATE_STATUS = 'cancelled_late_partial_refund'
 NO_SHOW_GRACE = timedelta(minutes=15)
 NO_SHOW_ALERT_RATE = 20
+CHILD_CANCEL_ERROR = "Annulez la réservation principale pour annuler toute la famille, ou contactez le support."
 REFUND_FAILED_MESSAGE = (
     "Votre annulation est bien prise en compte. Le remboursement sera traité manuellement dans les 24h."
 )
@@ -100,18 +101,34 @@ def remove_loyalty_points(reservation):
     return removed
 
 
-def apply_cancellation(reservation, new_status, cancelled_by, reason, now, *, refund, remove_points):
-    """Annule la réservation verrouillée : le save() libère le créneau et déclenche
-    _sync_waitlist (signals.py). Retourne le dict commun des réponses HTTP."""
+def apply_cancellation(
+    reservation, new_status, cancelled_by, reason, now, *, refund, remove_points, barber_user=None, notes='',
+):
+    """Annule la réservation verrouillée et ses enfants : le save() libère chaque créneau
+    et déclenche _sync_waitlist (signals.py). Retourne le dict commun des réponses HTTP."""
+    # Un seul remboursement et un seul email : le parent porte le paiement de tout le groupe.
+    children = list(reservation.child_reservations.select_for_update().filter(status__in=CANCELLABLE_STATUSES))
     late = new_status == LATE_STATUS
     refund_amount, refund_failed = attempt_refund(reservation, now, late) if refund else (Decimal('0'), False)
     points_removed = remove_loyalty_points(reservation) if remove_points else 0
 
-    reservation.status = new_status
-    reservation.cancelled_at = now
-    reservation.cancelled_by = cancelled_by
-    reservation.cancellation_reason = reason
-    reservation.save()
+    for cancelled in (reservation, *children):
+        if remove_points and cancelled is not reservation:
+            points_removed += remove_loyalty_points(cancelled)
+        cancelled.status = new_status
+        cancelled.cancelled_at = now
+        cancelled.cancelled_by = cancelled_by
+        cancelled.cancellation_reason = reason
+        cancelled.save()
+        if cancelled_by == 'barber':
+            BarberCancellationLog.objects.create(
+                reservation=cancelled,
+                barber_user=barber_user,
+                reason=reason,
+                notes=notes,
+                client_was_refunded=bool(cancelled.refund_amount),
+                refund_amount=cancelled.refund_amount,
+            )
     queue_cancellation_email(reservation, refund_failed)
 
     return {
@@ -137,7 +154,7 @@ def cancel_active_reservations(user):
     """Suppression de compte : annule les RDV à venir du client selon la politique
     habituelle. Les RDV déjà commencés restent dans l'historique, tels quels."""
     now = timezone.now()
-    active = Reservation.objects.filter(user=user, status__in=CANCELLABLE_STATUSES)
+    active = Reservation.objects.filter(user=user, status__in=CANCELLABLE_STATUSES, parent_reservation__isnull=True)
     for pk in list(active.values_list('id', flat=True)):
         with transaction.atomic():
             reservation = Reservation.objects.select_for_update().get(pk=pk)
@@ -149,17 +166,6 @@ def cancel_active_reservations(user):
             "Suppression du compte %s : réservation %s annulée (%s, %s € remboursés)",
             user.pk, pk, result['status'], result['refund_amount'],
         )
-
-
-def log_barber_cancellation(reservation, user, reason, notes, refund_amount):
-    BarberCancellationLog.objects.create(
-        reservation=reservation,
-        barber_user=user,
-        reason=reason,
-        notes=notes,
-        client_was_refunded=bool(refund_amount),
-        refund_amount=refund_amount,
-    )
 
 
 @transaction.atomic

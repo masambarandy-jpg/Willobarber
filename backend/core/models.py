@@ -164,6 +164,11 @@ class Reservation(models.Model):
     # Coupe passée retirée de l'historique « Mon espace » du client (soft
     # delete) : le salon la voit toujours et les points fidélité restent acquis.
     hidden_by_client = models.BooleanField(default=False)
+    # Groupe d'enfants (cf. book.tsx) : la 1re réservation porte le paiement et
+    # les suivantes pointent vers elle. Annuler la 1re annule tout le groupe.
+    parent_reservation = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='child_reservations',
+    )
     refund_id = models.CharField(max_length=255, null=True, blank=True)
     refund_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     refunded_at = models.DateTimeField(null=True, blank=True)

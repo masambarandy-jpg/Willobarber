@@ -24,6 +24,7 @@ export type BarberReservation = {
   payment_intent_id?: string;
   amount_paid?: string | null;
   checked_in_at?: string | null;
+  parent_reservation?: number | null;
 };
 
 const lateMinutes = (r: BarberReservation) => Math.floor((Date.now() - salonStartMs(r.date, r.time)) / 60000);
@@ -87,21 +88,29 @@ export function ReservationActionsSheet({ reservation, onClose, onSelect }: {
           <Text style={styles.sheetItemText}>📞 Appeler le client</Text>
           {!phone && <Text style={styles.sheetHint}>Numéro non renseigné</Text>}
         </TouchableOpacity>
-        <TouchableOpacity style={styles.sheetItem} onPress={() => onSelect('client_requested')}>
-          <Text style={styles.sheetItemText}>❌ Annuler à sa demande</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.sheetItem} onPress={() => onSelect('salon_unavailable')}>
-          <Text style={styles.sheetItemText}>🚫 Annuler (salon)</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.sheetItem, noShowDisabled && styles.disabled]}
-          disabled={noShowDisabled}
-          onPress={() => onSelect('client_no_show')}
-          testID="action-no-show"
-        >
-          <Text style={styles.sheetItemText}>🚫 Marquer no-show</Text>
-          {noShowHint && <Text style={styles.sheetHint}>{noShowHint}</Text>}
-        </TouchableOpacity>
+        {reservation.parent_reservation ? (
+          <Text style={[styles.sheetHint, styles.sheetNotice]} testID="child-notice">
+            RDV lié à une réservation groupée : annulez la réservation principale pour annuler tout le groupe.
+          </Text>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.sheetItem} onPress={() => onSelect('client_requested')}>
+              <Text style={styles.sheetItemText}>❌ Annuler à sa demande</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.sheetItem} onPress={() => onSelect('salon_unavailable')}>
+              <Text style={styles.sheetItemText}>🚫 Annuler (salon)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sheetItem, noShowDisabled && styles.disabled]}
+              disabled={noShowDisabled}
+              onPress={() => onSelect('client_no_show')}
+              testID="action-no-show"
+            >
+              <Text style={styles.sheetItemText}>🚫 Marquer no-show</Text>
+              {noShowHint && <Text style={styles.sheetHint}>{noShowHint}</Text>}
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </Modal>
   );
@@ -109,9 +118,11 @@ export function ReservationActionsSheet({ reservation, onClose, onSelect }: {
 
 // ─── Modale de confirmation (3 motifs) ───────────────────────────────────────
 
-export function BarberCancelModal({ reservation, reason, onClose, onDone }: {
+export function BarberCancelModal({ reservation, reason, linkedCount, onClose, onDone }: {
   reservation: BarberReservation;
   reason: CancelByBarberReason;
+  // RDV enfants que la cascade annulera aussi.
+  linkedCount: number;
   onClose: () => void;
   onDone: (response: CancelResponse) => void;
 }) {
@@ -172,6 +183,11 @@ export function BarberCancelModal({ reservation, reason, onClose, onDone }: {
             )}
             <View style={styles.warning}>
               <Text style={styles.warningText}>{warning}</Text>
+              {linkedCount > 0 && (
+                <Text style={styles.warningText} testID="barber-cancel-linked">
+                  {linkedCount} RDV lié(s) seront aussi annulés.
+                </Text>
+              )}
             </View>
 
             <Text style={styles.fieldLabel}>
@@ -239,6 +255,7 @@ const styles = StyleSheet.create({
   sheetItem: { paddingVertical: 14, borderTopWidth: 1, borderTopColor: CC.trackBg },
   sheetItemText: { fontSize: 15, fontWeight: '600', color: CC.black },
   sheetHint: { fontSize: 12, color: CC.textSecondary, marginTop: 3 },
+  sheetNotice: { paddingVertical: 14, borderTopWidth: 1, borderTopColor: CC.trackBg },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 18 },
   modalBox: { backgroundColor: CC.white, borderRadius: 20, padding: 22, width: '100%', maxWidth: 480, maxHeight: '90%' },
   modalTitle: { fontFamily: SERIF, fontWeight: '700', fontSize: 21, color: CC.black },
