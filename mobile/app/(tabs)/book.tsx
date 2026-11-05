@@ -511,6 +511,7 @@ export default function BookScreen() {
             payment_intent_id: i === 0 ? paymentIntentId : undefined,
             amount_paid: i === 0 ? amountPaid : 0,
             child_count: i === 0 ? count : 1,
+            parent_reservation: i === 0 ? undefined : createdReservations[0].id,
           });
           createdReservations.push(created);
         }

@@ -42,10 +42,10 @@ def send_sms_reminder(reservation) -> bool:
 def send_reminders_for_tomorrow() -> dict:
     """Envoie les rappels SMS pour tous les RDV de demain. Utilisé par la commande
     manage.py send_reminders et par l'endpoint POST /api/reminders/send/."""
-    from .models import Reservation
+    from .models import CANCELLED_STATUSES, Reservation
 
     tomorrow = timezone.localdate() + timedelta(days=1)
-    reservations = Reservation.objects.filter(date=tomorrow).exclude(status__in=['cancelled', 'cancelled_client'])
+    reservations = Reservation.objects.filter(date=tomorrow).exclude(status__in=CANCELLED_STATUSES)
 
     sent = 0
     failed = 0

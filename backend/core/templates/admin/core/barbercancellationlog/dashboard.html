@@ -1,0 +1,32 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<table>
+  <thead>
+    <tr>
+      <th>Coiffeur</th>
+      <th>Total RDV</th>
+      <th>No-show</th>
+      <th>Demande du client</th>
+      <th>Indisponibilité salon</th>
+      <th>Taux de no-show</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in stats %}
+    <tr>
+      <td>{{ row.barber }}</td>
+      <td>{{ row.total }}</td>
+      <td>{{ row.client_no_show }}</td>
+      <td>{{ row.client_requested }}</td>
+      <td>{{ row.salon_unavailable }}</td>
+      <td{% if row.flagged %} style="background:#C0392B;color:#fff;font-weight:bold;"{% endif %}>
+        {{ row.no_show_rate }} %{% if row.flagged %} ⚠{% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">Aucun rendez-vous sur les 30 derniers jours.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

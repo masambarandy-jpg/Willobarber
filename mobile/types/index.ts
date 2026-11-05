@@ -1,3 +1,5 @@
+import type { ReservationStatus } from './reservation';
+
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
 export interface User {
@@ -104,13 +106,7 @@ export interface OpeningHoursDay {
 
 // ─── Reservation ─────────────────────────────────────────────────────────────
 
-export type ReservationStatus =
-  | 'pending'
-  | 'confirmed'
-  | 'completed'
-  | 'cancelled_client'
-  | 'cancelled_barber'
-  | 'no_show';
+export type { ReservationStatus } from './reservation';
 
 export type PaymentStatus = 'unpaid' | 'deposit_paid' | 'fully_paid' | 'refunded';
 
@@ -144,6 +140,12 @@ export interface Reservation {
   child_count?: number;
   // Coupe passée retirée de l'historique par le client (soft delete).
   hidden_by_client?: boolean;
+  // Champs réels du serializer, utilisés par la modale d'annulation.
+  time?: string;
+  payment_intent_id?: string;
+  amount_paid?: string | null;
+  // Groupe d'enfants : id de la réservation qui porte le paiement.
+  parent_reservation?: number | null;
 }
 
 export type BarberName = 'Willo' | 'Malik' | 'Idris';
@@ -157,6 +159,7 @@ export interface CreateReservationPayload {
   payment_intent_id?: string;
   amount_paid?: number;
   child_count?: number;
+  parent_reservation?: number;
 }
 
 // ─── Review ──────────────────────────────────────────────────────────────────

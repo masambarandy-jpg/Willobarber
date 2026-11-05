@@ -8,6 +8,7 @@ from django.conf import settings
 class User(AbstractUser):
     ROLE_CHOICES = [
         ('client', 'Client'),
+        ('barber', 'Coiffeur'),
         ('admin', 'Admin'),
     ]
     # Statut CRM choisi manuellement par le coiffeur (aucun calcul automatique).
@@ -38,6 +39,8 @@ class User(AbstractUser):
     last_reco_sent_at = models.DateTimeField(null=True, blank=True)
     # Customer Stripe du client (cartes mémorisées). Créé au 1er paiement.
     stripe_customer_id = models.CharField(max_length=100, blank=True, null=True)
+    # Nombre de RDV marqués no-show par le salon (cf. cancellations.py).
+    no_show_count = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.username} ({self.role})"
@@ -95,9 +98,9 @@ class Barber(models.Model):
         return f"{self.name} ({self.role})"
 
 
-# Les barbiers ne sont pas des User Django (aucun rôle 'barber' n'existe sur
-# User) : partout dans l'app (planning coiffeur, réservations, congés), le
-# barbier est identifié par ce prénom.
+# Le barbier d'un RDV n'est pas lié à un User Django, même avec le rôle 'barber' :
+# partout dans l'app (planning coiffeur, réservations, congés), il est identifié
+# par ce prénom.
 BARBER_CHOICES = [
     ('Willo', 'Willo'),
     ('Malik', 'Malik'),
@@ -107,6 +110,13 @@ BARBER_CHOICES = [
 # versions de l'app qui n'envoient pas encore de barbier.
 DEFAULT_BARBER = 'Willo'
 
+# Tout statut d'annulation libère le créneau et retire le RDV des visites.
+CANCELLED_STATUSES = (
+    'cancelled', 'cancelled_client',
+    'cancelled_and_refunded', 'cancelled_late_partial_refund',
+    'cancelled_no_show', 'cancelled_by_salon_refunded',
+)
+
 
 class Reservation(models.Model):
     STATUS_CHOICES = [
@@ -115,6 +125,15 @@ class Reservation(models.Model):
         ('cancelled', 'Annulé'),
         ('cancelled_client', 'Annulé par le client'),
         ('no_show', 'No-show'),
+        ('cancelled_and_refunded', 'Annulé et remboursé'),
+        ('cancelled_late_partial_refund', 'Annulé tardivement, frais de 5 € retenus'),
+        ('cancelled_no_show', 'Annulé pour no-show'),
+        ('cancelled_by_salon_refunded', 'Annulé par le salon et remboursé'),
+    ]
+
+    CANCELLED_BY_CHOICES = [
+        ('client', 'Client'),
+        ('barber', 'Coiffeur'),
     ]
 
     PAYMENT_STATUS_CHOICES = [
@@ -132,7 +151,7 @@ class Reservation(models.Model):
     service = models.ForeignKey(Service, on_delete=models.CASCADE)
     date = models.DateField()
     time = models.TimeField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending')
     payment_intent_id = models.CharField(max_length=255, blank=True, default='')
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True, default='')
@@ -145,6 +164,19 @@ class Reservation(models.Model):
     # Coupe passée retirée de l'historique « Mon espace » du client (soft
     # delete) : le salon la voit toujours et les points fidélité restent acquis.
     hidden_by_client = models.BooleanField(default=False)
+    # Groupe d'enfants (cf. book.tsx) : la 1re réservation porte le paiement et
+    # les suivantes pointent vers elle. Annuler la 1re annule tout le groupe.
+    parent_reservation = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='child_reservations',
+    )
+    refund_id = models.CharField(max_length=255, null=True, blank=True)
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    refunded_at = models.DateTimeField(null=True, blank=True)
+    # Renseigné par le webhook Stripe : refunded_at = demande acceptée, ceci = fonds rendus.
+    refund_confirmed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.CharField(max_length=10, choices=CANCELLED_BY_CHOICES, null=True, blank=True)
+    cancellation_reason = models.TextField(null=True, blank=True)
 
     class Meta:
         # Un seul créneau actif (pending/confirmed) par date+heure — le salon
@@ -162,6 +194,53 @@ class Reservation(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.date} {self.time}"
+
+
+class RefundAttempt(models.Model):
+    """Audit des remboursements Stripe ; les échecs se relancent depuis l'admin."""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('succeeded', 'Succeeded'),
+        ('failed', 'Failed'),
+    ]
+
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
+    attempt_number = models.IntegerField(default=1)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    stripe_refund_id = models.CharField(max_length=255, null=True, blank=True)
+    error_message = models.TextField(null=True, blank=True)
+    # Montant conservé par le salon sur une annulation tardive (CGV art. 3.2).
+    cancellation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Réservation {self.reservation_id} — tentative {self.attempt_number} ({self.status})"
+
+
+class BarberCancellationLog(models.Model):
+    """Trace anti-fraude de chaque annulation faite par le salon."""
+    REASON_CHOICES = [
+        ('client_no_show', 'Client absent'),
+        ('client_requested', 'Demande du client'),
+        ('salon_unavailable', 'Indisponibilité salon'),
+    ]
+
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
+    barber_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES)
+    notes = models.TextField(blank=True, max_length=500)
+    client_was_refunded = models.BooleanField(default=False)
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Réservation {self.reservation_id} — {self.reason}"
 
 
 class WaitlistEntry(models.Model):

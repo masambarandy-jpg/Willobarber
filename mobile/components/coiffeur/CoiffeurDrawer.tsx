@@ -52,7 +52,7 @@ const NAV_ITEMS: { key: CoiffeurRoute; label: string; icon: (color: string) => R
 
 export default function CoiffeurDrawer({ visible, onClose, active }: Props) {
   const { profile } = useCoiffeurProfile();
-  const { unreadCount } = useCoiffeurNotifications();
+  const { unreadCount, overdueCount } = useCoiffeurNotifications();
   const avatarLetter = (profile.firstName ?? '').charAt(0).toUpperCase() || 'W';
   const [supportVisible, setSupportVisible] = useState(false);
 
@@ -88,7 +88,9 @@ export default function CoiffeurDrawer({ visible, onClose, active }: Props) {
           <View style={styles.nav}>
             {NAV_ITEMS.map((item) => {
               const isActive = item.key === active;
-              const badge = item.key === 'notifications' ? unreadCount : 0;
+              const badge = item.key === 'notifications'
+                ? unreadCount
+                : item.key === 'dashboard' && overdueCount > 0 ? `À TRAITER (${overdueCount})` : 0;
               return (
                 <TouchableOpacity
                   key={item.key}
@@ -97,7 +99,7 @@ export default function CoiffeurDrawer({ visible, onClose, active }: Props) {
                 >
                   {item.icon(isActive ? CC.black : CC.black)}
                   <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>{item.label}</Text>
-                  {badge > 0 ? (
+                  {badge ? (
                     <View style={styles.badge}>
                       <Text style={styles.badgeText}>{badge}</Text>
                     </View>

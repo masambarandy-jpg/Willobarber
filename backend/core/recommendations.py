@@ -21,7 +21,7 @@ from django.utils import timezone
 
 from . import sse
 from .emails import JOURS_FR, format_date_fr
-from .models import DEFAULT_BARBER, ClosedPeriod, Notification, Reservation, User
+from .models import CANCELLED_STATUSES, DEFAULT_BARBER, ClosedPeriod, Notification, Reservation, User
 from .serializers import NotificationSerializer
 from .slots import day_hours, hhmm_to_minutes, slot_times_for, slot_within_hours, weekly_hours
 
@@ -29,7 +29,7 @@ SALON_TZ = ZoneInfo('Europe/Brussels')
 
 ACTIVE_STATUSES = ('pending', 'confirmed')
 # Une visite annulée ou manquée ne dit rien des habitudes du client.
-NON_VISIT_STATUSES = ('cancelled', 'cancelled_client', 'no_show')
+NON_VISIT_STATUSES = (*CANCELLED_STATUSES, 'no_show')
 
 HIGH_CONFIDENCE_VISITS = 5
 MEDIUM_CONFIDENCE_VISITS = 3

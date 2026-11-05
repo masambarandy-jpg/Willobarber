@@ -154,6 +154,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'core.User'
 
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
+# Secret de signature (whsec_…) de l'endpoint /api/payments/stripe-webhook/.
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET')
 
 # Client IDs Google OAuth (iOS, Android, Web — séparés par des virgules) :
 # audiences acceptées pour les id_token vérifiés par OAuthLoginView.
@@ -171,6 +173,8 @@ SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
 # le vérifier dans SendGrid PUIS définir SENDGRID_FROM_EMAIL sur Railway.
 SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL') or 'masamba.randy@gmail.com'
 SENDGRID_FROM_NAME = os.environ.get('SENDGRID_FROM_NAME') or 'WilloBarber'
+# Destinataire des alertes internes (échec de remboursement Stripe).
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL') or SENDGRID_FROM_EMAIL
 # Lien du bouton « Voir mon RDV » des emails ; à défaut, la racine du site
 # (landing page) de la requête qui a déclenché l'email.
 APP_URL = os.environ.get('APP_URL', '')

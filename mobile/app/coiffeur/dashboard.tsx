@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -15,6 +15,13 @@ import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { coiffeurBoutiqueApi } from '@/services/api';
+import { NotificationToast, type ToastData } from '@/components/NotificationToast';
+import {
+  BarberCancelModal, OverdueSection, ReservationActionsSheet, type BarberReservation,
+} from '@/components/coiffeur/ReservationCancellation';
+import { useOverdueReservations } from '@/hooks/useOverdueReservations';
+import type { CancelByBarberReason, CancelResponse } from '@/types/reservation';
+import { formatEuro, isCancellableStatus } from '@/utils/reservationTime';
 
 // jsPDF s'appuie sur des API navigateur indisponibles sur iOS/Android natif
 // (Expo Go) — un import statique fait planter l'app au chargement du module,
@@ -33,7 +40,16 @@ const JOURS_SEMAINE_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', '
 const MOIS_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 
 type CaPeriodData = { total: string; bars: { label: string; v: number }[]; active: string };
-type UpcomingClient = { id: number; letter: string; name: string; service: string; barber: string; time: string };
+type UpcomingClient = {
+  id: number;
+  letter: string;
+  name: string;
+  service: string;
+  barber: string;
+  time: string;
+  // Absent des données de démonstration : pas de menu d'actions sans vrai RDV.
+  reservation?: ApiReservation;
+};
 type TopService = { name: string; pct: number };
 type TopServiceWithCount = TopService & { count: number };
 
@@ -67,6 +83,11 @@ type ApiReservation = {
   status: string;
   payment_status?: string;
   barber?: string; // agenda par barbier ; absent d'un backend antérieur → Willo
+  client_phone?: string | null;
+  payment_intent_id?: string;
+  amount_paid?: string | null;
+  checked_in_at?: string | null;
+  parent_reservation?: number | null;
 };
 
 // Réel : /api/services/ → contient bien price et duration (minutes)
@@ -181,6 +202,8 @@ function useDashboardData() {
   const [analytics, setAnalytics] = useState<AnalyticsData>(MOCK_ANALYTICS);
   const [exportReservations, setExportReservations] = useState<ExportReservation[]>([]);
   const [exportServices, setExportServices] = useState<ApiService[]>([]);
+  const [todayReservations, setTodayReservations] = useState<ApiReservation[]>([]);
+  const [reloadTick, setReloadTick] = useState(0);
   // undefined = pas encore lu dans AsyncStorage, null = lu mais absent, string = token trouvé
   const [token, setToken] = useState<string | null | undefined>(undefined);
 
@@ -262,6 +285,7 @@ function useDashboardData() {
             service: r.service_name,
             barber: r.barber ?? 'Willo',
             time: r.time.slice(0, 5),
+            reservation: r,
           }));
 
         // ── CA jour : groupé par heure ──
@@ -386,6 +410,7 @@ function useDashboardData() {
           reservations.map((r) => ({ ...r, price: priceByServiceName[r.service_name] ?? 0 }))
         );
         setExportServices(services);
+        setTodayReservations(activeReservations.filter((r) => r.date === todayStr));
         return true;
       } catch (error) {
         console.log('ERREUR DASHBOARD:', error);
@@ -404,9 +429,11 @@ function useDashboardData() {
     })();
 
     return () => { cancelled = true; };
-  }, [token, reservationsVersion]);
+  }, [token, reservationsVersion, reloadTick]);
 
   return {
+    reload: () => setReloadTick((tick) => tick + 1),
+    todayReservations,
     loading,
     stats,
     upcomingClients,
@@ -769,7 +796,14 @@ export default function CoiffeurDashboardScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const periodBtnRef = useRef<View>(null);
+  const { setOverdueCount } = useCoiffeurNotifications();
+  const [actionsTarget, setActionsTarget] = useState<BarberReservation | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{ reservation: BarberReservation; reason: CancelByBarberReason } | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const hideToast = useCallback(() => setToast(null), []);
   const {
+    reload,
+    todayReservations,
     loading,
     stats,
     upcomingClients,
@@ -782,6 +816,24 @@ export default function CoiffeurDashboardScreen() {
   } = useDashboardData();
   const { products, loadingProducts, updatingProductId, ajusterStock } = useProductStock();
   const todayOrders = useTodayOrders();
+  const overdue = useOverdueReservations(todayReservations);
+
+  useEffect(() => {
+    setOverdueCount(overdue.length);
+  }, [overdue.length, setOverdueCount]);
+
+  const handleCancelled = (response: CancelResponse) => {
+    setCancelTarget(null);
+    setToast({
+      message: response.reason === 'client_no_show'
+        ? 'RDV marqué no-show'
+        : response.refund_amount > 0
+          ? `Remboursement de ${formatEuro(response.refund_amount)} effectué`
+          : response.message,
+      testID: 'barber-cancel-toast',
+    });
+    reload();
+  };
 
   const periodData = caData[period];
   const maxValue = Math.max(...periodData.bars.map((b) => b.v), 1);
@@ -842,6 +894,11 @@ export default function CoiffeurDashboardScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      <OverdueSection
+        reservations={overdue}
+        onNoShow={(reservation) => setCancelTarget({ reservation, reason: 'client_no_show' })}
+      />
 
       <TouchableOpacity
         style={styles.scanBtn}
@@ -1015,6 +1072,16 @@ export default function CoiffeurDashboardScreen() {
               </Text>
             </View>
             <Text style={styles.clientTime}>{c.time}</Text>
+            {c.reservation && isCancellableStatus(c.reservation.status) && (
+              <TouchableOpacity
+                style={styles.actionsBtn}
+                onPress={() => setActionsTarget(c.reservation ?? null)}
+                accessibilityLabel="Actions"
+                testID={`btn-actions-${c.id}`}
+              >
+                <Text style={styles.actionsBtnText}>⋮ Actions</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ))}
       </View>
@@ -1070,6 +1137,26 @@ export default function CoiffeurDashboardScreen() {
         )}
       </View>
     </CoiffeurScreen>
+
+      <ReservationActionsSheet
+        reservation={actionsTarget}
+        onClose={() => setActionsTarget(null)}
+        onSelect={(reason) => {
+          if (actionsTarget) setCancelTarget({ reservation: actionsTarget, reason });
+          setActionsTarget(null);
+        }}
+      />
+      {cancelTarget && (
+        <BarberCancelModal
+          key={`${cancelTarget.reservation.id}-${cancelTarget.reason}`}
+          reservation={cancelTarget.reservation}
+          reason={cancelTarget.reason}
+          linkedCount={todayReservations.filter((r) => r.parent_reservation === cancelTarget.reservation.id).length}
+          onClose={() => setCancelTarget(null)}
+          onDone={handleCancelled}
+        />
+      )}
+      <NotificationToast toast={toast} onHide={hideToast} />
 
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} />
@@ -1408,6 +1495,18 @@ const styles = StyleSheet.create({
   },
   clientTime: {
     fontSize: 14,
+    fontWeight: '700',
+    color: CC.black,
+  },
+  actionsBtn: {
+    borderWidth: 1,
+    borderColor: CC.inputBorder,
+    borderRadius: 100,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  actionsBtnText: {
+    fontSize: 12,
     fontWeight: '700',
     color: CC.black,
   },

@@ -13,6 +13,7 @@ import {
   UsersIcon,
 } from '@/components/coiffeur/Icons';
 import { CC, SERIF } from '@/components/coiffeur/theme';
+import { isCancelledStatus } from '@/utils/reservationTime';
 import { useIsTablet } from '@/components/coiffeur/useIsTablet';
 import { useCoiffeurNotifications } from '@/contexts/CoiffeurNotificationsContext';
 import { WaitlistBadge, WaitlistSlotModal, useDayWaitlist, waitlistSlotKey } from '@/components/coiffeur/WaitlistSlotModal';
@@ -997,7 +998,7 @@ export default function CoiffeurPlanningScreen() {
           )}
 
           {dayEvents.map((e) => {
-            const cancelled = e.status === 'cancelled_client';
+            const cancelled = isCancelledStatus(e.status);
             const style = BARBER_STYLE[e.barber];
             return (
               <View
@@ -1053,7 +1054,7 @@ export default function CoiffeurPlanningScreen() {
                   {capitalize(d.toLocaleDateString('fr-FR', { weekday: 'short' })).replace('.', '')} {d.getDate()}
                 </Text>
                 {events.map((e) => {
-                  const cancelled = e.status === 'cancelled_client';
+                  const cancelled = isCancelledStatus(e.status);
                   const style = BARBER_STYLE[e.barber];
                   return (
                     <TouchableOpacity

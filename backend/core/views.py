@@ -41,25 +41,30 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
-from django.db.models import Count, Max, Q, Sum
+from django.db.models import Count, F, Max, Q, Sum
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from boutique.pricing import OrderPricingError, price_order, to_cents
+from .cancellations import (
+    CANCELLABLE_STATUSES, LATE_STATUS, NO_SHOW_GRACE, REFUND_FAILED_MESSAGE, apply_cancellation, handle_refund_webhook,
+    CHILD_CANCEL_ERROR, cancel_active_reservations, cancel_for_client, has_started,
+)
 from .client_profile import build_client_profile
 from .comments import CommentError, check_commentable, clean_rating, clean_text, save_reply
 from .comments import client_name as client_display_name
 from .loyalty import reservation_points
 from .models import (
-    BARBER_CHOICES, DEFAULT_BARBER,
+    BARBER_CHOICES, CANCELLED_STATUSES, DEFAULT_BARBER,
     Barbershop, Barber, Service, Reservation, User, ClientMedia, ClosedPeriod, OpeningHours, Review,
     WaitlistEntry, BarberLeave, Notification, NotificationPreference, PaymentCard, UserSession,
 )
 from .emails import (
     format_date_fr, format_date_fr_short, format_heure_fr, is_late_cancellation, queue_reservation_email,
+    reservation_start,
 )
 from .oauth import InvalidOAuthToken, OAuthNotConfigured, verify_google_id_token
-from .permissions import IsStaffRole
+from .permissions import IsAdmin, IsBarber, IsReservationClientOwner, IsStaffRole
 from .recommendations import SALON_TZ, build_recommendation, create_client_notification, run_daily_recommendations
 from .slots import day_hours, minutes_to_hhmm, slot_times_for, weekly_hours
 from .sms import send_reminders_for_tomorrow
@@ -67,6 +72,7 @@ from . import waitlist
 from .serializers import (
     BarbershopSerializer, BarberSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
+    CancelByBarberSerializer, CancelReservationSerializer,
     ClosedPeriodSerializer, OpeningHoursSerializer, ReviewSerializer, WaitlistEntrySerializer,
     BarberLeaveSerializer, NotificationSerializer,
     NotificationPreferenceSerializer, PaymentCardSerializer,
@@ -75,7 +81,6 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 ACOMPTE_FIXE = 5
-CANCELLED_STATUSES = ('cancelled', 'cancelled_client')
 
 
 class PayeStamp(Flowable):
@@ -348,7 +353,7 @@ def available_slots(request):
         t.strftime('%H:%M')
         for t in Reservation.objects
             .filter(barber=barber, date=requested_date)
-            .exclude(status__in=['cancelled', 'cancelled_client'])
+            .exclude(status__in=CANCELLED_STATUSES)
             .values_list('time', flat=True)
     }
 
@@ -609,13 +614,21 @@ class ReservationViewSet(viewsets.ModelViewSet):
     # staff (via IsStaffRole) peut les toucher, sinon n'importe quel client
     # pourrait falsifier son propre statut de paiement.
     STAFF_ONLY_FIELDS = {'payment_status', 'payment_method', 'amount_paid'}
-    # Seules ces actions restent ouvertes à un client sur sa propre réservation :
-    # l'annuler (status='cancelled_client' + motif) ou la reprogrammer (date/heure)
-    # — cf. reservationsApi.cancel()/.reschedule() côté mobile.
-    CLIENT_ALLOWED_FIELDS = {'status', 'cancellation_reason', 'date', 'time'}
+    # Seule la reprogrammation reste ouverte à un client par PATCH (cf.
+    # reservationsApi.reschedule()) ; l'annulation passe par POST .../cancel/.
+    CLIENT_ALLOWED_FIELDS = {'date', 'time'}
 
     def _app_url(self):
         return settings.APP_URL or self.request.build_absolute_uri('/')
+
+    def update(self, request, *args, **kwargs):
+        # Ce chemin annulait sans rembourser alors que l'email annonçait le contraire.
+        if request.data.get('status') in CANCELLED_STATUSES:
+            return Response(
+                {'detail': 'Endpoint déprécié. Utilisez POST /api/reservations/<id>/cancel/'},
+                status=status.HTTP_410_GONE,
+            )
+        return super().update(request, *args, **kwargs)
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -625,31 +638,14 @@ class ReservationViewSet(viewsets.ModelViewSet):
             if requested_fields & self.STAFF_ONLY_FIELDS:
                 raise PermissionDenied("Seul le salon peut modifier ces informations.")
             if requested_fields - self.CLIENT_ALLOWED_FIELDS:
-                raise PermissionDenied("Vous ne pouvez qu'annuler ou reprogrammer votre réservation.")
-            # Un client ne peut faire évoluer le statut que vers "annulé par le client".
-            if 'status' in requested_fields and self.request.data.get('status') != 'cancelled_client':
-                raise PermissionDenied("Vous ne pouvez qu'annuler votre réservation.")
-        previous_status = serializer.instance.status
+                raise PermissionDenied("Vous ne pouvez que reprogrammer votre réservation.")
         previous_slot = {'date': serializer.instance.date, 'time': serializer.instance.time}
         reservation = serializer.save()
 
-        # Emails client : annulation (client ou salon) ou reprogrammation.
-        if previous_status not in CANCELLED_STATUSES and reservation.status in CANCELLED_STATUSES:
-            queue_reservation_email(
-                reservation, 'cancelled', self._app_url(), late=is_late_cancellation(reservation),
-            )
-        elif reservation.status not in CANCELLED_STATUSES and (
+        if reservation.status not in CANCELLED_STATUSES and (
             (reservation.date, reservation.time) != (previous_slot['date'], previous_slot['time'])
         ):
             queue_reservation_email(reservation, 'rescheduled', self._app_url(), previous=previous_slot)
-
-        # Retirer les points gagnés à la création pour éviter le farming
-        # (annulation par le client ou par le salon, une seule fois).
-        if previous_status in ('pending', 'confirmed') and reservation.status in ('cancelled', 'cancelled_client'):
-            points_to_refund = reservation_points(reservation)
-            client = reservation.user
-            client.loyalty_points = max(0, (client.loyalty_points or 0) - points_to_refund)
-            client.save(update_fields=['loyalty_points'])
 
     def create(self, request, *args, **kwargs):
         date = request.data.get('date')
@@ -728,6 +724,129 @@ class ReservationViewSet(viewsets.ModelViewSet):
         user.save(update_fields=['loyalty_points'])
 
         queue_reservation_email(reservation, 'confirmed', self._app_url())
+
+
+def _cancellation_response(result, message, **extra):
+    """Réponse commune des annulations ; un échec Stripe remplace le message."""
+    refund_failed = result.pop('refund_failed')
+    return Response({**result, **extra, 'message': REFUND_FAILED_MESSAGE if refund_failed else message})
+
+
+def _late_message(result):
+    if result['cancellation_fee'] > 0:
+        return (f"Annulation tardive : {fmt_eur(result['cancellation_fee'])} de frais retenus, "
+                f"{fmt_eur(result['refund_amount'])} remboursés.")
+    return "Annulation tardive : aucun paiement en ligne à rembourser."
+
+
+def _locked_reservation(pk):
+    """À appeler dans un atomic : None si la réservation n'existe pas."""
+    return Reservation.objects.select_for_update().filter(pk=pk).first()
+
+
+class CancelReservationView(APIView):
+    """Annulation d'un RDV par son client, remboursement Stripe si le délai est respecté."""
+    # CGV WilloBarber, art. 3.2 : « Annulation notifiée plus de 24 heures avant
+    # l'horaire convenu : [...] remboursement intégral et automatique sur la carte
+    # bancaire ayant servi à la transaction, via la plateforme Stripe. »
+    # À 24h ou moins : 5 € conservés par le salon, seul l'excédent est remboursé.
+    permission_classes = [IsAuthenticated, IsReservationClientOwner]
+
+    def post(self, request, pk):
+        serializer = CancelReservationSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': 'Le motif ne doit pas dépasser 500 caractères.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        now = timezone.now()
+        with transaction.atomic():
+            reservation = _locked_reservation(pk)
+            if reservation is None:
+                return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+            self.check_object_permissions(request, reservation)
+            if reservation.status not in CANCELLABLE_STATUSES:
+                return Response({'error': 'Déjà annulée'}, status=status.HTTP_400_BAD_REQUEST)
+            if reservation.parent_reservation_id:
+                return Response({'error': CHILD_CANCEL_ERROR}, status=status.HTTP_400_BAD_REQUEST)
+            if has_started(reservation, now):
+                return Response({'error': 'Ce rendez-vous a déjà commencé : il ne peut plus être annulé.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            result, late = cancel_for_client(reservation, serializer.validated_data['reason'] or None, now)
+        message = _late_message(result) if late else "Votre rendez-vous est annulé et le paiement en ligne vous est remboursé."
+        return _cancellation_response(result, message)
+
+
+class CancelReservationByBarberView(APIView):
+    """Annulation par le salon : no-show, demande du client ou indisponibilité."""
+    permission_classes = [IsAuthenticated, IsBarber | IsAdmin]
+
+    def post(self, request, pk):
+        serializer = CancelByBarberSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': 'Motif ou notes invalides.', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        reason = serializer.validated_data['reason']
+
+        now = timezone.now()
+        with transaction.atomic():
+            reservation = _locked_reservation(pk)
+            if reservation is None:
+                return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+            if reservation.status not in CANCELLABLE_STATUSES:
+                return Response({'error': 'Déjà annulée'}, status=status.HTTP_400_BAD_REQUEST)
+            if reservation.parent_reservation_id:
+                return Response({'error': CHILD_CANCEL_ERROR}, status=status.HTTP_400_BAD_REQUEST)
+
+            if reason == 'client_no_show':
+                # Délai de grâce : un client peut arriver avec quelques minutes de
+                # retard. Le no-show (ni remboursement, ni points, compteur +1) n'est
+                # donc ouvert qu'après 15 min, et jamais pour un client déjà enregistré.
+                if reservation.checked_in or reservation.child_reservations.filter(checked_in=True).exists():
+                    return Response({'error': 'Ce client a déjà été enregistré à son arrivée.'}, status=status.HTTP_400_BAD_REQUEST)
+                if now <= reservation_start(reservation) + NO_SHOW_GRACE:
+                    return Response({'error': "Vous ne pouvez marquer no-show qu'après +15 min"}, status=status.HTTP_400_BAD_REQUEST)
+                new_status, refund, remove_points = 'cancelled_no_show', False, True
+                message = "RDV marqué no-show."
+            elif reason == 'client_requested':
+                late = is_late_cancellation(reservation, now)
+                new_status = LATE_STATUS if late else 'cancelled_and_refunded'
+                refund, remove_points = True, True
+            else:
+                # Service non rendu du fait du salon (CDE Livre VI) : toujours remboursé.
+                new_status, refund, remove_points = 'cancelled_by_salon_refunded', True, False
+                message = "RDV annulé par le salon, client remboursé intégralement."
+
+            result = apply_cancellation(
+                reservation, new_status, 'barber', reason, now, refund=refund, remove_points=remove_points,
+                barber_user=request.user, notes=serializer.validated_data['notes'],
+            )
+            if reason == 'client_requested':
+                message = _late_message(result) if late else "RDV annulé à la demande du client."
+            if reason == 'client_no_show':
+                User.objects.filter(pk=reservation.user_id).update(no_show_count=F('no_show_count') + 1)
+        return _cancellation_response(result, message, reason=reason)
+
+
+class StripeWebhookView(APIView):
+    """Événements Stripe : suivi des remboursements. Authentifié par la signature HMAC."""
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    # charge.refund.updated ne couvre que certains moyens de paiement ; les
+    # remboursements carte passent par refund.created / refund.updated.
+    REFUND_EVENTS = ('charge.refund.updated', 'refund.created', 'refund.updated')
+
+    def post(self, request):
+        if not settings.STRIPE_WEBHOOK_SECRET:
+            logger.error("Webhook Stripe reçu mais STRIPE_WEBHOOK_SECRET n'est pas configuré")
+            return Response({'error': 'Webhook non configuré.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        try:
+            event = stripe.Webhook.construct_event(
+                request.body, request.headers.get('Stripe-Signature', ''), settings.STRIPE_WEBHOOK_SECRET,
+            )
+        except (ValueError, stripe.error.SignatureVerificationError):
+            return Response({'error': 'Signature invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if event.type in self.REFUND_EVENTS:
+            handle_refund_webhook(event.data.object)
+        return Response({'received': True})
 
 
 class RegisterView(APIView):
@@ -830,11 +949,7 @@ class DeleteAccountView(APIView):
     def delete(self, request):
         user = request.user
 
-        Reservation.objects.filter(
-            user=user,
-            date__gte=timezone.localdate(),
-            status__in=['pending', 'confirmed'],
-        ).update(status='cancelled_client')
+        cancel_active_reservations(user)
 
         timestamp = timezone.now().strftime('%Y%m%d%H%M%S%f')
         user.first_name = 'Client supprimé'

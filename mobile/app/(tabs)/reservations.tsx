@@ -42,13 +42,19 @@ import {
   HISTORY_PREVIEW_COUNT, HistoryToggleButton, useListAccordion, useTrackedScroll,
 } from '@/components/client/HistoryAccordion';
 import { reviewsApi, loyaltyApi } from '@/services/api';
+import {
+  LATE_CANCELLATION_MS, formatDelay, formatEuro, isCancellableStatus, lateCancellationAmounts, paidOnlineAmount, salonStartMs,
+} from '@/utils/reservationTime';
 
 // Réutilisé par le ScrollView de l'onglet "Mes coupes" (tablette/web) pour rendre son
 // inset horizontal local plutôt qu'hérité de tabletContainer — cf. usage plus bas.
 const TABLET_CONTAINER_PADDING_H = 20;
 
 // Statuts qui ne comptent pas comme une visite (stats VISITES / DERNIÈRE VISITE).
-const NOT_A_VISIT_STATUSES: string[] = ['cancelled', 'cancelled_client', 'no_show'];
+const NOT_A_VISIT_STATUSES: string[] = [
+  'cancelled', 'cancelled_client', 'no_show',
+  'cancelled_and_refunded', 'cancelled_late_partial_refund', 'cancelled_no_show', 'cancelled_by_salon_refunded',
+];
 
 const PRICE_BY_SERVICE_NAME: Record<string, number> = {
   'Signature WilloBarber': 45,
@@ -129,17 +135,38 @@ function GoldItalic({ children }: { children: React.ReactNode }) {
 }
 
 interface CancelModalProps {
-  visible: boolean;
+  reservation: Reservation | null;
+  // Tous les RDV du client, pour annoncer ceux que la cascade annulera aussi.
+  reservations: Reservation[];
   onClose: () => void;
   onConfirm: (reason: string) => void;
   loading: boolean;
 }
-function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps) {
+function CancelModal({ reservation, reservations, onClose, onConfirm, loading }: CancelModalProps) {
   const [reason, setReason] = useState('');
   const isTablet = useIsTablet();
   const { t } = useLanguage();
+
+  // Mêmes règles que le serveur, qui reste seul juge au moment de l'annulation.
+  const remaining = reservation
+    ? salonStartMs(reservation.date, reservation.time ?? reservation.start_time) - Date.now()
+    : 0;
+  const paid = reservation ? paidOnlineAmount(reservation) : 0;
+  const policy = paid <= 0
+    ? t('reservations.cancelModal.noPayment')
+    : remaining <= LATE_CANCELLATION_MS
+      ? t('reservations.cancelModal.late')
+        .replace('{fee}', formatEuro(lateCancellationAmounts(paid).fee))
+        .replace('{amount}', formatEuro(lateCancellationAmounts(paid).refund))
+      : t('reservations.cancelModal.refund').replace('{amount}', formatEuro(paid));
+
+  const isChild = !!reservation?.parent_reservation;
+  const linkedCount = reservation
+    ? reservations.filter((r) => r.parent_reservation === reservation.id && isCancellableStatus(r.status)).length
+    : 0;
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={!!reservation} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -149,12 +176,25 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
           <View style={[styles.modalBox, isTablet && styles.modalBoxTablet]}>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.modalTitle}>{t('reservations.cancelModal.title')}</Text>
-              <Text style={styles.modalSub}>{t('reservations.cancelModal.sub')}</Text>
+              {remaining > 0 && (
+                <Text style={styles.modalSub} testID="cancel-remaining">
+                  {t('reservations.cancelModal.remaining').replace('{delay}', formatDelay(remaining))}
+                </Text>
+              )}
+              <Text style={styles.modalSub} testID="cancel-policy">
+                {isChild ? t('reservations.cancelModal.childBlocked') : policy}
+              </Text>
+              {linkedCount > 0 && (
+                <Text style={styles.modalSub} testID="cancel-linked">
+                  {t('reservations.cancelModal.linked').replace('{count}', String(linkedCount))}
+                </Text>
+              )}
               <Text style={styles.fieldLabel}>{t('reservations.cancelModal.reasonLabel')}</Text>
               <TextInput
                 style={styles.modalInput}
                 value={reason}
                 onChangeText={setReason}
+                maxLength={500}
                 placeholder={t('reservations.cancelModal.placeholder')}
                 placeholderTextColor="rgba(255,255,255,0.3)"
                 multiline
@@ -163,12 +203,14 @@ function CancelModal({ visible, onClose, onConfirm, loading }: CancelModalProps)
                 <TouchableOpacity style={styles.btnKeep} onPress={onClose}>
                   <Text style={styles.btnKeepText}>{t('reservations.cancelModal.keep')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity testID="btn-confirm-cancel" style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
-                  {loading
-                    ? <ActivityIndicator color="#C0392B" size="small" />
-                    : <Text style={styles.btnDangerText}>{t('reservations.cancelModal.confirmCancel')}</Text>
-                  }
-                </TouchableOpacity>
+                {!isChild && (
+                  <TouchableOpacity testID="btn-confirm-cancel" style={styles.btnDanger} onPress={() => onConfirm(reason)} disabled={loading}>
+                    {loading
+                      ? <ActivityIndicator color="#C0392B" size="small" />
+                      : <Text style={styles.btnDangerText}>{t('reservations.cancelModal.confirmCancel')}</Text>
+                    }
+                  </TouchableOpacity>
+                )}
               </View>
             </ScrollView>
           </View>
@@ -839,9 +881,19 @@ export default function ReservationsScreen() {
     setCancelling(true);
     try {
       console.log(`[ANNULATION] POST /reservations/${cancelTarget.id}/cancel/ — reason:`, reason);
-      await cancel(cancelTarget.id, reason);
+      const response = await cancel(cancelTarget.id, reason);
       setCancelTarget(null);
-      setToast({ message: t('reservations.cancelledToast'), color: '#C0392B', testID: 'rdv-cancelled-toast' });
+      setToast(response.refund_amount > 0
+        ? {
+            message: t('reservations.cancelledRefundToast').replace('{amount}', formatEuro(response.refund_amount)),
+            testID: 'rdv-cancelled-toast',
+          }
+        : {
+            message: t('reservations.cancelledToast'),
+            subtitle: response.message,
+            color: '#C0392B',
+            testID: 'rdv-cancelled-toast',
+          });
       // L'annulation retire les points gagnés à la réservation.
       refreshUser().catch(() => {});
     } catch (err: any) {
@@ -1859,7 +1911,8 @@ export default function ReservationsScreen() {
       )}
 
       <CancelModal
-        visible={!!cancelTarget}
+        reservation={cancelTarget}
+        reservations={reservations}
         onClose={() => setCancelTarget(null)}
         onConfirm={handleCancel}
         loading={cancelling}
