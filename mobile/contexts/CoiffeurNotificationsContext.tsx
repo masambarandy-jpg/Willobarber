@@ -241,6 +241,9 @@ type CoiffeurNotificationsContextType = {
   ordersVersion: number;
   // Idem pour les commentaires clients (écran Avis clients).
   commentsVersion: number;
+  // RDV « À traiter » du dashboard, repris en badge dans la navigation.
+  overdueCount: number;
+  setOverdueCount: (count: number) => void;
 };
 
 const CoiffeurNotificationsContext = createContext<CoiffeurNotificationsContextType>({
@@ -251,6 +254,8 @@ const CoiffeurNotificationsContext = createContext<CoiffeurNotificationsContextT
   reservationsVersion: 0,
   ordersVersion: 0,
   commentsVersion: 0,
+  overdueCount: 0,
+  setOverdueCount: () => {},
 });
 
 export function CoiffeurNotificationsProvider({ children }: { children: React.ReactNode }) {
@@ -261,6 +266,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
   const [reservationsVersion, setReservationsVersion] = useState(0);
   const [ordersVersion, setOrdersVersion] = useState(0);
   const [commentsVersion, setCommentsVersion] = useState(0);
+  const [overdueCount, setOverdueCount] = useState(0);
   const [toast, setToast] = useState<ToastData | null>(null);
   const hideToast = useCallback(() => setToast(null), []);
   const [polling, setPolling] = useState(false);
@@ -389,7 +395,7 @@ export function CoiffeurNotificationsProvider({ children }: { children: React.Re
 
   return (
     <CoiffeurNotificationsContext.Provider
-      value={{ notifications, unreadCount, loading, marquerLue, reservationsVersion, ordersVersion, commentsVersion }}
+      value={{ notifications, unreadCount, loading, marquerLue, reservationsVersion, ordersVersion, commentsVersion, overdueCount, setOverdueCount }}
     >
       {children}
       <NotificationToast
