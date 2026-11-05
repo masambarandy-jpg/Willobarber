@@ -47,8 +47,8 @@ from django.template.response import TemplateResponse
 from django.utils import timezone
 from boutique.pricing import OrderPricingError, price_order, to_cents
 from .cancellations import (
-    CANCELLABLE_STATUSES, NO_SHOW_GRACE, REFUND_FAILED_MESSAGE, apply_cancellation, handle_refund_webhook,
-    log_barber_cancellation,
+    CANCELLABLE_STATUSES, LATE_STATUS, NO_SHOW_GRACE, REFUND_FAILED_MESSAGE, apply_cancellation, handle_refund_webhook,
+    has_started, log_barber_cancellation,
 )
 from .client_profile import build_client_profile
 from .comments import CommentError, check_commentable, clean_rating, clean_text, save_reply
@@ -741,6 +741,13 @@ def _cancellation_response(result, message, **extra):
     return Response({**result, **extra, 'message': REFUND_FAILED_MESSAGE if refund_failed else message})
 
 
+def _late_message(result):
+    if result['cancellation_fee'] > 0:
+        return (f"Annulation tardive : {fmt_eur(result['cancellation_fee'])} de frais retenus, "
+                f"{fmt_eur(result['refund_amount'])} remboursés.")
+    return "Annulation tardive : aucun paiement en ligne à rembourser."
+
+
 def _locked_reservation(pk):
     """À appeler dans un atomic : None si la réservation n'existe pas."""
     return Reservation.objects.select_for_update().filter(pk=pk).first()
@@ -751,8 +758,7 @@ class CancelReservationView(APIView):
     # CGV WilloBarber, art. 3.2 : « Annulation notifiée plus de 24 heures avant
     # l'horaire convenu : [...] remboursement intégral et automatique sur la carte
     # bancaire ayant servi à la transaction, via la plateforme Stripe. »
-    # Écart à arbitrer : à moins de 24h, les CGV conservent 5 € et remboursent
-    # l'excédent d'un paiement intégral ; le cahier des charges ne rembourse rien.
+    # À 24h ou moins : 5 € conservés par le salon, seul l'excédent est remboursé.
     permission_classes = [IsAuthenticated, IsReservationClientOwner]
 
     def post(self, request, pk):
@@ -768,21 +774,20 @@ class CancelReservationView(APIView):
             self.check_object_permissions(request, reservation)
             if reservation.status not in CANCELLABLE_STATUSES:
                 return Response({'error': 'Déjà annulée'}, status=status.HTTP_400_BAD_REQUEST)
+            if has_started(reservation, now):
+                return Response({'error': 'Ce rendez-vous a déjà commencé : il ne peut plus être annulé.'}, status=status.HTTP_400_BAD_REQUEST)
 
             late = is_late_cancellation(reservation, now)
             result = apply_cancellation(
                 reservation,
-                'cancelled_late_no_refund' if late else 'cancelled_and_refunded',
+                LATE_STATUS if late else 'cancelled_and_refunded',
                 'client',
                 serializer.validated_data['reason'][:50] or None,
                 now,
-                refund=not late,
+                refund=True,
                 remove_points=True,
             )
-        message = (
-            "Annulation tardive : aucun remboursement." if late
-            else "Votre rendez-vous est annulé et le paiement en ligne vous est remboursé."
-        )
+        message = _late_message(result) if late else "Votre rendez-vous est annulé et le paiement en ligne vous est remboursé."
         return _cancellation_response(result, message)
 
 
@@ -816,9 +821,8 @@ class CancelReservationByBarberView(APIView):
                 message = "RDV marqué no-show."
             elif reason == 'client_requested':
                 late = is_late_cancellation(reservation, now)
-                new_status = 'cancelled_late_no_refund' if late else 'cancelled_and_refunded'
-                refund, remove_points = not late, True
-                message = "Annulation tardive : aucun remboursement." if late else "RDV annulé à la demande du client."
+                new_status = LATE_STATUS if late else 'cancelled_and_refunded'
+                refund, remove_points = True, True
             else:
                 # Service non rendu du fait du salon (CDE Livre VI) : toujours remboursé.
                 new_status, refund, remove_points = 'cancelled_by_salon_refunded', True, False
@@ -827,6 +831,8 @@ class CancelReservationByBarberView(APIView):
             result = apply_cancellation(
                 reservation, new_status, 'barber', reason, now, refund=refund, remove_points=remove_points,
             )
+            if reason == 'client_requested':
+                message = _late_message(result) if late else "RDV annulé à la demande du client."
             if reason == 'client_no_show':
                 User.objects.filter(pk=reservation.user_id).update(no_show_count=F('no_show_count') + 1)
             log_barber_cancellation(

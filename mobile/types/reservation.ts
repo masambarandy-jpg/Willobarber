@@ -6,7 +6,7 @@ export type ReservationStatus =
   | 'cancelled_client'
   | 'cancelled_barber'
   | 'cancelled_and_refunded'
-  | 'cancelled_late_no_refund'
+  | 'cancelled_late_partial_refund'
   | 'cancelled_no_show'
   | 'cancelled_by_salon_refunded'
   | 'no_show';
@@ -23,6 +23,7 @@ export type CancelResponse = {
   status: ReservationStatus;
   reason?: CancelByBarberReason;
   refund_amount: number;
+  cancellation_fee?: number;
   loyalty_points_removed: number;
   message: string;
 };

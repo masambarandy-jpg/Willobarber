@@ -112,7 +112,7 @@ DEFAULT_BARBER = 'Willo'
 # Tout statut d'annulation libère le créneau et retire le RDV des visites.
 CANCELLED_STATUSES = (
     'cancelled', 'cancelled_client',
-    'cancelled_and_refunded', 'cancelled_late_no_refund',
+    'cancelled_and_refunded', 'cancelled_late_partial_refund',
     'cancelled_no_show', 'cancelled_by_salon_refunded',
 )
 
@@ -125,7 +125,7 @@ class Reservation(models.Model):
         ('cancelled_client', 'Annulé par le client'),
         ('no_show', 'No-show'),
         ('cancelled_and_refunded', 'Annulé et remboursé'),
-        ('cancelled_late_no_refund', 'Annulé tardivement, sans remboursement'),
+        ('cancelled_late_partial_refund', 'Annulé tardivement, frais de 5 € retenus'),
         ('cancelled_no_show', 'Annulé pour no-show'),
         ('cancelled_by_salon_refunded', 'Annulé par le salon et remboursé'),
     ]
@@ -203,6 +203,8 @@ class RefundAttempt(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     stripe_refund_id = models.CharField(max_length=255, null=True, blank=True)
     error_message = models.TextField(null=True, blank=True)
+    # Montant conservé par le salon sur une annulation tardive (CGV art. 3.2).
+    cancellation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

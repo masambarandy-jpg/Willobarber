@@ -22,7 +22,7 @@ admin.site.register(Review)
 
 @admin.register(RefundAttempt)
 class RefundAttemptAdmin(admin.ModelAdmin):
-    list_display = ('reservation', 'attempt_number', 'status', 'stripe_refund_id', 'error_message', 'created_at')
+    list_display = ('reservation', 'attempt_number', 'status', 'stripe_refund_id', 'cancellation_fee', 'error_message', 'created_at')
     list_filter = ('status', 'created_at')
     actions = ['retry_refund']
 

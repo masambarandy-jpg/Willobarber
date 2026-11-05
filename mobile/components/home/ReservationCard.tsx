@@ -30,7 +30,7 @@ const statusVariantMap: Record<string, 'success' | 'warning' | 'info' | 'error' 
   no_show: 'neutral',
   cancelled: 'error',
   cancelled_and_refunded: 'error',
-  cancelled_late_no_refund: 'error',
+  cancelled_late_partial_refund: 'error',
   cancelled_no_show: 'neutral',
   cancelled_by_salon_refunded: 'error',
 };

@@ -43,7 +43,7 @@ import {
 } from '@/components/client/HistoryAccordion';
 import { reviewsApi, loyaltyApi } from '@/services/api';
 import {
-  LATE_CANCELLATION_MS, formatDelay, formatEuro, paidOnlineAmount, salonStartMs,
+  LATE_CANCELLATION_MS, formatDelay, formatEuro, lateCancellationAmounts, paidOnlineAmount, salonStartMs,
 } from '@/utils/reservationTime';
 
 // Réutilisé par le ScrollView de l'onglet "Mes coupes" (tablette/web) pour rendre son
@@ -53,7 +53,7 @@ const TABLET_CONTAINER_PADDING_H = 20;
 // Statuts qui ne comptent pas comme une visite (stats VISITES / DERNIÈRE VISITE).
 const NOT_A_VISIT_STATUSES: string[] = [
   'cancelled', 'cancelled_client', 'no_show',
-  'cancelled_and_refunded', 'cancelled_late_no_refund', 'cancelled_no_show', 'cancelled_by_salon_refunded',
+  'cancelled_and_refunded', 'cancelled_late_partial_refund', 'cancelled_no_show', 'cancelled_by_salon_refunded',
 ];
 
 const PRICE_BY_SERVICE_NAME: Record<string, number> = {
@@ -154,6 +154,8 @@ function CancelModal({ reservation, onClose, onConfirm, loading }: CancelModalPr
     ? t('reservations.cancelModal.noPayment')
     : remaining <= LATE_CANCELLATION_MS
       ? t('reservations.cancelModal.late')
+        .replace('{fee}', formatEuro(lateCancellationAmounts(paid).fee))
+        .replace('{amount}', formatEuro(lateCancellationAmounts(paid).refund))
       : t('reservations.cancelModal.refund').replace('{amount}', formatEuro(paid));
 
   return (

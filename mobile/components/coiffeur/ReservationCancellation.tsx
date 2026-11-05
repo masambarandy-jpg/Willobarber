@@ -7,7 +7,7 @@ import { CC, SERIF } from './theme';
 import { coiffeurReservationsApi } from '@/services/api';
 import type { CancelByBarberReason, CancelResponse } from '@/types/reservation';
 import {
-  LATE_CANCELLATION_MS, NO_SHOW_GRACE_MS, formatDelay, formatEuro, paidOnlineAmount, salonStartMs,
+  LATE_CANCELLATION_MS, NO_SHOW_GRACE_MS, formatDelay, formatEuro, lateCancellationAmounts, paidOnlineAmount, salonStartMs,
 } from '@/utils/reservationTime';
 
 const NOTES_MAX = 500;
@@ -133,9 +133,11 @@ export function BarberCancelModal({ reservation, reason, onClose, onDone }: {
     },
     client_requested: {
       title: '❌ Annuler à la demande du client',
-      warning: late
-        ? '⚠️ Annulation tardive → aucun remboursement'
-        : paid > 0 ? `Remboursement intégral (${formatEuro(paid)}) sera effectué` : 'Aucun paiement en ligne à rembourser',
+      warning: paid <= 0
+        ? 'Aucun paiement en ligne à rembourser'
+        : late
+          ? `⚠️ Annulation tardive → frais de ${formatEuro(lateCancellationAmounts(paid).fee)}, remboursement de ${formatEuro(lateCancellationAmounts(paid).refund)}`
+          : `Remboursement intégral (${formatEuro(paid)}) sera effectué`,
       confirm: 'Confirmer',
     },
     salon_unavailable: {

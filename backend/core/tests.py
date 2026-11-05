@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import importlib
 import json
 import time as py_time
 from datetime import date, datetime, time, timedelta, timezone as dt_timezone
@@ -9,11 +10,12 @@ from unittest.mock import patch
 
 import stripe
 
+from django.apps import apps as django_apps
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .cancellations import REFUND_FAILED_MESSAGE
+from .cancellations import REFUND_FAILED_MESSAGE, retry_refund
 from .models import (
     Barbershop, BarberCancellationLog, BarberLeave, ClosedPeriod, Notification, OpeningHours, RefundAttempt,
     Reservation, Service, User, WaitlistEntry,
@@ -1002,6 +1004,7 @@ class HiddenByClientTests(TestCase):
 
 
 REFUND = SimpleNamespace(id='re_1', amount=4500, status='succeeded')
+LATE_REFUND = SimpleNamespace(id='re_2', amount=4000, status='succeeded')
 
 
 @override_settings(
@@ -1075,23 +1078,72 @@ class CancellationRefundTests(TestCase):
         self.assertEqual((attempt.status, attempt.stripe_refund_id), ('succeeded', 're_1'))
         self.assertIn('45 € vous sont intégralement remboursés', self.mails(sg)[0]['content'][0]['value'])
 
-    def test_client_cancel_less_than_24h_no_refund(self, sg, refund, _sse):
+    def test_late_cancellation_of_45_euro_slot_refunds_40_euros(self, sg, refund, _sse):
+        refund.return_value = LATE_REFUND
         reservation = self.book(timedelta(hours=23))
         r = self.cancel(reservation)
 
         self.assertEqual(r.status_code, 200, r.data)
-        self.assertEqual((r.data['status'], r.data['refund_amount']), ('cancelled_late_no_refund', 0))
+        self.assertEqual(
+            (r.data['status'], r.data['refund_amount'], r.data['cancellation_fee']),
+            ('cancelled_late_partial_refund', 40.0, 5.0),
+        )
+        refund.assert_called_once_with(payment_intent='pi_1', idempotency_key=f'refund-{reservation.id}', amount=4000)
+        attempt = RefundAttempt.objects.get(reservation=reservation)
+        self.assertEqual((attempt.status, attempt.cancellation_fee), ('succeeded', 5))
+        html = self.mails(sg)[0]['content'][0]['value']
+        for text in ("Frais d'annulation tardive : 5€", 'Montant remboursé : 40€', "l'article 3.2 de nos CGV"):
+            self.assertIn(text, html)
+
+    def test_late_cancellation_refunds_amount_minus_5_euros(self, _sg, refund, _sse):
+        refund.return_value = SimpleNamespace(id='re_3', amount=2350, status='succeeded')
+        r = self.cancel(self.book(timedelta(hours=5), amount_paid='28.50'))
+        self.assertEqual(refund.call_args.kwargs['amount'], 2350)
+        self.assertEqual((r.data['refund_amount'], r.data['cancellation_fee']), (23.5, 5.0))
+
+    def test_late_cancellation_of_cheap_slot_refunds_zero_if_total_below_5(self, _sg, refund, _sse):
+        reservation = self.book(timedelta(hours=5), amount_paid=3)
+        r = self.cancel(reservation)
         refund.assert_not_called()
-        self.assertFalse(RefundAttempt.objects.exists())
-        self.assertIn("n'est pas remboursé", self.mails(sg)[0]['content'][0]['value'].replace('&#x27;', "'"))
+        self.assertEqual((r.status_code, r.data['refund_amount'], r.data['cancellation_fee']), (200, 0, 3.0))
+        self.assertEqual(RefundAttempt.objects.get(reservation=reservation).cancellation_fee, 3)
+
+    def test_late_cancellation_of_5_euro_deposit_keeps_it_without_stripe(self, sg, refund, _sse):
+        r = self.cancel(self.book(timedelta(hours=5), amount_paid=5))
+        refund.assert_not_called()
+        self.assertEqual((r.data['refund_amount'], r.data['cancellation_fee']), (0, 5.0))
+        self.assertIn('Montant remboursé : 0€', self.mails(sg)[0]['content'][0]['value'])
+
+    def test_late_cancellation_stripe_failure_keeps_fee_and_retries_same_amount(self, _sg, refund, _sse):
+        refund.side_effect = stripe.error.APIConnectionError('down')
+        reservation = self.book(timedelta(hours=5))
+        with self.assertLogs('core.cancellations', level='ERROR'):
+            r = self.cancel(reservation)
+        self.assertEqual(r.data['message'], REFUND_FAILED_MESSAGE)
+        attempt = RefundAttempt.objects.get(reservation=reservation)
+        self.assertEqual((attempt.status, attempt.cancellation_fee), ('failed', 5))
+
+        refund.side_effect = None
+        refund.return_value = LATE_REFUND
+        self.assertTrue(retry_refund(attempt))
+        self.assertEqual(refund.call_args.kwargs['amount'], 4000)
+
+    def test_migration_converts_old_late_status(self, _sg, _refund, _sse):
+        reservation = self.book(timedelta(hours=5))
+        Reservation.objects.filter(pk=reservation.pk).update(status='cancelled_late_no_refund')
+        migration = importlib.import_module('core.migrations.0039_late_partial_refund_fee')
+        migration.rename_late_status(django_apps, None)
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, 'cancelled_late_partial_refund')
 
     def test_client_cancel_exactly_24h_is_late(self, _sg, refund, _sse):
+        refund.return_value = LATE_REFUND
         now = datetime(2026, 11, 10, 12, 0, tzinfo=SALON_TZ)
         reservation = self.book(at=now + timedelta(hours=24))
         with patch('django.utils.timezone.now', return_value=now):
             r = self.cancel(reservation)
-        self.assertEqual(r.data['status'], 'cancelled_late_no_refund')
-        refund.assert_not_called()
+        self.assertEqual(r.data['status'], 'cancelled_late_partial_refund')
+        self.assertEqual(refund.call_args.kwargs['amount'], 4000)
 
     def test_client_cancel_removes_loyalty_points_always(self, _sg, refund, _sse):
         refund.return_value = REFUND
@@ -1120,6 +1172,14 @@ class CancellationRefundTests(TestCase):
         r = self.cancel(reservation)
         self.assertEqual((r.status_code, r.data['error']), (400, 'Déjà annulée'))
         refund.assert_not_called()
+
+    def test_client_cannot_cancel_past_or_checked_in_reservation(self, _sg, refund, _sse):
+        for reservation in (self.book(timedelta(days=-30), status='pending'), self.book(timedelta(hours=3), checked_in=True)):
+            self.assertEqual(self.cancel(reservation).status_code, 400)
+            reservation.refresh_from_db()
+            self.assertIn(reservation.status, ('pending', 'confirmed'))
+        refund.assert_not_called()
+        self.assertEqual(self.points(), 200)
 
     def test_client_can_cancel_pending_booking_from_app(self, _sg, refund, _sse):
         refund.return_value = REFUND
@@ -1174,10 +1234,12 @@ class CancellationRefundTests(TestCase):
         refund.assert_called_once()
         self.assertIn('À votre demande', self.mails(sg)[0]['content'][0]['value'])
 
-    def test_barber_cancel_client_requested_less_than_24h_no_refund(self, _sg, refund, _sse):
+    def test_barber_cancel_client_requested_less_than_24h_keeps_fee(self, _sg, refund, _sse):
+        refund.return_value = LATE_REFUND
         r = self.cancel_by_barber(self.book(timedelta(hours=5)), 'client_requested')
-        self.assertEqual((r.data['status'], r.data['refund_amount'], r.data['loyalty_points_removed']), ('cancelled_late_no_refund', 0, 90))
-        refund.assert_not_called()
+        self.assertEqual((r.data['status'], r.data['refund_amount'], r.data['loyalty_points_removed']), ('cancelled_late_partial_refund', 40.0, 90))
+        self.assertEqual(refund.call_args.kwargs['amount'], 4000)
+        self.assertTrue(BarberCancellationLog.objects.get().client_was_refunded)
 
     def test_barber_cancel_salon_unavailable_always_refunds_100(self, sg, refund, _sse):
         refund.return_value = REFUND
@@ -1287,17 +1349,17 @@ class CancellationRefundTests(TestCase):
         self.assertIn('waiting@example.com', [m['personalizations'][0]['to'][0]['email'] for m in self.mails(sg)])
 
     def test_timezone_calculation_uses_europe_brussels(self, _sg, refund, _sse):
-        refund.return_value = REFUND
+        refund.return_value = LATE_REFUND
         # RDV à 12h00 à Bruxelles (11h00 UTC), 23h30 plus tard : lire l'heure en
         # UTC donnerait 24h30 et déclencherait à tort un remboursement.
         winter = self.book(at=datetime(2027, 1, 15, 12, 0, tzinfo=SALON_TZ))
         with patch('django.utils.timezone.now', return_value=datetime(2027, 1, 14, 11, 30, tzinfo=dt_timezone.utc)):
-            self.assertEqual(self.cancel(winter).data['status'], 'cancelled_late_no_refund')
+            self.assertEqual(self.cancel(winter).data['status'], 'cancelled_late_partial_refund')
         # Passage à l'heure d'été : 24h30 à l'horloge, mais 23h30 réellement écoulées.
         dst = self.book(at=datetime(2027, 3, 28, 13, 0, tzinfo=SALON_TZ))
         with patch('django.utils.timezone.now', return_value=datetime(2027, 3, 27, 11, 30, tzinfo=dt_timezone.utc)):
-            self.assertEqual(self.cancel(dst).data['status'], 'cancelled_late_no_refund')
-        refund.assert_not_called()
+            self.assertEqual(self.cancel(dst).data['status'], 'cancelled_late_partial_refund')
+        self.assertTrue(all(c.kwargs['amount'] == 4000 for c in refund.call_args_list))
 
     def test_client_cancellation_notifies_barber(self, _sg, refund, _sse):
         refund.return_value = REFUND

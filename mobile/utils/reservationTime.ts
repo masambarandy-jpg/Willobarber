@@ -5,6 +5,7 @@ const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 export const NO_SHOW_GRACE_MS = 15 * MINUTE_MS;
 export const LATE_CANCELLATION_MS = 24 * HOUR_MS;
+const LATE_CANCELLATION_FEE = 5;
 
 // Dernier dimanche du mois, 01:00 UTC : changement d'heure européen.
 function dstSwitchUtc(year: number, month: number): number {
@@ -44,6 +45,12 @@ export function formatDelay(ms: number): string {
 export function paidOnlineAmount(reservation: { payment_intent_id?: string; amount_paid?: string | null }): number {
   if (!reservation.payment_intent_id) return 0;
   return parseFloat(reservation.amount_paid ?? '0') || 0;
+}
+
+// Annulation tardive : 5 € conservés, seul l'excédent est remboursé (CGV art. 3.2).
+export function lateCancellationAmounts(paid: number): { refund: number; fee: number } {
+  const refund = Math.max(0, paid - LATE_CANCELLATION_FEE);
+  return { refund, fee: paid - refund };
 }
 
 // Ex. « 45€ », « 45,50€ ».

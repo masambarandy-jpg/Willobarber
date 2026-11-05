@@ -31,7 +31,7 @@ export const RESERVATION_STATUS = {
   no_show: { label: 'Non présenté', color: '#9E9E9E' },
   cancelled: { label: 'Annulé', color: '#EF5350' },
   cancelled_and_refunded: { label: 'Annulé et remboursé', color: '#EF5350' },
-  cancelled_late_no_refund: { label: 'Annulé (tardif)', color: '#EF5350' },
+  cancelled_late_partial_refund: { label: 'Annulé (tardif)', color: '#EF5350' },
   cancelled_no_show: { label: 'Non présenté', color: '#9E9E9E' },
   cancelled_by_salon_refunded: { label: 'Annulé par le salon', color: '#EF5350' },
 } as const;

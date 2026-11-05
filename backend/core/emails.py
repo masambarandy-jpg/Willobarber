@@ -1,6 +1,7 @@
 import logging
 import threading
 from datetime import datetime, timedelta
+from decimal import Decimal
 from html import escape
 
 import sendgrid
@@ -42,6 +43,7 @@ SALON_ADDRESS = 'Rue Auguste Van Zande 78, 1082 Bruxelles'
 SALON_PHONE = '+32 2 555 04 04'
 SALON_EMAIL = 'contact@willobarber.be'
 CANCELLATION_DELAY = timedelta(hours=24)
+LATE_CANCELLATION_FEE = Decimal('5.00')
 
 
 
@@ -79,6 +81,14 @@ def reservation_start(reservation):
 def is_late_cancellation(reservation, now=None):
     # Exactement 24h avant le RDV = déjà tardif : seul un délai > 24h ouvre le remboursement.
     return reservation_start(reservation) - (now or timezone.now()) <= CANCELLATION_DELAY
+
+
+def late_cancellation_amounts(reservation):
+    """(remboursement, frais conservés) d'une annulation tardive, sur le montant
+    réellement payé en ligne : un acompte de 5 € ne rembourse donc rien (CGV art. 3.2)."""
+    paid = (reservation.amount_paid or Decimal('0')) if reservation.payment_intent_id else Decimal('0')
+    refund = max(Decimal('0'), paid - LATE_CANCELLATION_FEE)
+    return refund, paid - refund
 
 
 def _payment(reservation):
@@ -189,7 +199,13 @@ def render_cancellation_email(reservation, refund_failed=False):
         kicker, title = 'RENDEZ-VOUS ANNULÉ', 'Votre rendez-vous a été annulé.'
         intro = "Nous confirmons l'annulation de votre rendez-vous."
 
-    if refund_failed:
+    if reservation.status == 'cancelled_late_partial_refund' and paid > 0:
+        late_refund, fee = late_cancellation_amounts(reservation)
+        refunded = "traité manuellement dans les 24h" if refund_failed else _eur(late_refund).replace(' ', '')
+        note = (f"Frais d'annulation tardive : {_eur(fee).replace(' ', '')}<br>"
+                f"Montant remboursé : {refunded}<br>"
+                "Conformément à l'article 3.2 de nos CGV.")
+    elif refund_failed:
         note = "Le remboursement sera traité manuellement dans les 24h."
     elif refund > 0:
         note = f"{_eur(refund)} vous sont intégralement remboursés sur votre carte (délai bancaire de 5 à 10 jours ouvrés)."
