@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { reservationsApi } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
+import { isCancelledStatus } from '@/utils/reservationTime';
 import type { Reservation } from '@/types';
 
 // Shape réel de /reservations/ : 'time' (absent du type partagé Reservation).
@@ -83,14 +84,15 @@ export function useReservations() {
   );
 
   const cancel = useCallback(async (id: number, reason?: string) => {
-    await reservationsApi.cancel(id, reason);
+    const response = await reservationsApi.cancel(id, reason);
     // Mise à jour optimiste : dès que le serveur a confirmé l'annulation, on
     // retire le RDV de `upcoming` immédiatement (recalculé depuis `reservations`)
     // sans attendre l'aller-retour du load() de réconciliation ci-dessous.
     setState({
-      reservations: state.reservations.map((r) => (r.id === id ? { ...r, status: 'cancelled_client' } : r)),
+      reservations: state.reservations.map((r) => (r.id === id ? { ...r, status: response.status } : r)),
     });
     await load();
+    return response;
   }, []);
 
   // Masque / réaffiche une coupe passée. `beforeApply` s'exécute entre la
@@ -107,7 +109,7 @@ export function useReservations() {
     (r) => r.status === 'pending' || r.status === 'confirmed',
   );
   const past = reservations.filter(
-    (r) => r.status === 'completed' || r.status === 'cancelled_client' || r.status === 'cancelled_barber' || r.status === 'no_show',
+    (r) => r.status === 'completed' || r.status === 'no_show' || isCancelledStatus(r.status),
   );
   const upcomingSorted = sortUpcoming(upcoming);
 

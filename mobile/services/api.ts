@@ -27,6 +27,7 @@ import type {
   BoutiqueOrderStatus,
   BarberName,
 } from '@/types';
+import type { CancelByBarberRequest, CancelResponse } from '@/types/reservation';
 
 const SECURE_KEY_ACCESS = 'wb_access_token';
 const SECURE_KEY_REFRESH = 'wb_refresh_token';
@@ -249,16 +250,10 @@ export const reservationsApi = {
   create: (payload: CreateReservationPayload) =>
     http.post<Reservation>('/reservations/', payload).then((r) => r.data),
 
-  // Le endpoint POST /reservations/{id}/cancel/ n'existe pas sur le backend
-  // déployé (confirmé en prod : 404 — seules les routes CRUD standard du
-  // ReservationViewSet sont enregistrées). L'annulation client passe donc par
-  // un PATCH classique sur la ressource, comme le reste du CRUD.
+  // Remboursement Stripe si l'annulation a lieu plus de 24h avant le RDV (côté serveur).
   cancel: (id: number, reason?: string) =>
     http
-      .patch<Reservation>(`/reservations/${id}/`, {
-        status: 'cancelled_client',
-        cancellation_reason: reason ?? '',
-      })
+      .post<CancelResponse>(`/reservations/${id}/cancel/`, reason ? { reason } : {})
       .then((r) => r.data),
 
   // Reprogrammer un RDV existant — même endpoint CRUD que cancel(), avec
@@ -578,6 +573,20 @@ export const coiffeurWaitlistApi = {
 
 export const coiffeurTeamApi = {
   weekAvailability: () => coiffeurFetch<WeekAvailability>('/barbers/availability/'),
+};
+
+export const coiffeurReservationsApi = {
+  cancelByBarber: async (id: number, body: CancelByBarberRequest): Promise<CancelResponse> => {
+    const res = await coiffeurAuthFetch(`/reservations/${id}/cancel-by-barber/`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(data?.error ?? 'Annulation impossible.');
+    }
+    return res.json() as Promise<CancelResponse>;
+  },
 };
 
 export const coiffeurBoutiqueApi = {
