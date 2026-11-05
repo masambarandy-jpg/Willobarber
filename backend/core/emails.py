@@ -77,7 +77,8 @@ def reservation_start(reservation):
 
 
 def is_late_cancellation(reservation, now=None):
-    return reservation_start(reservation) - (now or timezone.now()) < CANCELLATION_DELAY
+    # Exactement 24h avant le RDV = déjà tardif : seul un délai > 24h ouvre le remboursement.
+    return reservation_start(reservation) - (now or timezone.now()) <= CANCELLATION_DELAY
 
 
 def _payment(reservation):
@@ -161,6 +162,52 @@ def render_reservation_email(reservation, kind, app_url, previous=None, late=Fal
               "Passé ce délai, l'acompte est conservé.")
     html = _render_layout(subject, kicker, title, first_name, intro, rows, note, cta_label, app_url, policy)
     return subject, html
+
+
+def render_cancellation_email(reservation, refund_failed=False):
+    """(sujet, html) adaptés au motif : annulation client, no-show, demande du client ou salon."""
+    user = reservation.user
+    reason = reservation.cancellation_reason if reservation.cancelled_by == 'barber' else None
+    _, paid = _payment(reservation)
+    refund = float(reservation.refund_amount or 0)
+
+    if reason == 'client_no_show':
+        subject = 'Vous avez manqué votre rendez-vous WilloBarber'
+        kicker, title = 'RENDEZ-VOUS MANQUÉ', 'Vous avez manqué votre rendez-vous.'
+        intro = "Vous avez manqué votre RDV et nous n'avons pas pu vous accueillir."
+    elif reason == 'client_requested':
+        subject = 'Votre rendez-vous WilloBarber a été annulé'
+        kicker, title = 'RENDEZ-VOUS ANNULÉ', 'Votre rendez-vous a été annulé.'
+        intro = "À votre demande, nous avons annulé votre rendez-vous."
+    elif reason == 'salon_unavailable':
+        subject = 'Votre rendez-vous WilloBarber a été annulé'
+        kicker, title = 'RENDEZ-VOUS ANNULÉ', 'Votre rendez-vous a été annulé.'
+        intro = ("Nous sommes désolés, votre RDV a été annulé pour raison indépendante de votre volonté. "
+                 "Remboursement intégral de toute somme payée en ligne.")
+    else:
+        subject = 'Votre rendez-vous WilloBarber a été annulé'
+        kicker, title = 'RENDEZ-VOUS ANNULÉ', 'Votre rendez-vous a été annulé.'
+        intro = "Nous confirmons l'annulation de votre rendez-vous."
+
+    if refund_failed:
+        note = "Le remboursement sera traité manuellement dans les 24h."
+    elif refund > 0:
+        note = f"{_eur(refund)} vous sont intégralement remboursés sur votre carte (délai bancaire de 5 à 10 jours ouvrés)."
+    elif paid > 0:
+        note = f"Conformément à nos conditions, le paiement de {_eur(paid)} n'est pas remboursé."
+    else:
+        note = "Aucun paiement en ligne n'avait été effectué pour ce rendez-vous."
+    note += (" Vos points fidélité sont conservés." if reason == 'salon_unavailable'
+             else " Les points fidélité de ce rendez-vous ont été retirés.")
+
+    rows = [_row('Prestation', escape(reservation.service.name)),
+            _row('Date', format_date_fr(reservation.date), strike=True),
+            _row('Heure', format_heure_fr(reservation.time), strike=True)]
+    return subject, _render_layout(
+        subject, kicker, title, escape(user.first_name or user.username), intro, rows, note,
+        'Reprendre rendez-vous', settings.APP_URL,
+        "Annulation gratuite jusqu'à 24h avant le rendez-vous.",
+    )
 
 
 def _render_layout(subject, kicker, title, first_name, intro, rows, note, cta_label, cta_url, policy):
@@ -264,6 +311,51 @@ def send_html_email(to_email, subject, html):
         html_content=Content('text/html', html),
     )
     return sendgrid.SendGridAPIClient(api_key=api_key).send(message)
+
+
+def send_cancellation_email(reservation_id, refund_failed):
+    """Cible du thread : relit la résa annulée, envoie. Ne lève jamais."""
+    from .models import Reservation
+    try:
+        reservation = Reservation.objects.select_related('user', 'service').get(pk=reservation_id)
+        if not reservation.user.email:
+            logger.warning("Email d'annulation non envoyé : client %s sans adresse email", reservation.user_id)
+            return
+        subject, html = render_cancellation_email(reservation, refund_failed)
+        response = send_html_email(reservation.user.email, subject, html)
+        logger.info("Email d'annulation envoyé (réservation %s) — SendGrid status=%s", reservation_id, response.status_code)
+    except Exception:
+        logger.exception("Échec email d'annulation (réservation %s)", reservation_id)
+    finally:
+        connection.close()
+
+
+def queue_cancellation_email(reservation, refund_failed=False):
+    transaction.on_commit(lambda: threading.Thread(
+        target=send_cancellation_email, args=(reservation.id, refund_failed), daemon=True,
+    ).start())
+
+
+def send_refund_failure_alert(reservation_id, payment_intent_id, error):
+    """Cible du thread : prévient l'admin qu'un remboursement est à traiter. Ne lève jamais."""
+    try:
+        subject = f"⚠️ Remboursement Stripe en échec — réservation {reservation_id}"
+        html = (f"<p>Le remboursement de la réservation <b>{reservation_id}</b> a échoué.</p>"
+                f"<p>PaymentIntent : {escape(payment_intent_id or '—')}<br>Erreur : {escape(error)}</p>"
+                "<p>À relancer depuis l'admin Django (Refund attempts → « Retry refund ») dans les 24h.</p>")
+        send_html_email(settings.ADMIN_EMAIL, subject, html)
+    except Exception:
+        logger.exception("Échec alerte admin remboursement (réservation %s)", reservation_id)
+    finally:
+        connection.close()
+
+
+def queue_refund_failure_alert(reservation, error):
+    transaction.on_commit(lambda: threading.Thread(
+        target=send_refund_failure_alert,
+        args=(reservation.id, reservation.payment_intent_id, error),
+        daemon=True,
+    ).start())
 
 
 def send_reservation_email(reservation_id, kind, app_url, previous=None, late=False):

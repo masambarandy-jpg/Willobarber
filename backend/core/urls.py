@@ -23,6 +23,7 @@ urlpatterns = [
     path('reservations/<int:pk>/acompte-invoice/', views.generate_invoice, name='invoice'),
     path('reservations/<int:pk>/qr/', views.reservation_qr_code, name='reservation-qr'),
     path('reservations/<int:pk>/hide/', views.hide_reservation, name='reservation-hide'),
+    path('reservations/<int:pk>/cancel/', views.CancelReservationView.as_view(), name='reservation-cancel'),
     path('checkin/<uuid:qr_code>/', views.checkin_reservation, name='checkin'),
     path('slots/available/', views.available_slots, name='available-slots'),
     path('opening-hours/', views.opening_hours, name='opening-hours'),

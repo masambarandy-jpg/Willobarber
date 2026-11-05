@@ -41,11 +41,15 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
-from django.db.models import Count, Max, Q, Sum
+from django.db.models import Count, F, Max, Q, Sum
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from boutique.pricing import OrderPricingError, price_order, to_cents
+from .cancellations import (
+    CANCELLABLE_STATUSES, NO_SHOW_GRACE, REFUND_FAILED_MESSAGE, apply_cancellation, handle_refund_webhook,
+    log_barber_cancellation,
+)
 from .client_profile import build_client_profile
 from .comments import CommentError, check_commentable, clean_rating, clean_text, save_reply
 from .comments import client_name as client_display_name
@@ -57,9 +61,10 @@ from .models import (
 )
 from .emails import (
     format_date_fr, format_date_fr_short, format_heure_fr, is_late_cancellation, queue_reservation_email,
+    reservation_start,
 )
 from .oauth import InvalidOAuthToken, OAuthNotConfigured, verify_google_id_token
-from .permissions import IsStaffRole
+from .permissions import IsAdmin, IsBarber, IsReservationClientOwner, IsStaffRole
 from .recommendations import SALON_TZ, build_recommendation, create_client_notification, run_daily_recommendations
 from .slots import day_hours, minutes_to_hhmm, slot_times_for, weekly_hours
 from .sms import send_reminders_for_tomorrow
@@ -67,6 +72,7 @@ from . import waitlist
 from .serializers import (
     BarbershopSerializer, BarberSerializer, ServiceSerializer, ReservationSerializer,
     UserSerializer, RegisterSerializer, ClientMediaSerializer,
+    CancelByBarberSerializer, CancelReservationSerializer,
     ClosedPeriodSerializer, OpeningHoursSerializer, ReviewSerializer, WaitlistEntrySerializer,
     BarberLeaveSerializer, NotificationSerializer,
     NotificationPreferenceSerializer, PaymentCardSerializer,
@@ -727,6 +733,57 @@ class ReservationViewSet(viewsets.ModelViewSet):
         user.save(update_fields=['loyalty_points'])
 
         queue_reservation_email(reservation, 'confirmed', self._app_url())
+
+
+def _cancellation_response(result, message, **extra):
+    """Réponse commune des annulations ; un échec Stripe remplace le message."""
+    refund_failed = result.pop('refund_failed')
+    return Response({**result, **extra, 'message': REFUND_FAILED_MESSAGE if refund_failed else message})
+
+
+def _locked_reservation(pk):
+    """À appeler dans un atomic : None si la réservation n'existe pas."""
+    return Reservation.objects.select_for_update().filter(pk=pk).first()
+
+
+class CancelReservationView(APIView):
+    """Annulation d'un RDV par son client, remboursement Stripe si le délai est respecté."""
+    # CGV WilloBarber, art. 3.2 : « Annulation notifiée plus de 24 heures avant
+    # l'horaire convenu : [...] remboursement intégral et automatique sur la carte
+    # bancaire ayant servi à la transaction, via la plateforme Stripe. »
+    # Écart à arbitrer : à moins de 24h, les CGV conservent 5 € et remboursent
+    # l'excédent d'un paiement intégral ; le cahier des charges ne rembourse rien.
+    permission_classes = [IsAuthenticated, IsReservationClientOwner]
+
+    def post(self, request, pk):
+        serializer = CancelReservationSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': 'Le motif ne doit pas dépasser 500 caractères.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        now = timezone.now()
+        with transaction.atomic():
+            reservation = _locked_reservation(pk)
+            if reservation is None:
+                return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+            self.check_object_permissions(request, reservation)
+            if reservation.status not in CANCELLABLE_STATUSES:
+                return Response({'error': 'Déjà annulée'}, status=status.HTTP_400_BAD_REQUEST)
+
+            late = is_late_cancellation(reservation, now)
+            result = apply_cancellation(
+                reservation,
+                'cancelled_late_no_refund' if late else 'cancelled_and_refunded',
+                'client',
+                serializer.validated_data['reason'][:50] or None,
+                now,
+                refund=not late,
+                remove_points=True,
+            )
+        message = (
+            "Annulation tardive : aucun remboursement." if late
+            else "Votre rendez-vous est annulé et le paiement en ligne vous est remboursé."
+        )
+        return _cancellation_response(result, message)
 
 
 class RegisterView(APIView):
