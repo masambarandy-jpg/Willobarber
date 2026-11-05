@@ -108,17 +108,6 @@ def _payment_sentence(reservation):
     return f"Le règlement de {_eur(total)} se fait au salon."
 
 
-def _refund_sentence(reservation, late, by_salon):
-    _, paid = _payment(reservation)
-    if paid <= 0:
-        return "Aucun paiement n'avait été effectué : vous n'avez rien à régler."
-    if by_salon or not late:
-        return (f"Votre acompte de {_eur(paid)} vous sera intégralement remboursé sur votre carte "
-                "(délai bancaire de 5 à 10 jours ouvrés).")
-    return (f"Annulation à moins de 24h du rendez-vous : conformément à nos conditions, "
-            f"l'acompte de {_eur(paid)} est conservé.")
-
-
 def _row(label, value, strike=False):
     style = f"text-decoration:line-through;color:{MUTED};" if strike else f"color:{INK};font-weight:bold;"
     return (
@@ -129,8 +118,8 @@ def _row(label, value, strike=False):
     )
 
 
-def render_reservation_email(reservation, kind, app_url, previous=None, late=False):
-    """(sujet, html) pour kind = 'confirmed' | 'rescheduled' | 'cancelled'.
+def render_reservation_email(reservation, kind, app_url, previous=None):
+    """(sujet, html) pour kind = 'confirmed' | 'rescheduled'.
     previous : {'date', 'time'} de l'ancien créneau (reprogrammation)."""
     user = reservation.user
     first_name = escape(user.first_name or user.username)
@@ -139,7 +128,6 @@ def render_reservation_email(reservation, kind, app_url, previous=None, late=Fal
         service += f" × {reservation.child_count}"
     date_fr = format_date_fr(reservation.date)
     heure_fr = format_heure_fr(reservation.time)
-    by_salon = reservation.status == 'cancelled'
 
     if kind == 'confirmed':
         subject = 'Votre rendez-vous WilloBarber est confirmé 💈'
@@ -157,26 +145,18 @@ def render_reservation_email(reservation, kind, app_url, previous=None, late=Fal
             rows.append(_row('Ancien créneau', f"{format_date_fr(previous['date'])} · {format_heure_fr(previous['time'])}", strike=True))
         rows += [_row('Nouvelle date', date_fr), _row('Nouvelle heure', heure_fr), _row('Adresse', SALON_ADDRESS)]
         note = _payment_sentence(reservation)
-    elif kind == 'cancelled':
-        subject = 'Votre rendez-vous WilloBarber a été annulé'
-        kicker, title = 'RENDEZ-VOUS ANNULÉ', 'Votre rendez-vous a été annulé.'
-        intro = ("Le salon a dû annuler votre rendez-vous. Toutes nos excuses pour ce contretemps."
-                 if by_salon else "Nous confirmons l'annulation de votre rendez-vous.")
-        rows = [_row('Prestation', service), _row('Date', date_fr, strike=True), _row('Heure', heure_fr, strike=True)]
-        note = _refund_sentence(reservation, late, by_salon)
     else:
         raise ValueError(f"Type d'email inconnu : {kind}")
 
-    cta_label = 'Reprendre rendez-vous' if kind == 'cancelled' else 'Voir mon RDV'
+    cta_label = 'Voir mon RDV'
     policy = ("Annulation ou modification gratuite jusqu'à 24h avant le rendez-vous. "
               "Passé ce délai, l'acompte est conservé.")
     html = _render_layout(subject, kicker, title, first_name, intro, rows, note, cta_label, app_url, policy)
     return subject, html
 
 
-def render_cancellation_email(reservation, refund_failed=False):
+def render_cancellation_email(reservation, first_name, refund_failed=False):
     """(sujet, html) adaptés au motif : annulation client, no-show, demande du client ou salon."""
-    user = reservation.user
     reason = reservation.cancellation_reason if reservation.cancelled_by == 'barber' else None
     _, paid = _payment(reservation)
     refund = float(reservation.refund_amount or 0)
@@ -220,7 +200,7 @@ def render_cancellation_email(reservation, refund_failed=False):
             _row('Date', format_date_fr(reservation.date), strike=True),
             _row('Heure', format_heure_fr(reservation.time), strike=True)]
     return subject, _render_layout(
-        subject, kicker, title, escape(user.first_name or user.username), intro, rows, note,
+        subject, kicker, title, escape(first_name), intro, rows, note,
         'Reprendre rendez-vous', settings.APP_URL,
         "Annulation gratuite jusqu'à 24h avant le rendez-vous.",
     )
@@ -329,16 +309,16 @@ def send_html_email(to_email, subject, html):
     return sendgrid.SendGridAPIClient(api_key=api_key).send(message)
 
 
-def send_cancellation_email(reservation_id, refund_failed):
+def send_cancellation_email(reservation_id, refund_failed, to_email, first_name):
     """Cible du thread : relit la résa annulée, envoie. Ne lève jamais."""
     from .models import Reservation
     try:
-        reservation = Reservation.objects.select_related('user', 'service').get(pk=reservation_id)
-        if not reservation.user.email:
+        reservation = Reservation.objects.select_related('service').get(pk=reservation_id)
+        if not to_email:
             logger.warning("Email d'annulation non envoyé : client %s sans adresse email", reservation.user_id)
             return
-        subject, html = render_cancellation_email(reservation, refund_failed)
-        response = send_html_email(reservation.user.email, subject, html)
+        subject, html = render_cancellation_email(reservation, first_name, refund_failed)
+        response = send_html_email(to_email, subject, html)
         logger.info("Email d'annulation envoyé (réservation %s) — SendGrid status=%s", reservation_id, response.status_code)
     except Exception:
         logger.exception("Échec email d'annulation (réservation %s)", reservation_id)
@@ -347,8 +327,11 @@ def send_cancellation_email(reservation_id, refund_failed):
 
 
 def queue_cancellation_email(reservation, refund_failed=False):
+    # Coordonnées lues tout de suite : la suppression de compte anonymise le client juste après.
+    user = reservation.user
+    args = (reservation.id, refund_failed, user.email, user.first_name or user.username)
     transaction.on_commit(lambda: threading.Thread(
-        target=send_cancellation_email, args=(reservation.id, refund_failed), daemon=True,
+        target=send_cancellation_email, args=args, daemon=True,
     ).start())
 
 
@@ -374,7 +357,7 @@ def queue_refund_failure_alert(reservation, error):
     ).start())
 
 
-def send_reservation_email(reservation_id, kind, app_url, previous=None, late=False):
+def send_reservation_email(reservation_id, kind, app_url, previous=None):
     """Cible du thread : relit la résa, rend le template, envoie. Ne lève jamais."""
     from .models import Reservation
     try:
@@ -384,7 +367,7 @@ def send_reservation_email(reservation_id, kind, app_url, previous=None, late=Fa
         if not reservation.user.email:
             logger.warning("Email RDV %s non envoyé : client %s sans adresse email", kind, reservation.user_id)
             return
-        subject, html = render_reservation_email(reservation, kind, app_url, previous=previous, late=late)
+        subject, html = render_reservation_email(reservation, kind, app_url, previous=previous)
         response = send_html_email(reservation.user.email, subject, html)
         logger.info("Email RDV %s envoyé (réservation %s) — SendGrid status=%s", kind, reservation_id, response.status_code)
     except Exception:

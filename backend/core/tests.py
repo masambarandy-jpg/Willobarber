@@ -298,6 +298,12 @@ class ReservationEmailTests(TestCase):
             response = self.api.patch(f'/api/reservations/{reservation.id}/', data, format='json')
         self.assertEqual(response.status_code, 200, response.data)
 
+    def post_cancel(self, reservation, action, body, as_user=None):
+        self.api.force_authenticate(as_user or self.client_user)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.api.post(f'/api/reservations/{reservation.id}/{action}/', body, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+
     @patch('core.views.send_online_payment_invoice')
     def test_confirmation_email_sent_on_booking(self, _invoice, sg):
         self.book()
@@ -337,13 +343,14 @@ class ReservationEmailTests(TestCase):
         self.assertIn('Vendredi 27 novembre 2026', html)
         self.assertIn('10h00', html)
 
+    @patch('stripe.Refund.create', return_value=SimpleNamespace(id='re_1', amount=500, status='succeeded'))
     @patch('core.views.send_online_payment_invoice')
-    def test_cancellation_more_than_24h_mentions_refund(self, _invoice, sg):
+    def test_cancellation_more_than_24h_mentions_refund(self, _invoice, _refund, sg):
         reservation = self.book()
-        self.patch_resa(reservation, {'status': 'cancelled_client'})
+        self.post_cancel(reservation, 'cancel', {})
         mail = self.sent(sg)[-1]
         self.assertEqual(mail['subject'], 'Votre rendez-vous WilloBarber a été annulé')
-        self.assertIn('vous sera intégralement remboursé', mail['content'][0]['value'])
+        self.assertIn('intégralement remboursés', mail['content'][0]['value'])
 
     @patch('core.views.send_online_payment_invoice')
     def test_late_cancellation_keeps_deposit(self, _invoice, sg):
@@ -351,16 +358,20 @@ class ReservationEmailTests(TestCase):
         OpeningHours.objects.update(is_closed=False, open_time=time(0), close_time=time(0))
         tomorrow = (datetime.now(SALON_TZ) + timedelta(hours=3))
         reservation = self.book(date=tomorrow.date().isoformat(), time=tomorrow.strftime('%H:00'))
-        self.patch_resa(reservation, {'status': 'cancelled_client'})
-        self.assertIn("l'acompte de 5 € est conservé", self.sent(sg)[-1]['content'][0]['value'])
-
-    @patch('core.views.send_online_payment_invoice')
-    def test_salon_cancellation_apologises_and_refunds(self, _invoice, sg):
-        reservation = self.book()
-        self.patch_resa(reservation, {'status': 'cancelled'}, as_user=self.staff)
+        self.post_cancel(reservation, 'cancel', {})
         html = self.sent(sg)[-1]['content'][0]['value']
-        self.assertIn('Le salon a dû annuler', html)
-        self.assertIn('intégralement remboursé', html)
+        self.assertIn("Frais d'annulation tardive : 5€", html)
+        self.assertIn('Montant remboursé : 0€', html)
+
+    @patch('stripe.Refund.create', return_value=SimpleNamespace(id='re_1', amount=500, status='succeeded'))
+    @patch('core.views.send_online_payment_invoice')
+    def test_salon_cancellation_apologises_and_refunds(self, _invoice, _refund, sg):
+        reservation = self.book()
+        self.post_cancel(reservation, 'cancel-by-barber', {'reason': 'salon_unavailable'}, as_user=self.staff)
+        html = self.sent(sg)[-1]['content'][0]['value']
+        self.assertIn('Nous sommes désolés', html)
+        self.assertIn('intégralement remboursés', html)
+
 
     @patch('core.views.send_online_payment_invoice')
     def test_staff_payment_update_sends_nothing(self, _invoice, sg):
@@ -632,7 +643,7 @@ class LoyaltyPointsTests(TestCase):
     def test_cancelled_child_cut_removes_its_10_points(self, _mail):
         self.book(self.signature, 'Willo')
         kid = self.book(self.kids, 'Malik')
-        self.api.patch(f"/api/reservations/{kid['id']}/", {'status': 'cancelled_client'}, format='json')
+        self.api.post(f"/api/reservations/{kid['id']}/cancel/", {}, format='json')
         self.assertEqual(self.points(), 90)
 
 
@@ -815,7 +826,7 @@ class WaitlistTests(TestCase):
     def cancel(self, reservation):
         self.api.force_authenticate(self.staff)
         with self.captureOnCommitCallbacks(execute=True):
-            r = self.api.patch(f'/api/reservations/{reservation.id}/', {'status': 'cancelled'}, format='json')
+            r = self.api.post(f'/api/reservations/{reservation.id}/cancel-by-barber/', {'reason': 'salon_unavailable'}, format='json')
         self.assertEqual(r.status_code, 200, r.data)
 
     def waitlist_events(self, publish_to_client):
@@ -1316,6 +1327,48 @@ class CancellationRefundTests(TestCase):
         self.assertEqual(self.cancel_by_barber(reservation, 'salon_unavailable').status_code, 400)
         refund.assert_called_once()
         self.assertEqual(self.points(), 110)
+
+    def test_old_patch_cancel_returns_410_gone(self, _sg, refund, _sse):
+        reservation = self.book(timedelta(hours=48))
+        for user, value in ((self.client_user, 'cancelled_client'), (self.staff, 'cancelled'),
+                            (self.staff, 'cancelled_and_refunded'), (self.staff, 'cancelled_late_partial_refund')):
+            self.api.force_authenticate(user)
+            r = self.api.patch(f'/api/reservations/{reservation.id}/', {'status': value}, format='json')
+            self.assertEqual(r.status_code, 410)
+            self.assertEqual(r.data['detail'], 'Endpoint déprécié. Utilisez POST /api/reservations/<id>/cancel/')
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, 'confirmed')
+        refund.assert_not_called()
+
+    def test_patch_reschedule_still_works(self, sg, _refund, _sse):
+        reservation = self.book(timedelta(hours=48))
+        self.api.force_authenticate(self.client_user)
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.api.patch(f'/api/reservations/{reservation.id}/', {'time': '10:00'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertIn('reprogrammé', self.mails(sg)[-1]['subject'])
+
+    def test_delete_account_cancels_active_reservations_with_refund_policy(self, sg, refund, _sse):
+        refund.side_effect = [REFUND, LATE_REFUND]
+        far = self.book(timedelta(hours=48))
+        late = self.book(timedelta(hours=5))
+        past = self.book(timedelta(days=-3))
+        self.api.force_authenticate(self.client_user)
+        with self.captureOnCommitCallbacks(execute=True), self.assertLogs('core.cancellations', level='WARNING') as logs:
+            r = self.api.delete('/api/auth/delete-account/')
+
+        self.assertEqual(r.status_code, 200)
+        far.refresh_from_db(); late.refresh_from_db(); past.refresh_from_db()
+        self.assertEqual(far.status, 'cancelled_and_refunded')
+        self.assertEqual(late.status, 'cancelled_late_partial_refund')
+        self.assertEqual(past.status, 'confirmed')
+        self.assertEqual(refund.call_count, 2)
+        self.assertEqual(refund.call_args.kwargs['amount'], 4000)
+        self.assertEqual(len(logs.records), 2)
+        # L'email part à la vraie adresse, pas à l'adresse anonymisée.
+        recipients = {m['personalizations'][0]['to'][0]['email'] for m in self.mails(sg)}
+        self.assertEqual(recipients, {'randy@example.com'})
+        self.assertTrue(User.objects.get(pk=self.client_user.pk).is_deleted)
 
     def test_slot_is_freed_after_cancellation(self, _sg, refund, _sse):
         refund.return_value = REFUND

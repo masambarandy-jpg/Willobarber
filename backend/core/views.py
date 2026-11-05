@@ -48,7 +48,7 @@ from django.utils import timezone
 from boutique.pricing import OrderPricingError, price_order, to_cents
 from .cancellations import (
     CANCELLABLE_STATUSES, LATE_STATUS, NO_SHOW_GRACE, REFUND_FAILED_MESSAGE, apply_cancellation, handle_refund_webhook,
-    has_started, log_barber_cancellation,
+    cancel_active_reservations, cancel_for_client, has_started, log_barber_cancellation,
 )
 from .client_profile import build_client_profile
 from .comments import CommentError, check_commentable, clean_rating, clean_text, save_reply
@@ -614,13 +614,21 @@ class ReservationViewSet(viewsets.ModelViewSet):
     # staff (via IsStaffRole) peut les toucher, sinon n'importe quel client
     # pourrait falsifier son propre statut de paiement.
     STAFF_ONLY_FIELDS = {'payment_status', 'payment_method', 'amount_paid'}
-    # Seules ces actions restent ouvertes à un client sur sa propre réservation :
-    # l'annuler (status='cancelled_client' + motif) ou la reprogrammer (date/heure)
-    # — cf. reservationsApi.cancel()/.reschedule() côté mobile.
-    CLIENT_ALLOWED_FIELDS = {'status', 'cancellation_reason', 'date', 'time'}
+    # Seule la reprogrammation reste ouverte à un client par PATCH (cf.
+    # reservationsApi.reschedule()) ; l'annulation passe par POST .../cancel/.
+    CLIENT_ALLOWED_FIELDS = {'date', 'time'}
 
     def _app_url(self):
         return settings.APP_URL or self.request.build_absolute_uri('/')
+
+    def update(self, request, *args, **kwargs):
+        # Ce chemin annulait sans rembourser alors que l'email annonçait le contraire.
+        if request.data.get('status') in CANCELLED_STATUSES:
+            return Response(
+                {'detail': 'Endpoint déprécié. Utilisez POST /api/reservations/<id>/cancel/'},
+                status=status.HTTP_410_GONE,
+            )
+        return super().update(request, *args, **kwargs)
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -630,31 +638,14 @@ class ReservationViewSet(viewsets.ModelViewSet):
             if requested_fields & self.STAFF_ONLY_FIELDS:
                 raise PermissionDenied("Seul le salon peut modifier ces informations.")
             if requested_fields - self.CLIENT_ALLOWED_FIELDS:
-                raise PermissionDenied("Vous ne pouvez qu'annuler ou reprogrammer votre réservation.")
-            # Un client ne peut faire évoluer le statut que vers "annulé par le client".
-            if 'status' in requested_fields and self.request.data.get('status') != 'cancelled_client':
-                raise PermissionDenied("Vous ne pouvez qu'annuler votre réservation.")
-        previous_status = serializer.instance.status
+                raise PermissionDenied("Vous ne pouvez que reprogrammer votre réservation.")
         previous_slot = {'date': serializer.instance.date, 'time': serializer.instance.time}
         reservation = serializer.save()
 
-        # Emails client : annulation (client ou salon) ou reprogrammation.
-        if previous_status not in CANCELLED_STATUSES and reservation.status in CANCELLED_STATUSES:
-            queue_reservation_email(
-                reservation, 'cancelled', self._app_url(), late=is_late_cancellation(reservation),
-            )
-        elif reservation.status not in CANCELLED_STATUSES and (
+        if reservation.status not in CANCELLED_STATUSES and (
             (reservation.date, reservation.time) != (previous_slot['date'], previous_slot['time'])
         ):
             queue_reservation_email(reservation, 'rescheduled', self._app_url(), previous=previous_slot)
-
-        # Retirer les points gagnés à la création pour éviter le farming
-        # (annulation par le client ou par le salon, une seule fois).
-        if previous_status in ('pending', 'confirmed') and reservation.status in ('cancelled', 'cancelled_client'):
-            points_to_refund = reservation_points(reservation)
-            client = reservation.user
-            client.loyalty_points = max(0, (client.loyalty_points or 0) - points_to_refund)
-            client.save(update_fields=['loyalty_points'])
 
     def create(self, request, *args, **kwargs):
         date = request.data.get('date')
@@ -777,16 +768,7 @@ class CancelReservationView(APIView):
             if has_started(reservation, now):
                 return Response({'error': 'Ce rendez-vous a déjà commencé : il ne peut plus être annulé.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            late = is_late_cancellation(reservation, now)
-            result = apply_cancellation(
-                reservation,
-                LATE_STATUS if late else 'cancelled_and_refunded',
-                'client',
-                serializer.validated_data['reason'][:50] or None,
-                now,
-                refund=True,
-                remove_points=True,
-            )
+            result, late = cancel_for_client(reservation, serializer.validated_data['reason'][:50] or None, now)
         message = _late_message(result) if late else "Votre rendez-vous est annulé et le paiement en ligne vous est remboursé."
         return _cancellation_response(result, message)
 
@@ -965,11 +947,7 @@ class DeleteAccountView(APIView):
     def delete(self, request):
         user = request.user
 
-        Reservation.objects.filter(
-            user=user,
-            date__gte=timezone.localdate(),
-            status__in=['pending', 'confirmed'],
-        ).update(status='cancelled_client')
+        cancel_active_reservations(user)
 
         timestamp = timezone.now().strftime('%Y%m%d%H%M%S%f')
         user.first_name = 'Client supprimé'

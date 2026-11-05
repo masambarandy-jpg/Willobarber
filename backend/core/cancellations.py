@@ -15,7 +15,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from .emails import (
-    late_cancellation_amounts, queue_cancellation_email, queue_refund_failure_alert, reservation_start,
+    is_late_cancellation, late_cancellation_amounts, queue_cancellation_email, queue_refund_failure_alert, reservation_start,
 )
 from .loyalty import reservation_points
 from .models import BarberCancellationLog, RefundAttempt, Reservation, User
@@ -121,6 +121,34 @@ def apply_cancellation(reservation, new_status, cancelled_by, reason, now, *, re
         'loyalty_points_removed': points_removed,
         'refund_failed': refund_failed,
     }
+
+
+def cancel_for_client(reservation, reason, now):
+    """Règle des 24h appliquée à une annulation côté client. Retourne (réponse, tardive)."""
+    late = is_late_cancellation(reservation, now)
+    result = apply_cancellation(
+        reservation, LATE_STATUS if late else 'cancelled_and_refunded', 'client', reason, now,
+        refund=True, remove_points=True,
+    )
+    return result, late
+
+
+def cancel_active_reservations(user):
+    """Suppression de compte : annule les RDV à venir du client selon la politique
+    habituelle. Les RDV déjà commencés restent dans l'historique, tels quels."""
+    now = timezone.now()
+    active = Reservation.objects.filter(user=user, status__in=CANCELLABLE_STATUSES)
+    for pk in list(active.values_list('id', flat=True)):
+        with transaction.atomic():
+            reservation = Reservation.objects.select_for_update().get(pk=pk)
+            if reservation.status not in CANCELLABLE_STATUSES or has_started(reservation, now):
+                continue
+            result, _ = cancel_for_client(reservation, 'Suppression du compte', now)
+        # WARNING : le niveau minimal des logs Railway, à conserver pour l'audit.
+        logger.warning(
+            "Suppression du compte %s : réservation %s annulée (%s, %s € remboursés)",
+            user.pk, pk, result['status'], result['refund_amount'],
+        )
 
 
 def log_barber_cancellation(reservation, user, reason, notes, refund_amount):
