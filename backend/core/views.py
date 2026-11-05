@@ -786,6 +786,55 @@ class CancelReservationView(APIView):
         return _cancellation_response(result, message)
 
 
+class CancelReservationByBarberView(APIView):
+    """Annulation par le salon : no-show, demande du client ou indisponibilité."""
+    permission_classes = [IsAuthenticated, IsBarber | IsAdmin]
+
+    def post(self, request, pk):
+        serializer = CancelByBarberSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': 'Motif ou notes invalides.', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        reason = serializer.validated_data['reason']
+
+        now = timezone.now()
+        with transaction.atomic():
+            reservation = _locked_reservation(pk)
+            if reservation is None:
+                return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+            if reservation.status not in CANCELLABLE_STATUSES:
+                return Response({'error': 'Déjà annulée'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if reason == 'client_no_show':
+                # Délai de grâce : un client peut arriver avec quelques minutes de
+                # retard. Le no-show (ni remboursement, ni points, compteur +1) n'est
+                # donc ouvert qu'après 15 min, et jamais pour un client déjà enregistré.
+                if reservation.checked_in:
+                    return Response({'error': 'Ce client a déjà été enregistré à son arrivée.'}, status=status.HTTP_400_BAD_REQUEST)
+                if now <= reservation_start(reservation) + NO_SHOW_GRACE:
+                    return Response({'error': "Vous ne pouvez marquer no-show qu'après +15 min"}, status=status.HTTP_400_BAD_REQUEST)
+                new_status, refund, remove_points = 'cancelled_no_show', False, True
+                message = "RDV marqué no-show."
+            elif reason == 'client_requested':
+                late = is_late_cancellation(reservation, now)
+                new_status = 'cancelled_late_no_refund' if late else 'cancelled_and_refunded'
+                refund, remove_points = not late, True
+                message = "Annulation tardive : aucun remboursement." if late else "RDV annulé à la demande du client."
+            else:
+                # Service non rendu du fait du salon (CDE Livre VI) : toujours remboursé.
+                new_status, refund, remove_points = 'cancelled_by_salon_refunded', True, False
+                message = "RDV annulé par le salon, client remboursé intégralement."
+
+            result = apply_cancellation(
+                reservation, new_status, 'barber', reason, now, refund=refund, remove_points=remove_points,
+            )
+            if reason == 'client_no_show':
+                User.objects.filter(pk=reservation.user_id).update(no_show_count=F('no_show_count') + 1)
+            log_barber_cancellation(
+                reservation, request.user, reason, serializer.validated_data['notes'], reservation.refund_amount,
+            )
+        return _cancellation_response(result, message, reason=reason)
+
+
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
