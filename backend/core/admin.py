@@ -10,7 +10,15 @@ from .models import (
 )
 from .recommendations import SALON_TZ
 
-admin.site.register(User)
+
+@admin.register(User)
+class UserAdmin(admin.ModelAdmin):
+    list_display = ('username', 'email', 'role', 'no_show_count', 'is_active')
+    list_filter = ('role',)
+    list_editable = ('role',)
+    search_fields = ('username', 'email')
+
+
 admin.site.register(Barbershop)
 admin.site.register(Barber)
 admin.site.register(Service)

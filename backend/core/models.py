@@ -8,6 +8,7 @@ from django.conf import settings
 class User(AbstractUser):
     ROLE_CHOICES = [
         ('client', 'Client'),
+        ('barber', 'Coiffeur'),
         ('admin', 'Admin'),
     ]
     # Statut CRM choisi manuellement par le coiffeur (aucun calcul automatique).
@@ -97,9 +98,9 @@ class Barber(models.Model):
         return f"{self.name} ({self.role})"
 
 
-# Les barbiers ne sont pas des User Django (aucun rôle 'barber' n'existe sur
-# User) : partout dans l'app (planning coiffeur, réservations, congés), le
-# barbier est identifié par ce prénom.
+# Le barbier d'un RDV n'est pas lié à un User Django, même avec le rôle 'barber' :
+# partout dans l'app (planning coiffeur, réservations, congés), il est identifié
+# par ce prénom.
 BARBER_CHOICES = [
     ('Willo', 'Willo'),
     ('Malik', 'Malik'),

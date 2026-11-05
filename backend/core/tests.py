@@ -1272,7 +1272,13 @@ class CancellationRefundTests(TestCase):
         self.assertEqual(r.status_code, 403)
         refund.assert_not_called()
 
-    def test_barber_role_can_use_barber_endpoint(self, _sg, refund, _sse):
+    def test_barber_role_is_available_in_choices(self, _sg, _refund, _sse):
+        self.assertIn(('barber', 'Coiffeur'), User.ROLE_CHOICES)
+        self.client.force_login(User.objects.create_superuser('root', password='x'))
+        r = self.client.get(f'/admin/core/user/{self.client_user.pk}/change/')
+        self.assertContains(r, '<option value="barber">Coiffeur</option>', html=True)
+
+    def test_user_with_barber_role_can_use_cancel_by_barber_endpoint(self, _sg, refund, _sse):
         refund.return_value = REFUND
         barber = User.objects.create_user('malik', role='barber')
         r = self.cancel_by_barber(self.book(timedelta(hours=48)), 'salon_unavailable', user=barber)
