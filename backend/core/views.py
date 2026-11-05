@@ -835,6 +835,30 @@ class CancelReservationByBarberView(APIView):
         return _cancellation_response(result, message, reason=reason)
 
 
+class StripeWebhookView(APIView):
+    """Événements Stripe : suivi des remboursements. Authentifié par la signature HMAC."""
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    # charge.refund.updated ne couvre que certains moyens de paiement ; les
+    # remboursements carte passent par refund.created / refund.updated.
+    REFUND_EVENTS = ('charge.refund.updated', 'refund.created', 'refund.updated')
+
+    def post(self, request):
+        if not settings.STRIPE_WEBHOOK_SECRET:
+            logger.error("Webhook Stripe reçu mais STRIPE_WEBHOOK_SECRET n'est pas configuré")
+            return Response({'error': 'Webhook non configuré.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        try:
+            event = stripe.Webhook.construct_event(
+                request.body, request.headers.get('Stripe-Signature', ''), settings.STRIPE_WEBHOOK_SECRET,
+            )
+        except (ValueError, stripe.error.SignatureVerificationError):
+            return Response({'error': 'Signature invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if event.type in self.REFUND_EVENTS:
+            handle_refund_webhook(event.data.object)
+        return Response({'received': True})
+
+
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 

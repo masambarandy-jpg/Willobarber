@@ -59,6 +59,7 @@ urlpatterns = [
     path('invoices/<str:token>/', views.download_online_invoice, name='online-invoice-download'),
     path('loyalty/redeem/', views.redeem_loyalty, name='redeem-loyalty'),
     path('payments/create-payment-intent/', views.create_payment_intent, name='create-payment-intent'),
+    path('payments/stripe-webhook/', views.StripeWebhookView.as_view(), name='stripe-webhook'),
     path('reservations/<int:pk>/send-final-invoice/', views.send_final_invoice, name='send-final-invoice'),
     path('reservations/<int:pk>/invoice/', views.download_final_invoice, name='reservation-invoice'),
     path('media/upload/', views.upload_client_media, name='media-upload'),
